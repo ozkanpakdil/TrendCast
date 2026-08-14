@@ -36,6 +36,8 @@ export interface MarketContract {
   liquidity?: number;
   /** Raw slug or URL for linking back. */
   slug?: string;
+  /** Direct link to the market page on the platform. */
+  url?: string;
   /** Keywords extracted from the question for correlation matching. */
   keywords: string[];
   /** Last-updated timestamp (epoch ms). */
@@ -73,6 +75,8 @@ export interface SocialSignal {
   sentiment: number;
   /** Virality score 0–100 (normalised across platforms). */
   virality: number;
+  /** Direct link to the post/trend on the platform. */
+  url?: string;
 }
 
 // ── News ──────────────────────────────────────────────────────────

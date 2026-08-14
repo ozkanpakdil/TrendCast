@@ -73,6 +73,7 @@ function normaliseGammaMarket(raw: GammaMarket): MarketContract | null {
       volume24h: raw.volume ? parseFloat(raw.volume) : undefined,
       liquidity: raw.liquidity ? parseFloat(raw.liquidity) : undefined,
       slug: raw.slug,
+      url: `https://polymarket.com/event/${raw.slug}`,
       keywords: extractKeywords(raw.question),
       lastUpdated: Date.now(),
     };

@@ -46,6 +46,7 @@ interface KalshiMarket {
 /** Raw Kalshi event shape (from /events?with_nested_markets=true). */
 interface KalshiEvent {
   event_ticker: string;
+  series_ticker: string;
   title: string;
   sub_title?: string;
   category?: string;
@@ -128,6 +129,13 @@ function normaliseKalshiMarket(raw: KalshiMarket, event?: KalshiEvent): MarketCo
       ? `${eventTitle} — ${raw.yes_sub_title}`
       : subTitle;
 
+    // Build the Kalshi market URL.
+    // Kalshi uses /markets/{series_ticker}/{event_ticker} (all lowercase) which
+    // redirects to the full /markets/{series_ticker}/{slug}/{event_ticker} URL.
+    const seriesTicker = event?.series_ticker ?? raw.event_ticker ?? raw.ticker;
+    const eventTicker = raw.event_ticker ?? raw.ticker;
+    const kalshiUrl = `https://kalshi.com/markets/${seriesTicker.toLowerCase()}/${eventTicker.toLowerCase()}`;
+
     // Use 24h volume if available, otherwise fall back to total volume.
     // Many Kalshi markets have volume_24h_fp: "0.00" but high volume_fp (total).
     const vol24h = parseFloat(raw.volume_24h_fp ?? '0') || 0;
@@ -143,6 +151,7 @@ function normaliseKalshiMarket(raw: KalshiMarket, event?: KalshiEvent): MarketCo
       volume24h: volume,
       liquidity: parseFloat(raw.open_interest_fp ?? '0') || undefined,
       slug: raw.ticker,
+      url: kalshiUrl,
       keywords: extractKeywords(fullTitle),
       lastUpdated: Date.now(),
     };

@@ -88,5 +88,6 @@ function normaliseRedditPost(post: RedditPost): SocialSignal {
     keywords: extractKeywords(text),
     sentiment,
     virality,
+    url: `https://www.reddit.com/r/${post.subreddit}/comments/${post.id}`,
   };
 }

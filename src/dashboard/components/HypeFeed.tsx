@@ -36,10 +36,16 @@ export function HypeFeed({ signals, highlightThreshold }: HypeFeedProps) {
       )}
       {top.map((signal) => {
         const isHot = signal.virality >= highlightThreshold;
+        const Wrapper = signal.url ? 'a' : 'div';
+        const wrapperProps = signal.url
+          ? { href: signal.url, target: '_blank', rel: 'noopener noreferrer' }
+          : {};
+
         return (
-          <div
+          <Wrapper
             key={signal.id}
-            className={`card-hover rounded-lg p-3 border ${
+            {...wrapperProps}
+            className={`card-hover rounded-lg p-3 border block cursor-pointer ${
               isHot
                 ? 'bg-slate-800/80 border-brand-500/40 shadow-lg shadow-brand-500/10'
                 : 'bg-slate-900 border-slate-800'
@@ -83,7 +89,7 @@ export function HypeFeed({ signals, highlightThreshold }: HypeFeedProps) {
                 <div className="text-[10px] text-slate-600">virality</div>
               </div>
             </div>
-          </div>
+          </Wrapper>
         );
       })}
     </div>

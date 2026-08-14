@@ -109,10 +109,16 @@ export function MarketOdds({ markets }: MarketOddsProps) {
         const yesPct = yesOutcome ? Math.round(yesOutcome.price * 100) : null;
         const noPct = noOutcome ? Math.round(noOutcome.price * 100) : null;
 
+        const Wrapper = market.url ? 'a' : 'div';
+        const wrapperProps = market.url
+          ? { href: market.url, target: '_blank', rel: 'noopener noreferrer' }
+          : {};
+
         return (
-          <div
+          <Wrapper
             key={`${market.platform}:${market.id}`}
-            className="card-hover rounded-lg p-3 bg-slate-900 border border-slate-800"
+            {...wrapperProps}
+            className="card-hover rounded-lg p-3 bg-slate-900 border border-slate-800 hover:border-slate-700 cursor-pointer block"
           >
             <div className="flex items-start gap-2">
               <div className="flex-1 min-w-0">
@@ -157,7 +163,7 @@ export function MarketOdds({ markets }: MarketOddsProps) {
                 onToggle={handleStarToggle}
               />
             </div>
-          </div>
+          </Wrapper>
         );
       })}
     </div>
