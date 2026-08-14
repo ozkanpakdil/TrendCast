@@ -20,6 +20,7 @@ import type { SocialSignal } from '@/types';
 import { CONFIG } from '@/config';
 import { extractKeywords } from '@/utils/keywords';
 import { analyzeSentiment } from '@/utils/sentiment';
+import { conditionalFetchJson } from '@/utils/conditional-fetch';
 
 /** rss2json.com API response shape (subset). */
 interface Rss2JsonResponse {
@@ -47,15 +48,12 @@ interface GoogleTrendItem {
 export async function collectXTrends(): Promise<SocialSignal[]> {
   const apiUrl = CONFIG.scrape.x.trendsRssUrl;
 
-  const response = await fetch(apiUrl, {
-    headers: { Accept: 'application/json' },
-  });
-
-  if (!response.ok) {
-    throw new Error(`Google Trends RSS error: ${response.status} ${response.statusText}`);
+  const data = await conditionalFetchJson<Rss2JsonResponse>(apiUrl);
+  if (data === null) {
+    // 304 Not Modified — no new trends.
+    console.log('[TrendCast] X/Trends: unchanged (304), skipping');
+    return [];
   }
-
-  const data: Rss2JsonResponse = await response.json();
 
   if (data.status !== 'ok' || !data.items) {
     throw new Error('Google Trends RSS feed could not be parsed');

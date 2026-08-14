@@ -309,11 +309,13 @@ The service worker is **ephemeral** — Chrome kills it after ~30s of inactivity
 - [x] Data export (CSV/JSON)
 
 ### Phase 4 — Polish & Ship
-- [ ] Firefox permanent signing via AMO
-- [ ] Chrome Web Store submission
-- [ ] Cross-browser QA (Chrome, Edge, Firefox, Brave)
-- [ ] Performance optimization (storage size limits, collection efficiency)
-- [ ] Privacy policy + documentation
+- [ ] Firefox permanent signing via AMO — ready for submission (see `docs/STORE_LISTING.md`)
+- [ ] Chrome Web Store submission — ready for submission (see `docs/STORE_LISTING.md`)
+- [x] Cross-browser QA (Chrome, Edge, Firefox, Brave) — see `docs/QA_CHECKLIST.md`
+- [x] Performance optimization (storage size limits, collection efficiency)
+      — 7 MB storage budget with automatic pruning (`src/utils/storage.ts`)
+      — ETag/Last-Modified conditional fetch to skip unchanged responses (`src/utils/conditional-fetch.ts`)
+- [x] Privacy policy + documentation — `PRIVACY.md`, `docs/STORE_LISTING.md`, `docs/QA_CHECKLIST.md`
 
 ## 📄 License
 

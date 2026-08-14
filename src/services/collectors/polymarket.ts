@@ -14,6 +14,7 @@
 import type { MarketContract, MarketOutcome } from '@/types';
 import { CONFIG } from '@/config';
 import { extractKeywords } from '@/utils/keywords';
+import { conditionalFetchJson } from '@/utils/conditional-fetch';
 
 /** Raw Gamma API market shape (subset of fields we use). */
 interface GammaMarket {
@@ -35,15 +36,12 @@ interface GammaMarket {
 export async function collectPolymarketMarkets(limit = 100): Promise<MarketContract[]> {
   const url = `${CONFIG.scrape.polymarket.gammaApi}&limit=${limit}`;
 
-  const response = await fetch(url, {
-    headers: { Accept: 'application/json' },
-  });
-
-  if (!response.ok) {
-    throw new Error(`Polymarket Gamma API error: ${response.status} ${response.statusText}`);
+  const data = await conditionalFetchJson<GammaMarket[]>(url);
+  if (data === null) {
+    // 304 Not Modified — no new data since last fetch.
+    console.log('[TrendCast] Polymarket: unchanged (304), skipping');
+    return [];
   }
-
-  const data: GammaMarket[] = await response.json();
 
   const results = data
     .map(normaliseGammaMarket)

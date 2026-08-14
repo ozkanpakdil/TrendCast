@@ -45,6 +45,7 @@ import { DEFAULT_SETTINGS } from '@/types';
 import { collectPolymarketMarkets, collectKalshiMarkets, collectRedditSignals, collectXTrends, collectNews } from '@/services/collectors';
 import { correlate, correlateNews, correlateNewsSocial } from '@/services/engine/correlation';
 import { exportToCsv, exportToJson } from '@/utils/export';
+import { pruneStorageIfNeeded, measureStorageUsage } from '@/utils/storage';
 
 // ── Register all listeners synchronously at top level ────────────
 setupAlarms();
@@ -182,6 +183,12 @@ function setupMessageHandlers(): void {
       return { data, filename: `trendcast-${Date.now()}.json` };
     }
   });
+
+  // Dashboard / Popup → Background: get storage usage stats (Phase 4)
+  onMessage('GET_STORAGE_USAGE', async () => {
+    const usage = await measureStorageUsage();
+    return { usage };
+  });
 }
 
 // ── Install / update handler ─────────────────────────────────────
@@ -289,6 +296,10 @@ async function runCollection(): Promise<CollectionSnapshot> {
 
   // Save a compact history entry for charting.
   await appendHistoryEntry(snapshot, settings.maxHistoryEntries);
+
+  // Phase 4: Prune storage if over budget (keeps chrome.storage.local
+  // within the ~7 MB soft budget to avoid QUOTA errors).
+  await pruneStorageIfNeeded();
 
   console.log(
     `[TrendCast] ━━ Collection complete: ${markets.length} markets, ${signals.length} signals, ${news.length} news ━━`,

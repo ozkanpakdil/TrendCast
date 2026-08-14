@@ -11,11 +11,12 @@
  * The full dashboard is in the new tab override (src/dashboard/).
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Settings } from './components/Settings';
 import { useSettings } from './hooks/useSettings';
 import { useSnapshot } from './hooks/useSnapshot';
 import { browser } from '@/messaging/browser';
+import { sendMessage } from '@/messaging';
 
 // Build-time version stamp injected by Vite's define.
 const BUILD_VERSION = import.meta.env.BUILD_VERSION ?? 'dev';
@@ -26,6 +27,36 @@ export function App() {
   const [activeTab, setActiveTab] = useState<Tab>('home');
   const { settings, updateSettings } = useSettings();
   const { snapshot, collecting, lastCollectionAt, triggerCollection } = useSnapshot();
+  const [storageBytes, setStorageBytes] = useState<number | null>(null);
+
+  // Phase 4: fetch storage usage for the home tab indicator.
+  useEffect(() => {
+    let cancelled = false;
+    const fetchUsage = async () => {
+      try {
+        const result = await sendMessage('GET_STORAGE_USAGE', {});
+        const unwrapped =
+          result && typeof result === 'object' && 'ok' in result
+            ? (result as { ok: boolean; data: unknown }).data
+            : result;
+        if (
+          !cancelled &&
+          unwrapped &&
+          typeof unwrapped === 'object' &&
+          'usage' in unwrapped
+        ) {
+          const usage = (unwrapped as { usage: { totalBytes: number } }).usage;
+          setStorageBytes(usage.totalBytes);
+        }
+      } catch {
+        // Non-critical — storage indicator is optional.
+      }
+    };
+    fetchUsage();
+    return () => {
+      cancelled = true;
+    };
+  }, [lastCollectionAt]);
 
   const openDashboard = useCallback(() => {
     browser.tabs.create({ url: 'chrome://newtab' });
@@ -102,6 +133,33 @@ export function App() {
               <StatCard label="Signals" value={stats.signals} icon="🔥" />
               <StatCard label="News" value={stats.news} icon="📰" />
             </div>
+
+            {/* Storage usage indicator (Phase 4) */}
+            {storageBytes != null && (
+              <div className="rounded-lg bg-slate-800 p-3">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs text-slate-400">Storage used</span>
+                  <span className="text-xs text-slate-200 font-medium">
+                    {(storageBytes / 1024 / 1024).toFixed(2)} MB
+                  </span>
+                </div>
+                <div className="w-full h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${
+                      storageBytes > 7 * 1024 * 1024
+                        ? 'bg-red-500'
+                        : storageBytes > 5 * 1024 * 1024
+                          ? 'bg-amber-500'
+                          : 'bg-brand-500'
+                    }`}
+                    style={{ width: `${Math.min(100, (storageBytes / (10 * 1024 * 1024)) * 100)}%` }}
+                  />
+                </div>
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Budget: 7 MB of 10 MB. Oldest data is pruned automatically.
+                </p>
+              </div>
+            )}
 
             {/* Enabled sources summary */}
             <div className="rounded-lg bg-slate-800 p-3">

@@ -278,7 +278,10 @@ export type Message =
   | { type: 'WATCHLIST_RESULT'; payload: { watchlist: WatchlistEntry[] } }
   // Dashboard → Background: export collected data
   | { type: 'EXPORT_DATA'; payload: { format: 'csv' | 'json' } }
-  | { type: 'EXPORT_RESULT'; payload: { data: string; filename: string } };
+  | { type: 'EXPORT_RESULT'; payload: { data: string; filename: string } }
+  // Dashboard / Popup → Background: get storage usage stats (Phase 4)
+  | { type: 'GET_STORAGE_USAGE'; payload: Record<string, never> }
+  | { type: 'STORAGE_USAGE_RESULT'; payload: { usage: { totalBytes: number; perKey: Record<string, number> } } };
 
 export type MessageType = Message['type'];
 

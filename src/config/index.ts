@@ -108,4 +108,27 @@ export const CONFIG = {
     // Debounce DOM mutations before re-scanning for injectable elements.
     mutationDebounceMs: 500,
   },
-} as const;
+  // ── Storage budget (Phase 4: performance optimisation) ───────
+  // chrome.storage.local has a 10 MB quota in MV3. We keep a safety
+  // margin and prune oldest data when the budget is exceeded.
+  storageBudget: {
+    // Soft budget in bytes for all TrendCast keys combined.
+    // chrome.storage.local allows ~10 MB; we target 7 MB to leave headroom.
+    budgetBytes: 7 * 1024 * 1024,
+    // When over budget, prune these keys (oldest first) down to this fraction.
+    pruneTargetFraction: 0.7,
+    // Max items retained per collection type (defensive caps).
+    maxMarkets: 500,
+    maxSignals: 500,
+    maxNews: 200,
+  },
+
+  // ── Conditional fetch (Phase 4: collection efficiency) ───────
+  // Stores ETag/Last-Modified per source so unchanged responses are
+  // skipped, saving bandwidth and CPU on the hourly collection cycle.
+  fetch: {
+    // Storage key for the ETag/Last-Modified cache.
+    cacheKey: 'trendcast:fetch-cache',
+    // Default request timeout in ms.
+    timeoutMs: 15_000,
+  },} as const;

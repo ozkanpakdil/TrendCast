@@ -19,6 +19,7 @@
 import type { MarketContract, MarketOutcome } from '@/types';
 import { CONFIG } from '@/config';
 import { extractKeywords } from '@/utils/keywords';
+import { conditionalFetchJson } from '@/utils/conditional-fetch';
 
 /** Raw Kalshi market shape (subset of the trade-api/v2 response). */
 interface KalshiMarket {
@@ -71,15 +72,11 @@ export async function collectKalshiMarkets(limit = 100): Promise<MarketContract[
     url.searchParams.set('limit', String(Math.min(remaining, pageSize)));
     if (cursor) url.searchParams.set('cursor', cursor);
 
-    const response = await fetch(url.toString(), {
-      headers: { Accept: 'application/json' },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Kalshi API error: ${response.status} ${response.statusText}`);
+    const data = await conditionalFetchJson<{ events: KalshiEvent[]; cursor?: string }>(url.toString());
+    if (data === null) {
+      // 304 Not Modified — no new data for this page.
+      break;
     }
-
-    const data: { events: KalshiEvent[]; cursor?: string } = await response.json();
 
     // Flatten events → markets, normalise each market.
     const normalised = data.events

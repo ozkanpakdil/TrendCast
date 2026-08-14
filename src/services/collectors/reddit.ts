@@ -14,6 +14,7 @@ import type { SocialSignal } from '@/types';
 import { CONFIG } from '@/config';
 import { extractKeywords } from '@/utils/keywords';
 import { analyzeSentiment } from '@/utils/sentiment';
+import { conditionalFetchJson } from '@/utils/conditional-fetch';
 
 /** Raw Reddit .json post shape (subset). */
 interface RedditPost {
@@ -42,15 +43,12 @@ interface RedditListingResponse {
 export async function collectRedditSignals(limit = 50): Promise<SocialSignal[]> {
   const url = `${CONFIG.scrape.reddit.jsonUrl}&limit=${limit}`;
 
-  const response = await fetch(url, {
-    headers: { Accept: 'application/json' },
-  });
-
-  if (!response.ok) {
-    throw new Error(`Reddit .json error: ${response.status} ${response.statusText}`);
+  const data = await conditionalFetchJson<RedditListingResponse>(url);
+  if (data === null) {
+    // 304 Not Modified — no new data.
+    console.log('[TrendCast] Reddit: unchanged (304), skipping');
+    return [];
   }
-
-  const data: RedditListingResponse = await response.json();
 
   const results = (data?.data?.children ?? [])
     .map((child) => child.data)

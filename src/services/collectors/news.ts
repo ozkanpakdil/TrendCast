@@ -17,6 +17,7 @@
 import type { NewsItem, NewsSource } from '@/types';
 import { CONFIG } from '@/config';
 import { extractKeywords } from '@/utils/keywords';
+import { conditionalFetchJson } from '@/utils/conditional-fetch';
 
 /** rss2json.com API response shape (subset). */
 interface Rss2JsonResponse {
@@ -67,15 +68,12 @@ async function collectFromSource(source: NewsSource): Promise<NewsItem[]> {
   };
   const apiUrl = configMap[source].rssUrl;
 
-  const response = await fetch(apiUrl, {
-    headers: { Accept: 'application/json' },
-  });
-
-  if (!response.ok) {
-    throw new Error(`${source.toUpperCase()} RSS error: ${response.status} ${response.statusText}`);
+  const data = await conditionalFetchJson<Rss2JsonResponse>(apiUrl);
+  if (data === null) {
+    // 304 Not Modified — no new headlines.
+    console.log(`[TrendCast] ${source.toUpperCase()}: unchanged (304), skipping`);
+    return [];
   }
-
-  const data: Rss2JsonResponse = await response.json();
 
   if (data.status !== 'ok' || !data.items) {
     throw new Error(`${source.toUpperCase()} RSS feed could not be parsed`);
