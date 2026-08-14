@@ -236,17 +236,15 @@ export function App() {
         ) : (
           <>
             {activeTab === 'feed' && (
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <section>
-                  <h2 className={`text-sm font-bold uppercase tracking-wider mb-3 ${sectionTitle}`}>
-                    🔥 Trending Hypes
-                  </h2>
-                  <HypeFeed
-                    signals={snapshot?.signals ?? []}
-                    highlightThreshold={settings.highlightThreshold}
-                  />
-                </section>
-              </div>
+              <section>
+                <h2 className={`text-sm font-bold uppercase tracking-wider mb-3 ${sectionTitle}`}>
+                  🔥 Trending Hypes — Virality Heatmap
+                </h2>
+                <HypeFeed
+                  signals={snapshot?.signals ?? []}
+                  highlightThreshold={settings.highlightThreshold}
+                />
+              </section>
             )}
 
             {activeTab === 'markets' && (

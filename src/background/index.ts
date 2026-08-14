@@ -42,7 +42,7 @@ import type {
   WatchlistEntry,
 } from '@/types';
 import { DEFAULT_SETTINGS } from '@/types';
-import { collectPolymarketMarkets, collectKalshiMarkets, collectRedditSignals, collectNews } from '@/services/collectors';
+import { collectPolymarketMarkets, collectKalshiMarkets, collectRedditSignals, collectXTrends, collectNews } from '@/services/collectors';
 import { correlate, correlateNews } from '@/services/engine/correlation';
 import { exportToCsv, exportToJson } from '@/utils/export';
 
@@ -239,6 +239,14 @@ async function runCollection(): Promise<CollectionSnapshot> {
     );
   }
 
+  if (enabled.x) {
+    tasks.push(
+      collectXTrends()
+        .then((signals) => storeSignals(signals))
+        .catch((err) => console.error('[TrendCast] ❌ X/Trends failed:', err)),
+    );
+  }
+
   // News (BBC + CNN)
   const newsSources: Array<'bbc' | 'cnn'> = [];
   if (enabled.bbc) newsSources.push('bbc');
@@ -251,8 +259,8 @@ async function runCollection(): Promise<CollectionSnapshot> {
     );
   }
 
-  // X and TikTok require content script scraping (no public fetch endpoint).
-  // They will report data via REPORT_SOCIAL_DATA when the user visits those sites.
+  // TikTok requires content script scraping (no public fetch endpoint).
+  // It will report data via REPORT_SOCIAL_DATA when the user visits the site.
 
   await Promise.allSettled(tasks);
 

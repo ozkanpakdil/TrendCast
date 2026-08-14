@@ -70,8 +70,10 @@ function normaliseRedditPost(post: RedditPost): SocialSignal {
   const ratioSentiment = (post.upvote_ratio - 0.5) * 2;
   const sentiment = textSentiment * 0.7 + ratioSentiment * 0.3;
   // Virality: normalise ups + comments (log scale to compress range).
+  // Use a gentler curve so posts don't all saturate at 100.
+  // log10(100K) * 20 = 100, log10(10K) * 20 = 80, log10(1K) * 20 = 60.
   const engagement = post.ups + post.num_comments;
-  const virality = Math.min(100, Math.log10(engagement + 1) * 25);
+  const virality = Math.min(100, Math.log10(engagement + 1) * 20);
 
   return {
     id: `reddit:${post.id}`,

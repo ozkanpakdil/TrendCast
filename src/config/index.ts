@@ -42,6 +42,9 @@ export const CONFIG = {
     x: {
       // X explore/trending page — content script reads trending topics
       url: 'https://x.com/explore/tabs/trending',
+      // Google Trends RSS (reflects Twitter/social trends) via rss2json CORS proxy.
+      // X has no free public API for trends; Google Trends is the best free source.
+      trendsRssUrl: 'https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent('https://trends.google.com/trending/rss?geo=US'),
     },
     tiktok: {
       // TikTok discover page — content script reads trend titles
