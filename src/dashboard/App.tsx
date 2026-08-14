@@ -2,7 +2,7 @@
  * Dashboard App — the main new tab page.
  *
  * Full-page React app showing aggregated hypes, news, market odds, and
- * correlations. This is the primary UI for HypeMarket.
+ * correlations. This is the primary UI for TrendCast.
  *
  * Phase 3 additions:
  *   - Dark/light theme toggle
@@ -38,6 +38,10 @@ import { browser } from '@/messaging/browser';
 import { CONFIG } from '@/config';
 import { sendMessage } from '@/messaging';
 import { downloadExport } from '@/utils/export';
+
+// Build-time version stamp injected by Vite's define.
+// Format: "0.1.0+2026-08-14T13:21:00Z" — version + build timestamp.
+const BUILD_VERSION = import.meta.env.BUILD_VERSION ?? 'dev';
 
 type Tab = 'feed' | 'markets' | 'news' | 'correlations' | 'watchlist' | 'history';
 
@@ -87,7 +91,7 @@ export function App() {
     try {
       await browser.storage.local.set({ [CONFIG.storage.settings]: updated });
     } catch (err) {
-      console.error('[HypeMarket] Failed to save theme:', err);
+      console.error('[TrendCast] Failed to save theme:', err);
     }
   }, [theme, settings]);
 
@@ -101,7 +105,7 @@ export function App() {
         downloadExport(data, filename, mimeType);
       }
     } catch (err) {
-      console.error('[HypeMarket] Export failed:', err);
+      console.error('[TrendCast] Export failed:', err);
     } finally {
       setExporting(false);
     }
@@ -141,7 +145,7 @@ export function App() {
           <div className="flex items-center gap-3">
             <span className="text-2xl">📊</span>
             <div>
-              <h1 className="text-xl font-bold text-brand-400">HypeMarket</h1>
+              <h1 className="text-xl font-bold text-brand-400">TrendCast</h1>
               <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-light-muted'}`}>
                 Sentiment × Markets · {stats.markets} markets · {stats.signals} signals · {stats.news} news
               </p>
@@ -149,6 +153,8 @@ export function App() {
           </div>
           <div className="flex items-center gap-3">
             <div className={`text-xs ${isDark ? 'text-slate-500' : 'text-light-muted'}`}>
+              <span className="opacity-60">v{BUILD_VERSION}</span>
+              {' · '}
               Last: <span className={isDark ? 'text-slate-300' : 'text-light-text'}>{lastCollectionText}</span>
             </div>
 
@@ -309,7 +315,7 @@ export function App() {
 
       {/* Footer */}
       <footer className={`border-t mt-12 py-6 text-center text-xs ${footerBorder}`}>
-        HypeMarket · 100% client-side · No API keys · Uses your browser sessions
+        TrendCast · 100% client-side · No API keys · Uses your browser sessions
       </footer>
     </div>
   );

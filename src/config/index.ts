@@ -26,8 +26,12 @@ export const CONFIG = {
     kalshi: {
       // Kalshi markets page
       url: 'https://kalshi.com/markets',
-      // Kalshi public market data endpoint (no auth needed for read-only)
-      api: 'https://api.kalshi.com/v2/markets?status=open&limit=100',
+      // Kalshi public events endpoint with nested markets.
+      // We use /events instead of /markets because the /markets endpoint
+      // returns dead quarter-by-quarter sports spreads with no trades.
+      // The /events endpoint returns real markets with actual prices/volume.
+      // mve_filter=exclude filters out multivariate event combos.
+      api: 'https://external-api.kalshi.com/trade-api/v2/events?status=open&limit=100&mve_filter=exclude&with_nested_markets=true',
     },
     reddit: {
       // Reddit popular/hot — content script reads post titles + scores
@@ -44,14 +48,16 @@ export const CONFIG = {
       url: 'https://www.tiktok.com/discover',
     },
     bbc: {
-      // BBC news RSS — no login needed, public feed
-      rssUrl: 'https://feeds.bbci.co.uk/news/rss.xml',
+      // BBC news RSS via rss2json.com (CORS-friendly JSON proxy).
+      // Direct RSS fetch is CORS-blocked in Firefox MV3 background workers.
+      rssUrl: 'https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent('https://feeds.bbci.co.uk/news/rss.xml'),
       // BBC news homepage as fallback for DOM scraping
       url: 'https://www.bbc.com/news',
     },
     cnn: {
-      // CNN RSS — no login needed, public feed
-      rssUrl: 'http://rss.cnn.com/rss/edition.rss',
+      // CNN news via Google News RSS filtered to CNN, through rss2json.com.
+      // CNN's own RSS feed (rss.cnn.com) is unreliable and CORS-blocked.
+      rssUrl: 'https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent('https://news.google.com/rss/search?q=site:cnn.com+when:1d&hl=en-US&gl=US&ceid=US:en'),
       // CNN homepage as fallback for DOM scraping
       url: 'https://www.cnn.com',
     },
@@ -59,7 +65,7 @@ export const CONFIG = {
 
   // ── Background collection ─────────────────────────────────────
   collection: {
-    alarmName: 'hypemarket-collect',
+    alarmName: 'trendcast-collect',
     defaultIntervalMinutes: 60, // hourly
     // MV3 `chrome.alarms` minimum is 0.5 min (30s) in Chrome.
     minIntervalMinutes: 5,
@@ -71,20 +77,20 @@ export const CONFIG = {
 
   // ── Storage keys ──────────────────────────────────────────────
   storage: {
-    settings: 'hypemarket:settings',
-    latestSnapshot: 'hypemarket:latest-snapshot',
-    collectedMarkets: 'hypemarket:collected-markets',
-    collectedSignals: 'hypemarket:collected-signals',
-    collectedNews: 'hypemarket:collected-news',
-    correlations: 'hypemarket:correlations',
-    lastCollectionAt: 'hypemarket:last-collection',
-    history: 'hypemarket:history',
-    watchlist: 'hypemarket:watchlist',
+    settings: 'trendcast:settings',
+    latestSnapshot: 'trendcast:latest-snapshot',
+    collectedMarkets: 'trendcast:collected-markets',
+    collectedSignals: 'trendcast:collected-signals',
+    collectedNews: 'trendcast:collected-news',
+    correlations: 'trendcast:correlations',
+    lastCollectionAt: 'trendcast:last-collection',
+    history: 'trendcast:history',
+    watchlist: 'trendcast:watchlist',
   },
 
   // ── Overlay injection ─────────────────────────────────────────
   overlay: {
-    containerId: 'hypemarket-overlay-root',
+    containerId: 'trendcast-overlay-root',
     // Debounce DOM mutations before re-scanning for injectable elements.
     mutationDebounceMs: 500,
   },

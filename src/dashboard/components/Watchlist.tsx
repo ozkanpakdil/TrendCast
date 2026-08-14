@@ -35,7 +35,7 @@ export function Watchlist({ markets }: WatchlistProps) {
         setWatchlist((result as { watchlist: WatchlistEntry[] }).watchlist);
       }
     } catch (err) {
-      console.error('[HypeMarket] Failed to fetch watchlist:', err);
+      console.error('[TrendCast] Failed to fetch watchlist:', err);
       // Fallback: read directly from storage
       try {
         const storageResult = await browser.storage.local.get(CONFIG.storage.watchlist);
@@ -66,7 +66,7 @@ export function Watchlist({ markets }: WatchlistProps) {
       await sendMessage('REMOVE_FROM_WATCHLIST', { contractId });
       // The storage listener will update the state
     } catch (err) {
-      console.error('[HypeMarket] Failed to remove from watchlist:', err);
+      console.error('[TrendCast] Failed to remove from watchlist:', err);
     }
   }, []);
 

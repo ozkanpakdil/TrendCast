@@ -26,7 +26,7 @@ export function useSnapshot() {
       if (snap) setSnapshot(snap);
       if (lastAt) setLastCollectionAt(lastAt);
     } catch (err) {
-      console.error('[HypeMarket] Failed to fetch snapshot:', err);
+      console.error('[TrendCast] Failed to fetch snapshot:', err);
     } finally {
       setLoading(false);
     }
@@ -34,11 +34,13 @@ export function useSnapshot() {
 
   const triggerCollection = useCallback(async () => {
     setCollecting(true);
+    console.log('[TrendCast] [Dashboard] Triggering collection…');
     try {
-      await sendMessage('TRIGGER_COLLECTION', {});
+      const result = await sendMessage('TRIGGER_COLLECTION', {});
+      console.log('[TrendCast] [Dashboard] Collection returned:', result);
       await fetchSnapshot();
     } catch (err) {
-      console.error('[HypeMarket] Collection trigger failed:', err);
+      console.error('[TrendCast] [Dashboard] Collection trigger failed:', err);
     } finally {
       setCollecting(false);
     }

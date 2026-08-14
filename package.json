@@ -1,6 +1,6 @@
 {
-  "name": "hypemarket",
-  "displayName": "HypeMarket — Social Sentiment × Prediction Markets",
+  "name": "trendcast",
+  "displayName": "TrendCast — Social Sentiment × Prediction Markets",
   "version": "0.1.0",
   "description": "Track social sentiment across X, Reddit, and TikTok and correlate it in real-time with Polymarket and Kalshi prediction market odds.",
   "license": "MIT",
@@ -8,9 +8,9 @@
   "private": true,
   "scripts": {
     "dev": "vite",
-    "dev:firefox": "cross-env TARGET=firefox vite",
+    "dev:firefox": "TARGET=firefox vite",
     "build": "tsc --noEmit && vite build",
-    "build:firefox": "cross-env TARGET=firefox tsc --noEmit && vite build",
+    "build:firefox": "TARGET=firefox tsc --noEmit && TARGET=firefox vite build",
     "preview": "vite preview",
     "lint": "eslint . --ext .ts,.tsx --max-warnings 0",
     "lint:fix": "eslint . --ext .ts,.tsx --fix",
@@ -18,7 +18,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "zip": "cd dist && zip -r ../hypemarket-v$(node -p \"require('../package.json').version\").zip ."
+    "zip": "cd dist && zip -r ../trendcast-v$(node -p \"require('../package.json').version\").zip ."
   },
   "dependencies": {
     "react": "^18.3.1",
@@ -35,8 +35,7 @@
     "@typescript-eslint/eslint-plugin": "^7.18.0",
     "@typescript-eslint/parser": "^7.18.0",
     "autoprefixer": "^10.4.19",
-    "cross-env": "^7.0.3",
-    "eslint": "^8.57.0",
+"eslint": "^8.57.0",
     "eslint-plugin-react": "^7.35.0",
     "eslint-plugin-react-hooks": "^4.6.2",
     "jsdom": "^30.0.1",

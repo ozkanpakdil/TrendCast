@@ -24,7 +24,7 @@ export function useCorrelations() {
         setCorrelations(result as CorrelationResult);
       }
     } catch (err) {
-      console.error('[HypeMarket] Correlation failed:', err);
+      console.error('[TrendCast] Correlation failed:', err);
     } finally {
       setLoading(false);
     }

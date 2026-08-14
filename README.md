@@ -1,4 +1,4 @@
-# 📊 HypeMarket — Social Sentiment × Prediction Markets
+# 📊 TrendCast — Social Sentiment × Prediction Markets
 
 A cross-browser extension (Chrome MV3 & Firefox compatible) that tracks social sentiment and viral trends across **X (Twitter)**, **Reddit**, **TikTok**, **BBC**, and **CNN**, and correlates them in real-time with prediction market odds on **Polymarket** and **Kalshi**.
 
@@ -28,7 +28,7 @@ The extension uses your own browser sessions to collect data. When you install i
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
-│                    HypeMarket — 100% Client-Side Architecture             │
+│                    TrendCast — 100% Client-Side Architecture             │
 ├──────────────────────────────────────────────────────────────────────────┤
 │                                                                          │
 │  ┌─────────────┐    chrome.storage     ┌───────────────────────────┐    │
@@ -187,7 +187,7 @@ bun run lint           # ESLint
 3. Enable **Developer mode** (top-right toggle)
 4. Click **Load unpacked**
 5. Select the `dist/` folder
-6. Open a new tab — the HypeMarket dashboard appears
+6. Open a new tab — the TrendCast dashboard appears
 
 ### Firefox
 

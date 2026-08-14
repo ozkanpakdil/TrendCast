@@ -1,9 +1,9 @@
-/* HypeMarket overlay — injected into social platforms.
- * Styles are scoped with .hypemarket-overlay prefix to avoid conflicts.
+/* TrendCast overlay — injected into social platforms.
+ * Styles are scoped with .trendcast-overlay prefix to avoid conflicts.
  * Uses high z-index to stay above social platform UI.
  */
 
-.hypemarket-overlay {
+.trendcast-overlay {
   position: fixed;
   bottom: 16px;
   right: 16px;
@@ -20,7 +20,7 @@
   border: 1px solid #2a2a4e;
 }
 
-.hypemarket-overlay__header {
+.trendcast-overlay__header {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -30,13 +30,13 @@
   border-bottom: 1px solid #2a2a4e;
 }
 
-.hypemarket-overlay__logo {
+.trendcast-overlay__logo {
   font-weight: 700;
   font-size: 14px;
   color: #599dff;
 }
 
-.hypemarket-overlay__close {
+.trendcast-overlay__close {
   background: none;
   border: none;
   color: #888;
@@ -46,15 +46,15 @@
   line-height: 1;
 }
 
-.hypemarket-overlay__close:hover {
+.trendcast-overlay__close:hover {
   color: #fff;
 }
 
-.hypemarket-overlay__body {
+.trendcast-overlay__body {
   padding: 8px;
 }
 
-.hypemarket-overlay__match {
+.trendcast-overlay__match {
   padding: 10px;
   margin-bottom: 6px;
   background: #1e1e3a;
@@ -62,47 +62,47 @@
   border-left: 3px solid #599dff;
 }
 
-.hypemarket-overlay__question {
+.trendcast-overlay__question {
   font-weight: 600;
   margin-bottom: 6px;
   line-height: 1.3;
 }
 
-.hypemarket-overlay__odds {
+.trendcast-overlay__odds {
   display: flex;
   gap: 8px;
   margin-bottom: 6px;
 }
 
-.hypemarket-overlay__outcome {
+.trendcast-overlay__outcome {
   padding: 2px 8px;
   border-radius: 4px;
   font-size: 12px;
   font-weight: 600;
 }
 
-.hypemarket-overlay__outcome--yes {
+.trendcast-overlay__outcome--yes {
   background: rgba(22, 163, 74, 0.2);
   color: #4ade80;
 }
 
-.hypemarket-overlay__outcome--no {
+.trendcast-overlay__outcome--no {
   background: rgba(220, 38, 38, 0.2);
   color: #f87171;
 }
 
-.hypemarket-overlay__meta {
+.trendcast-overlay__meta {
   display: flex;
   justify-content: space-between;
   font-size: 11px;
   color: #888;
 }
 
-.hypemarket-overlay__platform {
+.trendcast-overlay__platform {
   text-transform: capitalize;
 }
 
-.hypemarket-overlay__confidence {
+.trendcast-overlay__confidence {
   color: #599dff;
   font-weight: 600;
 }

@@ -4,20 +4,25 @@ import { resolve } from 'node:path';
 import manifest from './src/manifest.config';
 
 /**
- * Vite configuration for HypeMarket.
+ * Vite configuration for TrendCast.
  *
  * Uses @crxjs/vite-plugin for HMR-aware extension bundling.
  * The `TARGET` env var switches between Chrome (MV3) and Firefox (MV3 via polyfill).
  *
- * ⚠️ Pitfall: Firefox does not yet fully support MV3 service workers.
- *    We use `background.scripts` fallback for Firefox and `service_worker` for Chrome.
- *    The webextension-polyfill normalises the API surface in both.
+ * ⚠️ Pitfall: Firefox does not support `background.service_worker` in MV3.
+ *    We use `background.scripts` (event page) for Firefox and `service_worker`
+ *    for Chrome. The manifest.config.ts handles this switch based on TARGET.
+ *
+ * ⚠️ Pitfall: @crxjs/vite-plugin injects `use_dynamic_url` into
+ *    `web_accessible_resources` by default. Firefox doesn't support this
+ *    property and warns on load. Passing `browser: 'firefox'` to the crx()
+ *    plugin makes it strip the property automatically.
  */
 export default defineConfig(({ mode }) => {
   const isFirefox = process.env.TARGET === 'firefox';
 
   return {
-    plugins: [crx({ manifest })],
+    plugins: [crx({ manifest, browser: isFirefox ? 'firefox' : 'chrome' })],
     resolve: {
       alias: {
         '@': resolve(__dirname, 'src'),
@@ -36,6 +41,11 @@ export default defineConfig(({ mode }) => {
     define: {
       // Allows code to branch on browser at build time
       'import.meta.env.IS_FIREFOX': JSON.stringify(isFirefox),
+      // Build-time version stamp so users can verify they're running the latest build.
+      // Format: "0.1.0+2026-08-14T13:21:00Z" — version + build timestamp.
+      'import.meta.env.BUILD_VERSION': JSON.stringify(
+        `${process.env.npm_package_version ?? '0.0.0'}+${new Date().toISOString()}`,
+      ),
     },
     server: {
       port: 5173,

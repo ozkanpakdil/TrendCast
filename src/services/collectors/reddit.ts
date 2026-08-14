@@ -52,10 +52,13 @@ export async function collectRedditSignals(limit = 50): Promise<SocialSignal[]> 
 
   const data: RedditListingResponse = await response.json();
 
-  return (data?.data?.children ?? [])
+  const results = (data?.data?.children ?? [])
     .map((child) => child.data)
     .filter((post): post is RedditPost => post != null)
     .map(normaliseRedditPost);
+
+  console.log(`[TrendCast] Reddit: ${results.length} items collected`);
+  return results;
 }
 
 /** Convert a Reddit post into our normalised `SocialSignal`. */

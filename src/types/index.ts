@@ -1,8 +1,8 @@
 /**
- * Core domain types for HypeMarket.
+ * Core domain types for TrendCast.
  *
  * ── Architecture Shift ────────────────────────────────────────────
- * HypeMarket is 100% client-side. No external API calls with API keys.
+ * TrendCast is 100% client-side. No external API calls with API keys.
  * The extension scrapes data using the user's own browser sessions:
  *   - Content scripts read the DOM when the user visits supported sites.
  *   - The background worker opens background tabs hourly to collect
@@ -242,7 +242,7 @@ export interface ExtensionSettings {
   };
   /** Minimum virality score to highlight a signal (0–100). */
   highlightThreshold: number;
-  /** Whether to override the new tab page with the HypeMarket dashboard. */
+  /** Whether to override the new tab page with the TrendCast dashboard. */
   overrideNewTab: boolean;
   /** UI theme mode. */
   theme: ThemeMode;

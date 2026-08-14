@@ -17,6 +17,9 @@ import { useSettings } from './hooks/useSettings';
 import { useSnapshot } from './hooks/useSnapshot';
 import { browser } from '@/messaging/browser';
 
+// Build-time version stamp injected by Vite's define.
+const BUILD_VERSION = import.meta.env.BUILD_VERSION ?? 'dev';
+
 type Tab = 'home' | 'settings';
 
 export function App() {
@@ -46,7 +49,7 @@ export function App() {
       <header className="flex items-center justify-between px-4 py-3 bg-slate-800 border-b border-slate-700">
         <div className="flex items-center gap-2">
           <span className="text-xl">📊</span>
-          <h1 className="text-base font-bold text-brand-400">HypeMarket</h1>
+          <h1 className="text-base font-bold text-brand-400">TrendCast</h1>
         </div>
         <nav className="flex gap-1">
           {(['home', 'settings'] as Tab[]).map((tab) => (
@@ -123,7 +126,7 @@ export function App() {
 
             {/* Info */}
             <p className="text-[10px] text-slate-500 text-center leading-relaxed">
-              HypeMarket runs entirely in your browser. No API keys, no servers.
+              TrendCast runs entirely in your browser. No API keys, no servers.
               <br />
               Data is collected hourly using your own browser sessions.
             </p>
@@ -137,7 +140,7 @@ export function App() {
 
       {/* Footer */}
       <footer className="px-4 py-2 bg-slate-800 border-t border-slate-700 text-[10px] text-slate-500 text-center">
-        HypeMarket v0.1.0 · 100% client-side · No API keys
+        TrendCast v{BUILD_VERSION} · 100% client-side · No API keys
       </footer>
     </div>
   );

@@ -70,9 +70,27 @@ export function MarketOdds({ markets }: MarketOddsProps) {
   const isWatched = (market: MarketContract) =>
     watchlist.some((w) => w.contractId === market.id && w.platform === market.platform);
 
-  const sorted = [...markets].sort(
-    (a, b) => (b.volume24h ?? 0) - (a.volume24h ?? 0),
+  // Sort each platform by volume descending, then interleave so the
+  // tab shows a balanced mix (e.g. 25 Polymarket + 25 Kalshi) instead
+  // of being dominated by whichever platform has more markets.
+  const perPlatform = 25;
+  const byPlatform = new Map<string, MarketContract[]>();
+  for (const m of markets) {
+    const list = byPlatform.get(m.platform) ?? [];
+    list.push(m);
+    byPlatform.set(m.platform, list);
+  }
+  const sortedPerPlatform = Array.from(byPlatform.values()).map((list) =>
+    [...list].sort((a, b) => (b.volume24h ?? 0) - (a.volume24h ?? 0)).slice(0, perPlatform),
   );
+  // Interleave: take turns picking one market from each platform's top list
+  const sorted: MarketContract[] = [];
+  const maxLen = Math.max(...sortedPerPlatform.map((l) => l.length), 0);
+  for (let i = 0; i < maxLen; i++) {
+    for (const list of sortedPerPlatform) {
+      if (i < list.length) sorted.push(list[i]);
+    }
+  }
 
   return (
     <div className="space-y-2">

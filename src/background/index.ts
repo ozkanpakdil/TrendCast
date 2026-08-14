@@ -51,7 +51,13 @@ setupAlarms();
 setupMessageHandlers();
 setupInstallHandler();
 
-console.log('[HypeMarket] Background worker initialised at', new Date().toISOString());
+// Build-time version stamp injected by Vite's define.
+// Format: "0.1.0+2026-08-14T13:21:00Z"
+const BUILD_VERSION = import.meta.env.BUILD_VERSION ?? 'dev';
+
+console.log(
+  `[TrendCast] Background worker initialised — v${BUILD_VERSION} at ${new Date().toISOString()}`,
+);
 
 // ── Alarm setup ──────────────────────────────────────────────────
 
@@ -62,7 +68,7 @@ function setupAlarms(): void {
 
   browser.alarms.onAlarm.addListener(async (alarm) => {
     if (alarm.name !== CONFIG.collection.alarmName) return;
-    console.log('[HypeMarket] Alarm fired — starting hourly collection');
+    console.log('[TrendCast] Alarm fired — starting hourly collection');
     await runCollection();
   });
 }
@@ -75,7 +81,7 @@ function setupMessageHandlers(): void {
     const existing = await getCollectedMarkets();
     const merged = mergeMarkets(existing, payload.markets);
     await browser.storage.local.set({ [CONFIG.storage.collectedMarkets]: merged });
-    console.log(`[HypeMarket] Stored ${payload.markets.length} markets from content script`);
+    console.log(`[TrendCast] Stored ${payload.markets.length} markets from content script`);
   });
 
   // Content script → Background: report scraped social signals from DOM
@@ -83,7 +89,7 @@ function setupMessageHandlers(): void {
     const existing = await getCollectedSignals();
     const merged = mergeSignals(existing, payload.signals);
     await browser.storage.local.set({ [CONFIG.storage.collectedSignals]: merged });
-    console.log(`[HypeMarket] Stored ${payload.signals.length} social signals from content script`);
+    console.log(`[TrendCast] Stored ${payload.signals.length} social signals from content script`);
   });
 
   // Content script → Background: report scraped news headlines from DOM
@@ -91,12 +97,12 @@ function setupMessageHandlers(): void {
     const existing = await getCollectedNews();
     const merged = mergeNews(existing, payload.news);
     await browser.storage.local.set({ [CONFIG.storage.collectedNews]: merged });
-    console.log(`[HypeMarket] Stored ${payload.news.length} news items from content script`);
+    console.log(`[TrendCast] Stored ${payload.news.length} news items from content script`);
   });
 
   // Popup / Dashboard → Background: trigger manual collection
   onMessage('TRIGGER_COLLECTION', async () => {
-    console.log('[HypeMarket] Manual collection triggered');
+    console.log('[TrendCast] Manual collection triggered');
     const snapshot = await runCollection();
     return snapshot;
   });
@@ -116,7 +122,7 @@ function setupMessageHandlers(): void {
     const newsMatches = correlateNews(news, markets);
 
     await browser.storage.local.set({ [CONFIG.storage.correlations]: { matches, newsMatches } });
-    console.log(`[HypeMarket] Correlated ${matches.length} signal matches, ${newsMatches.length} news matches`);
+    console.log(`[TrendCast] Correlated ${matches.length} signal matches, ${newsMatches.length} news matches`);
 
     return { matches, newsMatches };
   });
@@ -134,7 +140,7 @@ function setupMessageHandlers(): void {
     const filtered = watchlist.filter((w) => w.contractId !== payload.entry.contractId);
     filtered.push(payload.entry);
     await browser.storage.local.set({ [CONFIG.storage.watchlist]: filtered });
-    console.log(`[HypeMarket] Added to watchlist: ${payload.entry.contractId}`);
+    console.log(`[TrendCast] Added to watchlist: ${payload.entry.contractId}`);
     return { watchlist: filtered };
   });
 
@@ -143,7 +149,7 @@ function setupMessageHandlers(): void {
     const watchlist = await getWatchlist();
     const filtered = watchlist.filter((w) => w.contractId !== payload.contractId);
     await browser.storage.local.set({ [CONFIG.storage.watchlist]: filtered });
-    console.log(`[HypeMarket] Removed from watchlist: ${payload.contractId}`);
+    console.log(`[TrendCast] Removed from watchlist: ${payload.contractId}`);
     return { watchlist: filtered };
   });
 
@@ -166,10 +172,10 @@ function setupMessageHandlers(): void {
 
     if (payload.format === 'csv') {
       const data = exportToCsv({ markets, signals, news, correlations });
-      return { data, filename: `hypemarket-${Date.now()}.csv` };
+      return { data, filename: `trendcast-${Date.now()}.csv` };
     } else {
       const data = exportToJson({ markets, signals, news, correlations });
-      return { data, filename: `hypemarket-${Date.now()}.json` };
+      return { data, filename: `trendcast-${Date.now()}.json` };
     }
   });
 }
@@ -179,7 +185,7 @@ function setupMessageHandlers(): void {
 function setupInstallHandler(): void {
   browser.runtime.onInstalled.addListener(async (details) => {
     if (details.reason === 'install') {
-      console.log('[HypeMarket] First install — seeding default settings');
+      console.log('[TrendCast] First install — seeding default settings');
       await browser.storage.local.set({
         [CONFIG.storage.settings]: DEFAULT_SETTINGS,
       });
@@ -203,6 +209,8 @@ async function runCollection(): Promise<CollectionSnapshot> {
   const settings = await getSettings();
   const enabled = settings.enabledSources;
 
+  console.log('[TrendCast] ━━ Collection started ━━');
+
   const tasks: Promise<unknown>[] = [];
 
   // Markets
@@ -210,7 +218,7 @@ async function runCollection(): Promise<CollectionSnapshot> {
     tasks.push(
       collectPolymarketMarkets()
         .then((markets) => storeMarkets(markets))
-        .catch((err) => console.error('[HypeMarket] Polymarket collection failed:', err)),
+        .catch((err) => console.error('[TrendCast] ❌ Polymarket failed:', err)),
     );
   }
 
@@ -218,7 +226,7 @@ async function runCollection(): Promise<CollectionSnapshot> {
     tasks.push(
       collectKalshiMarkets()
         .then((markets) => storeMarkets(markets))
-        .catch((err) => console.error('[HypeMarket] Kalshi collection failed:', err)),
+        .catch((err) => console.error('[TrendCast] ❌ Kalshi failed:', err)),
     );
   }
 
@@ -227,7 +235,7 @@ async function runCollection(): Promise<CollectionSnapshot> {
     tasks.push(
       collectRedditSignals()
         .then((signals) => storeSignals(signals))
-        .catch((err) => console.error('[HypeMarket] Reddit collection failed:', err)),
+        .catch((err) => console.error('[TrendCast] ❌ Reddit failed:', err)),
     );
   }
 
@@ -239,7 +247,7 @@ async function runCollection(): Promise<CollectionSnapshot> {
     tasks.push(
       collectNews(newsSources)
         .then((news) => storeNews(news))
-        .catch((err) => console.error('[HypeMarket] News collection failed:', err)),
+        .catch((err) => console.error('[TrendCast] ❌ News failed:', err)),
     );
   }
 
@@ -268,7 +276,9 @@ async function runCollection(): Promise<CollectionSnapshot> {
   // Save a compact history entry for charting.
   await appendHistoryEntry(snapshot, settings.maxHistoryEntries);
 
-  console.log(`[HypeMarket] Collection complete: ${markets.length} markets, ${signals.length} signals, ${news.length} news items`);
+  console.log(
+    `[TrendCast] ━━ Collection complete: ${markets.length} markets, ${signals.length} signals, ${news.length} news ━━`,
+  );
   return snapshot;
 }
 

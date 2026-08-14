@@ -45,9 +45,12 @@ export async function collectPolymarketMarkets(limit = 100): Promise<MarketContr
 
   const data: GammaMarket[] = await response.json();
 
-  return data
+  const results = data
     .map(normaliseGammaMarket)
     .filter((m): m is MarketContract => m !== null);
+
+  console.log(`[TrendCast] Polymarket: ${results.length} items collected`);
+  return results;
 }
 
 /** Convert a Gamma API market into our normalised `MarketContract`. */

@@ -125,7 +125,7 @@ export function Settings({ settings, onUpdate }: SettingsProps) {
           />
         </label>
         <p className="text-[10px] text-slate-500 mt-1">
-          When enabled, opening a new tab shows the HypeMarket dashboard.
+          When enabled, opening a new tab shows the TrendCast dashboard.
           Disable to keep your browser's default new tab page.
         </p>
       </Section>

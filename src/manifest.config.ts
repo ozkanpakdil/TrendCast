@@ -2,7 +2,7 @@ import { defineManifest } from '@crxjs/vite-plugin';
 import pkg from '../package.json';
 
 /**
- * HypeMarket — Manifest V3 configuration.
+ * TrendCast — Manifest V3 configuration.
  *
  * This is the single source of truth for the extension manifest.
  * @crxjs/vite-plugin consumes this at build time and emits a valid
@@ -15,9 +15,9 @@ import pkg from '../package.json';
  *   • `chrome_url_overrides` replaces the new tab page with our dashboard.
  *
  * Firefox (MV3 — supported since Firefox 109+):
- *   • Background can use `service_worker` (Firefox 121+) OR `scripts`
- *     for older versions. We emit `scripts` as a fallback at build time
- *     (see vite.config.ts `TARGET=firefox`).
+ *   • Background uses `scripts` (event page). Firefox does NOT support
+ *     `background.service_worker` — it must be `background.scripts`.
+ *     We switch at build time based on `TARGET=firefox` env var.
  *   • `browser_action` is the legacy key; MV3 uses `action` in both.
  *   • `chrome_url_overrides` is supported in Firefox.
  *
@@ -34,16 +34,26 @@ import pkg from '../package.json';
  * tabs for hourly collection.
  * ─────────────────────────────────────────────────────────────────
  */
+
+// Access process.env without requiring @types/node.
+// The manifest config is imported by vite.config.ts and runs in Node/Bun,
+// so process.env is available at build time. The cast avoids a tsc error
+// since @types/node is not in our tsconfig types array.
+declare const process: { env: Record<string, string | undefined> } | undefined;
+
+const isFirefox =
+  (typeof process !== 'undefined' && process.env?.TARGET === 'firefox') ?? false;
+
 export default defineManifest({
   manifest_version: 3,
-  name: pkg.displayName ?? 'HypeMarket',
+  name: pkg.displayName ?? 'TrendCast',
   description: pkg.description,
   version: pkg.version,
 
   // Toolbar icon + popup (quick-launcher)
   action: {
     default_popup: 'src/popup/index.html',
-    default_title: 'HypeMarket — Sentiment × Markets',
+    default_title: 'TrendCast — Sentiment × Markets',
     default_icon: {
       '16': 'icons/icon-16.png',
       '32': 'icons/icon-32.png',
@@ -53,7 +63,7 @@ export default defineManifest({
   },
 
   // ── New Tab Override ──────────────────────────────────────────
-  // Replaces the browser's new tab page with the HypeMarket dashboard.
+  // Replaces the browser's new tab page with the TrendCast dashboard.
   // This is the primary UI — users see all hypes, news, and correlated
   // market odds every time they open a new tab.
   //
@@ -73,11 +83,18 @@ export default defineManifest({
 
   // ── Background ────────────────────────────────────────────────
   // Chrome MV3: service_worker (ephemeral, may be killed at any time).
-  // Firefox MV3: we inject `scripts` fallback at build time.
-  background: {
-    service_worker: 'src/background/index.ts',
-    type: 'module',
-  },
+  // Firefox MV3: scripts (event page). Firefox does NOT support
+  //   background.service_worker — using it causes installation to fail
+  //   with "background.service_worker is currently disabled. Add
+  //   background.scripts." We switch based on TARGET env var.
+  background: isFirefox
+    ? {
+        scripts: ['src/background/index.ts'],
+      }
+    : {
+        service_worker: 'src/background/index.ts',
+        type: 'module',
+      },
 
   // ── Content Scripts ────────────────────────────────────────────
   // Split by domain group so we only inject what's needed.
@@ -141,12 +158,14 @@ export default defineManifest({
     // Prediction markets (user's own session if logged in)
     'https://*.polymarket.com/*',
     'https://*.kalshi.com/*',
+    'https://*.kalshi.co/*',
     // Social platforms (user's own session if logged in)
     'https://*.x.com/*',
     'https://*.twitter.com/*',
     'https://*.reddit.com/*',
     'https://*.tiktok.com/*',
-    // News sites (no login required)
+    // News RSS feeds — fetched via rss2json.com CORS proxy
+    'https://api.rss2json.com/*',
     'https://*.bbc.com/*',
     'https://*.cnn.com/*',
   ],
@@ -182,7 +201,7 @@ export default defineManifest({
   // Firefox-specific: https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/manifest.json/browser_specific_settings
   browser_specific_settings: {
     gecko: {
-      id: 'hypemarket@trendcast.dev',
+      id: 'trendcast@trendcast.dev',
       strict_min_version: '121.0',
     },
   },

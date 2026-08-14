@@ -48,7 +48,7 @@ export function HistoryChart({ className }: HistoryChartProps) {
         setHistory((result as { history: HistoryEntry[] }).history);
       }
     } catch (err) {
-      console.error('[HypeMarket] Failed to fetch history:', err);
+      console.error('[TrendCast] Failed to fetch history:', err);
       // Fallback: read directly from storage
       try {
         const storageResult = await browser.storage.local.get(CONFIG.storage.history);

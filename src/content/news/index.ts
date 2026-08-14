@@ -99,12 +99,12 @@ async function scanAndReport(): Promise<void> {
   if (hash === lastScanHash) return;
   lastScanHash = hash;
 
-  console.log(`[HypeMarket] Scraped ${news.length} headlines from ${detectSource()}`);
+  console.log(`[TrendCast] Scraped ${news.length} headlines from ${detectSource()}`);
 
   try {
     await sendMessage('REPORT_NEWS_DATA', { news });
   } catch (err) {
-    console.error('[HypeMarket] Failed to report news:', err);
+    console.error('[TrendCast] Failed to report news:', err);
   }
 }
 

@@ -368,35 +368,35 @@ function injectOverlay(matches: CorrelationMatch[]): void {
 
   const container = document.createElement('div');
   container.id = CONFIG.overlay.containerId;
-  container.className = 'hypemarket-overlay';
+  container.className = 'trendcast-overlay';
 
   const topMatches = matches.slice(0, 5);
   container.innerHTML = `
-    <div class="hypemarket-overlay__header">
-      <span class="hypemarket-overlay__logo">📊 HypeMarket</span>
-      <button class="hypemarket-overlay__close" aria-label="Close">×</button>
+    <div class="trendcast-overlay__header">
+      <span class="trendcast-overlay__logo">📊 TrendCast</span>
+      <button class="trendcast-overlay__close" aria-label="Close">×</button>
     </div>
-    <div class="hypemarket-overlay__body">
+    <div class="trendcast-overlay__body">
       ${topMatches.map((m) => `
-        <div class="hypemarket-overlay__match" data-confidence="${(m.confidence * 100).toFixed(0)}%">
-          <div class="hypemarket-overlay__question">${escapeHtml(m.contract.question)}</div>
-          <div class="hypemarket-overlay__odds">
+        <div class="trendcast-overlay__match" data-confidence="${(m.confidence * 100).toFixed(0)}%">
+          <div class="trendcast-overlay__question">${escapeHtml(m.contract.question)}</div>
+          <div class="trendcast-overlay__odds">
             ${m.contract.outcomes.map((o) => `
-              <span class="hypemarket-overlay__outcome hypemarket-overlay__outcome--${o.label.toLowerCase()}">
+              <span class="trendcast-overlay__outcome trendcast-overlay__outcome--${o.label.toLowerCase()}">
                 ${o.label}: ${(o.price * 100).toFixed(0)}%
               </span>
             `).join('')}
           </div>
-          <div class="hypemarket-overlay__meta">
-            <span class="hypemarket-overlay__platform">${m.contract.platform}</span>
-            <span class="hypemarket-overlay__confidence">${(m.confidence * 100).toFixed(0)}% match</span>
+          <div class="trendcast-overlay__meta">
+            <span class="trendcast-overlay__platform">${m.contract.platform}</span>
+            <span class="trendcast-overlay__confidence">${(m.confidence * 100).toFixed(0)}% match</span>
           </div>
         </div>
       `).join('')}
     </div>
   `;
 
-  container.querySelector('.hypemarket-overlay__close')?.addEventListener('click', () => {
+  container.querySelector('.trendcast-overlay__close')?.addEventListener('click', () => {
     container.remove();
   });
 
@@ -423,7 +423,7 @@ async function scanAndReport(): Promise<void> {
   if (hash === lastScanHash) return;
   lastScanHash = hash;
 
-  console.log(`[HypeMarket] Scraped ${signals.length} signals from ${detectPlatform()}`);
+  console.log(`[TrendCast] Scraped ${signals.length} signals from ${detectPlatform()}`);
 
   try {
     // Report signals to background for storage.
@@ -445,7 +445,7 @@ async function scanAndReport(): Promise<void> {
       }
     }
   } catch (err) {
-    console.error('[HypeMarket] Scan failed:', err);
+    console.error('[TrendCast] Scan failed:', err);
   }
 }
 

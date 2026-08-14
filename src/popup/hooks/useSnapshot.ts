@@ -25,7 +25,7 @@ export function useSnapshot() {
       if (snap) setSnapshot(snap);
       if (lastAt) setLastCollectionAt(lastAt);
     } catch (err) {
-      console.error('[HypeMarket] Failed to fetch snapshot:', err);
+      console.error('[TrendCast] Failed to fetch snapshot:', err);
     }
   }, []);
 
@@ -35,7 +35,7 @@ export function useSnapshot() {
       await sendMessage('TRIGGER_COLLECTION', {});
       await fetchSnapshot();
     } catch (err) {
-      console.error('[HypeMarket] Collection trigger failed:', err);
+      console.error('[TrendCast] Collection trigger failed:', err);
     } finally {
       setCollecting(false);
     }

@@ -50,7 +50,7 @@ async function checkUrlChange(): Promise<void> {
     currentUrl.includes('/market/');
   if (!isMarketPage) return;
 
-  console.log('[HypeMarket] Detected market page:', currentUrl);
+  console.log('[TrendCast] Detected market page:', currentUrl);
 
   // Wait a moment for the SPA to render market data.
   await new Promise((resolve) => setTimeout(resolve, 1500));
@@ -59,9 +59,9 @@ async function checkUrlChange(): Promise<void> {
   if (markets.length > 0) {
     try {
       await sendMessage('REPORT_MARKET_DATA', { markets });
-      console.log(`[HypeMarket] Reported ${markets.length} markets from DOM`);
+      console.log(`[TrendCast] Reported ${markets.length} markets from DOM`);
     } catch (err) {
-      console.error('[HypeMarket] Failed to report market data:', err);
+      console.error('[TrendCast] Failed to report market data:', err);
     }
   }
 }
