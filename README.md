@@ -134,38 +134,37 @@ TrendCast/
 
 ### Prerequisites
 
-- **Node.js** ≥ 18
-- **npm** ≥ 9 (or pnpm/yarn)
+- **Bun** ≥ 1.3 (or Node.js ≥ 18 with npm/pnpm/yarn)
 - Chrome ≥ 114 or Firefox ≥ 121
 
 ### Installation
 
 ```bash
 cd TrendCast
-npm install
+bun install
 ```
 
 ### Development
 
 ```bash
 # Start Vite dev server with HMR (Chrome)
-npm run dev
+bun run dev
 
 # For Firefox
-npm run dev:firefox
+bun run dev:firefox
 ```
 
 ### Build
 
 ```bash
 # Build for Chrome
-npm run build
+bun run build
 
 # Build for Firefox
-npm run build:firefox
+bun run build:firefox
 
 # Package as ZIP
-npm run zip
+bun run zip
 ```
 
 The built extension will be in `dist/`.
@@ -173,17 +172,17 @@ The built extension will be in `dist/`.
 ## 🧪 Testing
 
 ```bash
-npm run test          # Run unit tests
-npm run test:watch    # Watch mode
-npm run typecheck      # TypeScript type checking
-npm run lint           # ESLint
+bun run test          # Run unit tests
+bun run test:watch    # Watch mode
+bun run typecheck      # TypeScript type checking
+bun run lint           # ESLint
 ```
 
 ## 🌐 Loading the Extension
 
 ### Chrome / Edge / Brave
 
-1. Run `npm run build`
+1. Run `bun run build`
 2. Open `chrome://extensions/`
 3. Enable **Developer mode** (top-right toggle)
 4. Click **Load unpacked**
@@ -192,7 +191,7 @@ npm run lint           # ESLint
 
 ### Firefox
 
-1. Run `npm run build:firefox`
+1. Run `bun run build:firefox`
 2. Open `about:debugging#/runtime/this-firefox`
 3. Click **Load Temporary Add-on**
 4. Select `dist/manifest.json`
@@ -254,6 +253,7 @@ The service worker is **ephemeral** — Chrome kills it after ~30s of inactivity
 | **Vite 5** | Build tool + dev server |
 | **@crxjs/vite-plugin** | Extension-aware bundling + HMR |
 | **webextension-polyfill** | Cross-browser API normalisation |
+| **Bun** | Package manager + script runner |
 | **Vitest** | Unit testing |
 
 ## 🗺️ Roadmap
