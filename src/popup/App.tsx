@@ -17,6 +17,7 @@ import { useSettings } from './hooks/useSettings';
 import { useSnapshot } from './hooks/useSnapshot';
 import { browser } from '@/messaging/browser';
 import { sendMessage } from '@/messaging';
+import { CONFIG } from '@/config';
 
 // Build-time version stamp injected by Vite's define.
 const BUILD_VERSION = import.meta.env.BUILD_VERSION ?? 'dev';
@@ -197,8 +198,20 @@ export function App() {
       </main>
 
       {/* Footer */}
-      <footer className="px-4 py-2 bg-slate-800 border-t border-slate-700 text-[10px] text-slate-500 text-center">
-        TrendCast v{BUILD_VERSION} · 100% client-side · No API keys
+      <footer className="px-4 py-2 bg-slate-800 border-t border-slate-700 text-[10px] text-slate-500 text-center space-y-1">
+        <div>
+          TrendCast v{BUILD_VERSION} · 100% client-side · No API keys
+        </div>
+        <div>
+          <a
+            href={CONFIG.community.telegram}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-brand-400 hover:text-brand-300 transition-colors"
+          >
+            💬 Join the community on Telegram
+          </a>
+        </div>
       </footer>
     </div>
   );

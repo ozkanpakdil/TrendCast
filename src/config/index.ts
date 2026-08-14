@@ -11,6 +11,14 @@
  */
 
 export const CONFIG = {
+  // ── Community links ───────────────────────────────────────────
+  // Public Telegram group for user support, announcements, and feedback.
+  // Swap the placeholder URL for your real group link after creating it.
+  community: {
+    telegram: 'https://t.me/trendcast_community',
+    githubIssues: 'https://github.com/ozkan/trendcast/issues',
+  },
+
   // ── Scraping targets ───────────────────────────────────────────
   // These are the URLs the background worker opens in background tabs
   // to collect data. Content scripts matching these domains will

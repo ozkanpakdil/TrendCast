@@ -317,6 +317,15 @@ The service worker is **ephemeral** — Chrome kills it after ~30s of inactivity
       — ETag/Last-Modified conditional fetch to skip unchanged responses (`src/utils/conditional-fetch.ts`)
 - [x] Privacy policy + documentation — `PRIVACY.md`, `docs/STORE_LISTING.md`, `docs/QA_CHECKLIST.md`
 
-## 📄 License
+## � Community & Support
+
+| Channel | Use for | Link |
+|---------|---------|------|
+| **Telegram** | General chat, announcements, quick questions | [t.me/trendcast_community](https://t.me/trendcast_community) |
+| **GitHub Issues** | Bug reports, feature requests | [GitHub Issues](https://github.com/ozkan/trendcast/issues) |
+
+The extension is 100% client-side — the Telegram link is just for community discussion. No data is ever sent to Telegram or any server.
+
+## �📄 License
 
 MIT

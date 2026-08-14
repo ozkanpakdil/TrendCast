@@ -43,7 +43,7 @@ import { downloadExport } from '@/utils/export';
 // Format: "0.1.0+2026-08-14T13:21:00Z" — version + build timestamp.
 const BUILD_VERSION = import.meta.env.BUILD_VERSION ?? 'dev';
 
-type Tab = 'feed' | 'markets' | 'news' | 'correlations' | 'watchlist' | 'history';
+type Tab = 'feed' | 'markets' | 'news' | 'correlations' | 'watchlist' | 'history' | 'community';
 
 export function App() {
   const { snapshot, loading, collecting, lastCollectionAt, triggerCollection } = useSnapshot();
@@ -224,6 +224,7 @@ export function App() {
             ['correlations', '🔗 Correlations'],
             ['watchlist', '⭐ Watchlist'],
             ['history', '📊 History'],
+            ['community', '💬 Community'],
           ] as [Tab, string][]).map(([tab, label]) => (
             <button
               key={tab}
@@ -317,13 +318,88 @@ export function App() {
                 <HistoryChart />
               </section>
             )}
+
+            {activeTab === 'community' && (
+              <section className="max-w-2xl mx-auto py-8 space-y-6">
+                <div className="text-center space-y-2">
+                  <h2 className={`text-2xl font-bold ${isDark ? 'text-slate-100' : 'text-light-text'}`}>
+                    💬 Join the TrendCast Community
+                  </h2>
+                  <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-light-muted'}`}>
+                    Connect with other users, share insights, report bugs, and stay updated on new features.
+                  </p>
+                </div>
+
+                {/* Telegram card */}
+                <div className={`rounded-xl border p-6 space-y-3 ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-light-surface border-light-border'}`}>
+                  <div className="flex items-center gap-3">
+                    <span className="text-3xl">💬</span>
+                    <div>
+                      <h3 className={`text-lg font-bold ${isDark ? 'text-slate-100' : 'text-light-text'}`}>Telegram Group</h3>
+                      <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-light-muted'}`}>General chat · Announcements · Quick questions</p>
+                    </div>
+                  </div>
+                  <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-light-muted'}`}>
+                    Join our public Telegram group to discuss prediction markets, social sentiment trends,
+                    and feature requests with other TrendCast users.
+                  </p>
+                  <a
+                    href={CONFIG.community.telegram}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-block px-5 py-2.5 rounded-lg bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium transition-colors"
+                  >
+                    💬 Join on Telegram →
+                  </a>
+                </div>
+
+                {/* GitHub Issues card */}
+                <div className={`rounded-xl border p-6 space-y-3 ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-light-surface border-light-border'}`}>
+                  <div className="flex items-center gap-3">
+                    <span className="text-3xl">🐛</span>
+                    <div>
+                      <h3 className={`text-lg font-bold ${isDark ? 'text-slate-100' : 'text-light-text'}`}>GitHub Issues</h3>
+                      <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-light-muted'}`}>Bug reports · Feature requests</p>
+                    </div>
+                  </div>
+                  <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-light-muted'}`}>
+                    Found a bug or have a feature idea? Open an issue on GitHub. This is the best way
+                    to track and resolve problems.
+                  </p>
+                  <a
+                    href={CONFIG.community.githubIssues}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`inline-block px-5 py-2.5 rounded-lg text-sm font-medium transition-colors ${btnSecondary}`}
+                  >
+                    🐛 Report on GitHub →
+                  </a>
+                </div>
+
+                {/* Privacy note */}
+                <div className={`rounded-lg p-4 text-xs text-center ${isDark ? 'bg-slate-900/50 text-slate-500' : 'bg-light-surface/50 text-light-muted'}`}>
+                  🔒 TrendCast is 100% client-side. These links open external sites in a new tab.
+                  No data is ever sent to Telegram, GitHub, or any server.
+                </div>
+              </section>
+            )}
           </>
         )}
       </main>
 
       {/* Footer */}
-      <footer className={`border-t mt-12 py-6 text-center text-xs ${footerBorder}`}>
-        TrendCast · 100% client-side · No API keys · Uses your browser sessions
+      <footer className={`border-t mt-12 py-6 text-center text-xs space-y-1 ${footerBorder}`}>
+        <div>TrendCast · 100% client-side · No API keys · Uses your browser sessions</div>
+        <div>
+          <a
+            href={CONFIG.community.telegram}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-brand-400 hover:text-brand-300 transition-colors"
+          >
+            💬 Join the community on Telegram
+          </a>
+        </div>
       </footer>
     </div>
   );
