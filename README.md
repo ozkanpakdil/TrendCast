@@ -178,6 +178,29 @@ bun run typecheck      # TypeScript type checking
 bun run lint           # ESLint
 ```
 
+## 🤖 CI/CD & Releases
+
+A GitHub Actions workflow (`.github/workflows/release.yml`) automatically builds and publishes releases.
+
+### Automatic (tag push)
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+This triggers the workflow which:
+1. Runs unit tests
+2. Builds both Chrome and Firefox targets in parallel
+3. Packages each as `trendcast-{chrome,firefox}-<tag>.zip`
+4. Creates a GitHub Release with auto-generated notes and both zips attached
+
+### Manual dispatch
+
+Go to **Actions** → **Build & Release** → **Run workflow** and enter a tag name (e.g. `v0.1.0`).
+
+The release artifacts appear under **Releases** on your repository page, ready to download and load as unpacked extensions.
+
 ## 🌐 Loading the Extension
 
 ### Chrome / Edge / Brave
