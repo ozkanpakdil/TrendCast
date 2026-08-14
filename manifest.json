@@ -1,0 +1,83 @@
+{
+  "manifest_version": 3,
+  "name": "HypeMarket — Social Sentiment × Prediction Markets",
+  "description": "Track social sentiment across X, Reddit, and TikTok and correlate it in real-time with Polymarket and Kalshi prediction market odds.",
+  "version": "0.1.0",
+  "action": {
+    "default_popup": "src/popup/index.html",
+    "default_title": "HypeMarket — Sentiment × Markets",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "background": {
+    "service_worker": "src/background/index.ts",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://polymarket.com/*",
+        "*://*.polymarket.com/*",
+        "*://kalshi.com/*",
+        "*://*.kalshi.com/*"
+      ],
+      "js": ["src/content/prediction-markets/index.ts"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "*://x.com/*",
+        "*://twitter.com/*",
+        "*://reddit.com/*",
+        "*://tiktok.com/*"
+      ],
+      "js": ["src/content/socials/index.ts"],
+      "css": ["src/content/socials/overlay.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "permissions": ["storage", "alarms", "tabs", "scripting", "notifications"],
+  "host_permissions": [
+    "https://*.polymarket.com/*",
+    "https://clob.polymarket.com/*",
+    "https://*.kalshi.com/*",
+    "https://api.kalshi.com/*",
+    "https://api.twitter.com/*",
+    "https://*.x.com/*",
+    "https://www.reddit.com/*",
+    "https://oauth.reddit.com/*",
+    "https://www.tiktok.com/*"
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["icons/*.png", "assets/*.css"],
+      "matches": [
+        "*://x.com/*",
+        "*://twitter.com/*",
+        "*://reddit.com/*",
+        "*://tiktok.com/*",
+        "*://polymarket.com/*",
+        "*://kalshi.com/*"
+      ]
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; style-src 'self' 'unsafe-inline'"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "hypemarket@trendcast.dev",
+      "strict_min_version": "121.0"
+    }
+  }
+}
