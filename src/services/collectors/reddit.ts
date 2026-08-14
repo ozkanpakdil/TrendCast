@@ -13,6 +13,7 @@
 import type { SocialSignal } from '@/types';
 import { CONFIG } from '@/config';
 import { extractKeywords } from '@/utils/keywords';
+import { analyzeSentiment } from '@/utils/sentiment';
 
 /** Raw Reddit .json post shape (subset). */
 interface RedditPost {
@@ -60,8 +61,11 @@ export async function collectRedditSignals(limit = 50): Promise<SocialSignal[]> 
 /** Convert a Reddit post into our normalised `SocialSignal`. */
 function normaliseRedditPost(post: RedditPost): SocialSignal {
   const text = `${post.title} ${post.selftext ?? ''}`;
-  // Rough sentiment proxy: upvote_ratio (0–1 → -1 to +1).
-  const sentiment = (post.upvote_ratio - 0.5) * 2;
+  // Phase 3: Use lexicon-based NLP sentiment analysis instead of just upvote ratio.
+  // Blend text sentiment (70%) with upvote ratio (30%) for a combined score.
+  const textSentiment = analyzeSentiment(text).score;
+  const ratioSentiment = (post.upvote_ratio - 0.5) * 2;
+  const sentiment = textSentiment * 0.7 + ratioSentiment * 0.3;
   // Virality: normalise ups + comments (log scale to compress range).
   const engagement = post.ups + post.num_comments;
   const virality = Math.min(100, Math.log10(engagement + 1) * 25);

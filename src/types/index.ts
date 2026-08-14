@@ -136,6 +136,47 @@ export interface CollectionSnapshot {
   news: NewsItem[];
 }
 
+/**
+ * A compact historical snapshot for charting.
+ * Only stores aggregate counts + top items to keep storage small.
+ */
+export interface HistoryEntry {
+  /** Epoch ms. */
+  timestamp: number;
+  /** Number of markets collected. */
+  marketCount: number;
+  /** Number of signals collected. */
+  signalCount: number;
+  /** Number of news items collected. */
+  newsCount: number;
+  /** Number of correlations found. */
+  correlationCount: number;
+  /** Top 5 signal virality scores at this point. */
+  topVirality: number[];
+  /** Average sentiment at this point (-1 to +1). */
+  avgSentiment: number;
+}
+
+// ── Watchlist ─────────────────────────────────────────────────────
+
+/**
+ * A user-created watchlist of market contracts to track.
+ * Stored in chrome.storage.local.
+ */
+export interface WatchlistEntry {
+  /** The market contract ID (platform-native). */
+  contractId: string;
+  platform: MarketPlatform;
+  /** The question text (cached for display even if market expires). */
+  question: string;
+  /** When the user added this to the watchlist (epoch ms). */
+  addedAt: number;
+}
+
+// ── Theme ─────────────────────────────────────────────────────────
+
+export type ThemeMode = 'dark' | 'light';
+
 // ── Messaging ────────────────────────────────────────────────────
 
 /**
@@ -169,7 +210,18 @@ export type Message =
   | { type: 'CORRELATE_ALL'; payload: Record<string, never> }
   | { type: 'CORRELATION_RESULT'; payload: { matches: CorrelationMatch[]; newsMatches: NewsCorrelationMatch[] } }
   // Overlay injection (socials content script)
-  | { type: 'INJECT_OVERLAY'; payload: { matches: CorrelationMatch[] } };
+  | { type: 'INJECT_OVERLAY'; payload: { matches: CorrelationMatch[] } }
+  // Dashboard → Background: get historical snapshots for charting
+  | { type: 'GET_HISTORY'; payload: { limit?: number } }
+  | { type: 'HISTORY_RESULT'; payload: { history: HistoryEntry[] } }
+  // Dashboard → Background: watchlist management
+  | { type: 'ADD_TO_WATCHLIST'; payload: { entry: WatchlistEntry } }
+  | { type: 'REMOVE_FROM_WATCHLIST'; payload: { contractId: string } }
+  | { type: 'GET_WATCHLIST'; payload: Record<string, never> }
+  | { type: 'WATCHLIST_RESULT'; payload: { watchlist: WatchlistEntry[] } }
+  // Dashboard → Background: export collected data
+  | { type: 'EXPORT_DATA'; payload: { format: 'csv' | 'json' } }
+  | { type: 'EXPORT_RESULT'; payload: { data: string; filename: string } };
 
 export type MessageType = Message['type'];
 
@@ -192,6 +244,10 @@ export interface ExtensionSettings {
   highlightThreshold: number;
   /** Whether to override the new tab page with the HypeMarket dashboard. */
   overrideNewTab: boolean;
+  /** UI theme mode. */
+  theme: ThemeMode;
+  /** How many historical snapshots to retain (max). */
+  maxHistoryEntries: number;
 }
 
 export const DEFAULT_SETTINGS: ExtensionSettings = {
@@ -207,4 +263,6 @@ export const DEFAULT_SETTINGS: ExtensionSettings = {
   },
   highlightThreshold: 60,
   overrideNewTab: true,
+  theme: 'dark',
+  maxHistoryEntries: 168, // 7 days of hourly snapshots
 };

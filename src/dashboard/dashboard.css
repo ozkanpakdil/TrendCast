@@ -18,6 +18,17 @@
   background: #475569;
 }
 
+/* Light theme scrollbar */
+.light ::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+.light ::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+}
+.light ::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
 /* Smooth card hover transitions */
 .card-hover {
   transition: transform 0.15s ease, box-shadow 0.15s ease;
@@ -25,4 +36,9 @@
 .card-hover:hover {
   transform: translateY(-2px);
   box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+}
+
+/* Light theme card hover */
+.light .card-hover:hover {
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
 }

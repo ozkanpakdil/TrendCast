@@ -25,6 +25,7 @@
 import { sendMessage } from '@/messaging';
 import type { CorrelationMatch, SocialSignal, SocialPlatform } from '@/types';
 import { extractKeywords } from '@/utils/keywords';
+import { analyzeSentiment } from '@/utils/sentiment';
 import { CONFIG } from '@/config';
 
 /** Detect which social platform we're on. */
@@ -51,9 +52,19 @@ function scrapeSignals(): SocialSignal[] {
   }
 }
 
-/** Scrape tweets from X. */
+/** Scrape tweets from X, including the explore/trending page. */
 function scrapeXSignals(): SocialSignal[] {
   const signals: SocialSignal[] = [];
+
+  // Check if we're on the explore/trending page
+  const path = window.location.pathname;
+  const isExplorePage = path.includes('/explore') || path.includes('/trending');
+
+  if (isExplorePage) {
+    signals.push(...scrapeXTrending());
+  }
+
+  // Always also scrape tweets on the page (explore pages have tweets too)
   const tweets = document.querySelectorAll('article[data-testid="tweet"]');
 
   tweets.forEach((tweet, i) => {
@@ -75,6 +86,8 @@ function scrapeXSignals(): SocialSignal[] {
     const engagement = likes + shares + comments;
     const virality = Math.min(100, Math.log10(engagement + 1) * 25);
 
+    const sentimentResult = analyzeSentiment(text);
+
     signals.push({
       id: `x:${Date.now()}-${i}`,
       platform: 'x',
@@ -83,10 +96,98 @@ function scrapeXSignals(): SocialSignal[] {
       metrics: { likes, shares, comments, views: views || undefined },
       timestamp: new Date().toISOString(),
       keywords: extractKeywords(text),
-      sentiment: 0, // X sentiment requires NLP — neutral default for now
+      sentiment: sentimentResult.score,
       virality,
     });
   });
+
+  return signals;
+}
+
+/**
+ * Scrape trending topics from X's explore/trending page.
+ * X shows trending topics in a sidebar or tabbed list with:
+ *   - Topic name
+ *   - Tweet count (e.g., "1,234 Tweets")
+ *   - Sometimes a category/description
+ *
+ * Selectors are fragile — X changes their DOM frequently. We try
+ * multiple known selector patterns for robustness.
+ */
+function scrapeXTrending(): SocialSignal[] {
+  const signals: SocialSignal[] = [];
+
+  // Strategy 1: Trending topic rows in the sidebar/main column.
+  // X uses [data-testid="trend"] for trending items (varies by version).
+  const trendSelectors = [
+    '[data-testid="trend"]',
+    'div[role="listitem"] a[href*="/explore/tabs/trending"]',
+    'div[data-testid="trendContainer"]',
+    '[data-testid="sidebarColumn"] [role="listitem"]',
+  ];
+
+  const trendEls: Element[] = [];
+  for (const selector of trendSelectors) {
+    const els = document.querySelectorAll(selector);
+    if (els.length > 0) {
+      trendEls.push(...Array.from(els));
+      break;
+    }
+  }
+
+  trendEls.forEach((el, i) => {
+    // The trending topic name is usually in a heading or span.
+    // X's structure: category (small) → topic name (bold) → tweet count.
+    const nameEl = el.querySelector('span[dir="auto"]') ?? el.querySelector('span');
+    const name = nameEl?.textContent?.trim() ?? '';
+    if (!name) return;
+
+    // Extract tweet count from text like "1,234 Tweets" or "12.3K Tweets"
+    const allText = el.textContent ?? '';
+    const tweetCountMatch = allText.match(/([\d,.]+[KM]?)\s*Tweets?/i);
+    const tweetCount = tweetCountMatch ? parseMetric(tweetCountMatch[1]) : 0;
+
+    // Skip if it's just a category label (short, no tweet count)
+    if (name.length < 2) return;
+
+    const engagement = tweetCount;
+    const virality = Math.min(100, Math.log10(engagement + 1) * 20);
+
+    const sentimentResult = analyzeSentiment(name);
+
+    signals.push({
+      id: `x-trending:${Date.now()}-${i}`,
+      platform: 'x',
+      text: `Trending: ${name}`,
+      author: 'x-trending',
+      metrics: { likes: 0, shares: 0, comments: 0, views: tweetCount || undefined },
+      timestamp: new Date().toISOString(),
+      keywords: extractKeywords(name),
+      sentiment: sentimentResult.score,
+      virality: Math.max(virality, 60), // Trending topics get a baseline virality
+    });
+  });
+
+  // Strategy 2: If no structured trends found, try generic links to trending topics
+  if (signals.length === 0) {
+    const trendLinks = document.querySelectorAll('a[href*="/explore/tabs/trending"]');
+    trendLinks.forEach((link, i) => {
+      const name = link.textContent?.trim() ?? '';
+      if (name.length < 2 || name.length > 200) return;
+      const sentimentResult = analyzeSentiment(name);
+      signals.push({
+        id: `x-trending-link:${Date.now()}-${i}`,
+        platform: 'x',
+        text: `Trending: ${name}`,
+        author: 'x-trending',
+        metrics: { likes: 0, shares: 0, comments: 0 },
+        timestamp: new Date().toISOString(),
+        keywords: extractKeywords(name),
+        sentiment: sentimentResult.score,
+        virality: 65,
+      });
+    });
+  }
 
   return signals;
 }
@@ -110,6 +211,9 @@ function scrapeRedditSignals(): SocialSignal[] {
     const engagement = ups + comments;
     const virality = Math.min(100, Math.log10(engagement + 1) * 25);
 
+    // Use lexicon-based sentiment analysis instead of neutral default
+    const sentimentResult = analyzeSentiment(title);
+
     signals.push({
       id: `reddit:${Date.now()}-${i}`,
       platform: 'reddit',
@@ -118,7 +222,7 @@ function scrapeRedditSignals(): SocialSignal[] {
       metrics: { likes: ups, shares: 0, comments },
       timestamp: new Date().toISOString(),
       keywords: extractKeywords(title),
-      sentiment: 0,
+      sentiment: sentimentResult.score,
       virality,
     });
   });
@@ -126,25 +230,117 @@ function scrapeRedditSignals(): SocialSignal[] {
   return signals;
 }
 
-/** Scrape trending topics from TikTok. */
+/**
+ * Scrape trending topics from TikTok, including the discover page.
+ *
+ * TikTok's discover page shows trending hashtags, sounds, and creators
+ * with view counts and video counts. The DOM structure varies but
+ * typically uses cards with trend descriptions and metrics.
+ */
 function scrapeTiktokSignals(): SocialSignal[] {
   const signals: SocialSignal[] = [];
-  const trendEls = document.querySelectorAll('[data-e2e="trend-desc"], [class*="trend-title"]');
+
+  const path = window.location.pathname;
+  const isDiscoverPage = path.includes('/discover') || path.includes('/explore');
+
+  // Strategy 1: TikTok discover page trend cards
+  // TikTok uses various selectors for trend cards — we try multiple patterns.
+  const trendSelectors = [
+    '[data-e2e="trend-desc"]',
+    '[data-e2e="discover-item"]',
+    'div[class*="TrendContainer"]',
+    'div[class*="trend-card"]',
+    'a[href*="/tag/"]',
+    'a[href*="/trending"]',
+  ];
+
+  const trendEls: Element[] = [];
+  for (const selector of trendSelectors) {
+    const els = document.querySelectorAll(selector);
+    if (els.length > 0) {
+      trendEls.push(...Array.from(els));
+      break;
+    }
+  }
 
   trendEls.forEach((el, i) => {
-    const text = el.textContent?.trim() ?? '';
-    if (!text) return;
+    // Trend title/name
+    const titleEl = el.querySelector('[data-e2e="trend-title"], [class*="title"], h2, h3, span');
+    const title = titleEl?.textContent?.trim() ?? el.textContent?.trim() ?? '';
+    if (!title || title.length < 2) return;
+
+    // Extract view/video count from text like "1.2B views" or "5.6M videos"
+    const allText = el.textContent ?? '';
+    const viewsMatch = allText.match(/([\d,.]+[KMB]?)\s*views?/i);
+    const videosMatch = allText.match(/([\d,.]+[KMB]?)\s*videos?/i);
+    const views = viewsMatch ? parseMetric(viewsMatch[1]) : 0;
+    const videos = videosMatch ? parseMetric(videosMatch[1]) : 0;
+
+    const engagement = views + videos;
+    const virality = Math.min(100, Math.log10(engagement + 1) * 18);
+
+    const sentimentResult = analyzeSentiment(title);
 
     signals.push({
       id: `tiktok:${Date.now()}-${i}`,
       platform: 'tiktok',
-      text,
+      text: title,
       author: 'tiktok-trend',
+      metrics: { likes: 0, shares: 0, comments: 0, views: views || undefined },
+      timestamp: new Date().toISOString(),
+      keywords: extractKeywords(title),
+      sentiment: sentimentResult.score,
+      virality: Math.max(virality, isDiscoverPage ? 55 : 40),
+    });
+  });
+
+  // Strategy 2: Hashtag links on discover page
+  if (signals.length === 0 && isDiscoverPage) {
+    const hashtagLinks = document.querySelectorAll('a[href*="/tag/"]');
+    hashtagLinks.forEach((link, i) => {
+      const title = link.textContent?.trim() ?? '';
+      if (title.length < 2) return;
+
+      // Try to find view count near the link
+      const parent = link.closest('div');
+      const parentText = parent?.textContent ?? '';
+      const viewsMatch = parentText.match(/([\d,.]+[KMB]?)\s*views?/i);
+      const views = viewsMatch ? parseMetric(viewsMatch[1]) : 0;
+
+      const sentimentResult = analyzeSentiment(title);
+
+      signals.push({
+        id: `tiktok-tag:${Date.now()}-${i}`,
+        platform: 'tiktok',
+        text: `#${title}`,
+        author: 'tiktok-trend',
+        metrics: { likes: 0, shares: 0, comments: 0, views: views || undefined },
+        timestamp: new Date().toISOString(),
+        keywords: extractKeywords(title),
+        sentiment: sentimentResult.score,
+        virality: Math.max(Math.min(100, Math.log10(views + 1) * 18), 50),
+      });
+    });
+  }
+
+  // Strategy 3: Video descriptions on any TikTok page
+  const videoDescEls = document.querySelectorAll('[data-e2e="video-desc"], [class*="video-desc"]');
+  videoDescEls.forEach((el, i) => {
+    const text = el.textContent?.trim() ?? '';
+    if (!text || text.length < 2) return;
+
+    const sentimentResult = analyzeSentiment(text);
+
+    signals.push({
+      id: `tiktok-video:${Date.now()}-${i}`,
+      platform: 'tiktok',
+      text,
+      author: 'tiktok-creator',
       metrics: { likes: 0, shares: 0, comments: 0 },
       timestamp: new Date().toISOString(),
       keywords: extractKeywords(text),
-      sentiment: 0,
-      virality: 50, // Default — TikTok metrics are hard to scrape reliably
+      sentiment: sentimentResult.score,
+      virality: 45,
     });
   });
 

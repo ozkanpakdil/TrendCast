@@ -97,6 +97,20 @@ export function Settings({ settings, onUpdate }: SettingsProps) {
             Social signals with virality above this score are highlighted in the dashboard
           </span>
         </label>
+
+        {/* Theme toggle (Phase 3) */}
+        <label className="flex items-center justify-between text-xs py-1 px-2 rounded bg-slate-800 cursor-pointer mt-2">
+          <span className="text-slate-300">🌙 Dark mode</span>
+          <input
+            type="checkbox"
+            checked={settings.theme === 'dark'}
+            onChange={(e) => onUpdate({ theme: e.target.checked ? 'dark' : 'light' })}
+            className="accent-brand-500"
+          />
+        </label>
+        <p className="text-[10px] text-slate-500 mt-1">
+          Toggle between dark and light dashboard themes.
+        </p>
       </Section>
 
       {/* New tab override */}

@@ -275,15 +275,15 @@ The service worker is **ephemeral** — Chrome kills it after ~30s of inactivity
 - [x] Popup simplified to quick-launcher
 - [x] Source toggle settings (no API key inputs)
 
-### Phase 3 — Enhancement (Next)
-- [ ] X (Twitter) trending topics scraping (explore page)
-- [ ] TikTok trend extraction (discover page)
-- [ ] NER-based entity extraction (replace keyword matching)
-- [ ] Historical correlation charts in the dashboard
-- [ ] Sentiment analysis (NLP-based, not just upvote ratio)
-- [ ] Custom watchlists (user picks markets to track)
-- [ ] Dark/light theme toggle for dashboard
-- [ ] Data export (CSV/JSON)
+### Phase 3 — Enhancement (✅ Complete)
+- [x] X (Twitter) trending topics scraping (explore page)
+- [x] TikTok trend extraction (discover page)
+- [x] NER-based entity extraction (replace keyword matching)
+- [x] Historical correlation charts in the dashboard
+- [x] Sentiment analysis (NLP-based, not just upvote ratio)
+- [x] Custom watchlists (user picks markets to track)
+- [x] Dark/light theme toggle for dashboard
+- [x] Data export (CSV/JSON)
 
 ### Phase 4 — Polish & Ship
 - [ ] Firefox permanent signing via AMO

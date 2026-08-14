@@ -78,6 +78,8 @@ export const CONFIG = {
     collectedNews: 'hypemarket:collected-news',
     correlations: 'hypemarket:correlations',
     lastCollectionAt: 'hypemarket:last-collection',
+    history: 'hypemarket:history',
+    watchlist: 'hypemarket:watchlist',
   },
 
   // ── Overlay injection ─────────────────────────────────────────

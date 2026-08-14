@@ -2,19 +2,19 @@
  * Correlation Engine.
  *
  * The core logic that matches social signals and news headlines to
- * prediction market contracts based on keyword/entity overlap and
+ * prediction market contracts based on entity + keyword overlap and
  * computes a confidence score.
  *
  * Algorithm:
- *   1. Extract keywords from both the contract question and the social post / news.
- *   2. Compute Jaccard similarity between keyword sets.
- *   3. Boost confidence for exact cashtag/hashtag matches (e.g., $BTC).
- *   4. Weight by the social signal's virality score (for social signals).
- *   5. Filter by a minimum confidence threshold.
+ *   1. Extract entities (NER) from both the contract question and the social post / news.
+ *   2. Compute weighted entity similarity (Jaccard on confidence-weighted entity sets).
+ *   3. Fall back to keyword similarity for broader matching.
+ *   4. Boost confidence for exact cashtag/hashtag matches (e.g., $BTC).
+ *   5. Weight by the social signal's virality score (for social signals).
+ *   6. Filter by a minimum confidence threshold.
  *
- * ⚠️ Pitfall: Pure keyword matching produces false positives. In production,
- *    you'd want NER (Named Entity Recognition) or an LLM to extract entities.
- *    For v0.1, keyword overlap is a reasonable starting point.
+ * Phase 3: Now uses entity-based matching (NER) as the primary signal,
+ * with keyword overlap as a secondary fallback for broader coverage.
  */
 
 import type {
@@ -25,12 +25,19 @@ import type {
   SocialSignal,
 } from '@/types';
 import { keywordSimilarity } from '@/utils/keywords';
+import { entitySimilarity, extractEntityKeywords } from '@/utils/entities';
 
 /** Minimum confidence score to include a match (0–1). */
 const MIN_CONFIDENCE = 0.15;
 
 /** Boost factor for exact cashtag/hashtag matches. */
 const CASHTAG_BOOST = 0.3;
+
+/** Weight for entity-based similarity (primary). */
+const ENTITY_WEIGHT = 0.65;
+
+/** Weight for keyword-based similarity (secondary/fallback). */
+const KEYWORD_WEIGHT = 0.35;
 
 /**
  * Correlate a batch of social signals against a batch of market contracts.
@@ -54,9 +61,17 @@ export function correlate(
 
 /** Correlate a single signal-contract pair. */
 function correlatePair(signal: SocialSignal, contract: MarketContract): CorrelationMatch | null {
-  const similarity = keywordSimilarity(signal.keywords, contract.keywords);
-  if (similarity === 0) return null;
+  // Entity-based similarity (primary) — uses NER for precise matching
+  const entSim = entitySimilarity(signal.text, contract.question);
 
+  // Keyword-based similarity (secondary) — broader fallback
+  const kwSim = keywordSimilarity(signal.keywords, contract.keywords);
+
+  // Blend: weighted combination of entity + keyword similarity
+  const baseSim = entSim * ENTITY_WEIGHT + kwSim * KEYWORD_WEIGHT;
+  if (baseSim === 0) return null;
+
+  // Cashtag/hashtag boost
   const signalTags = signal.keywords.filter(
     (k) => k.startsWith('$') || signal.text.includes(`#${k}`),
   );
@@ -66,17 +81,22 @@ function correlatePair(signal: SocialSignal, contract: MarketContract): Correlat
 
   const viralityWeight = (signal.virality / 100) * 0.1;
 
-  const confidence = Math.min(1, similarity + boost + viralityWeight);
+  const confidence = Math.min(1, baseSim + boost + viralityWeight);
 
   if (confidence < MIN_CONFIDENCE) return null;
 
+  // Collect matched keywords from both entity and keyword overlap
   const matchedKeywords = signal.keywords.filter((k) => contract.keywords.includes(k));
+  const entityKeywords = extractEntityKeywords(signal.text).filter((ek) =>
+    extractEntityKeywords(contract.question).includes(ek),
+  );
+  const allMatched = [...new Set([...matchedKeywords, ...entityKeywords])];
 
   return {
     contract,
     signal,
     confidence,
-    matchedKeywords,
+    matchedKeywords: allMatched,
     correlatedAt: Date.now(),
   };
 }
@@ -106,21 +126,32 @@ function correlateNewsPair(
   news: NewsItem,
   contract: MarketContract,
 ): NewsCorrelationMatch | null {
-  const similarity = keywordSimilarity(news.keywords, contract.keywords);
-  if (similarity === 0) return null;
+  // Entity-based similarity (primary)
+  const entSim = entitySimilarity(news.headline, contract.question);
+
+  // Keyword-based similarity (secondary)
+  const kwSim = keywordSimilarity(news.keywords, contract.keywords);
+
+  const baseSim = entSim * ENTITY_WEIGHT + kwSim * KEYWORD_WEIGHT;
+  if (baseSim === 0) return null;
 
   // News doesn't have virality, so we use a slightly lower threshold boost.
-  const confidence = Math.min(1, similarity + 0.05);
+  const confidence = Math.min(1, baseSim + 0.05);
 
   if (confidence < MIN_CONFIDENCE) return null;
 
+  // Collect matched keywords from both entity and keyword overlap
   const matchedKeywords = news.keywords.filter((k) => contract.keywords.includes(k));
+  const entityKeywords = extractEntityKeywords(news.headline).filter((ek) =>
+    extractEntityKeywords(contract.question).includes(ek),
+  );
+  const allMatched = [...new Set([...matchedKeywords, ...entityKeywords])];
 
   return {
     contract,
     news,
     confidence,
-    matchedKeywords,
+    matchedKeywords: allMatched,
     correlatedAt: Date.now(),
   };
 }

@@ -32,14 +32,19 @@ import { onMessage } from '@/messaging';
 import { CONFIG } from '@/config';
 import type {
   CollectionSnapshot,
+  CorrelationMatch,
   ExtensionSettings,
+  HistoryEntry,
   MarketContract,
+  NewsCorrelationMatch,
   NewsItem,
   SocialSignal,
+  WatchlistEntry,
 } from '@/types';
 import { DEFAULT_SETTINGS } from '@/types';
 import { collectPolymarketMarkets, collectKalshiMarkets, collectRedditSignals, collectNews } from '@/services/collectors';
 import { correlate, correlateNews } from '@/services/engine/correlation';
+import { exportToCsv, exportToJson } from '@/utils/export';
 
 // ── Register all listeners synchronously at top level ────────────
 setupAlarms();
@@ -114,6 +119,58 @@ function setupMessageHandlers(): void {
     console.log(`[HypeMarket] Correlated ${matches.length} signal matches, ${newsMatches.length} news matches`);
 
     return { matches, newsMatches };
+  });
+
+  // Dashboard → Background: get historical snapshots for charting
+  onMessage('GET_HISTORY', async (payload) => {
+    const limit = payload.limit ?? 168;
+    const history = await getHistory(limit);
+    return { history };
+  });
+
+  // Dashboard → Background: add market to watchlist
+  onMessage('ADD_TO_WATCHLIST', async (payload) => {
+    const watchlist = await getWatchlist();
+    const filtered = watchlist.filter((w) => w.contractId !== payload.entry.contractId);
+    filtered.push(payload.entry);
+    await browser.storage.local.set({ [CONFIG.storage.watchlist]: filtered });
+    console.log(`[HypeMarket] Added to watchlist: ${payload.entry.contractId}`);
+    return { watchlist: filtered };
+  });
+
+  // Dashboard → Background: remove market from watchlist
+  onMessage('REMOVE_FROM_WATCHLIST', async (payload) => {
+    const watchlist = await getWatchlist();
+    const filtered = watchlist.filter((w) => w.contractId !== payload.contractId);
+    await browser.storage.local.set({ [CONFIG.storage.watchlist]: filtered });
+    console.log(`[HypeMarket] Removed from watchlist: ${payload.contractId}`);
+    return { watchlist: filtered };
+  });
+
+  // Dashboard → Background: get watchlist
+  onMessage('GET_WATCHLIST', async () => {
+    const watchlist = await getWatchlist();
+    return { watchlist };
+  });
+
+  // Dashboard → Background: export collected data
+  onMessage('EXPORT_DATA', async (payload) => {
+    const markets = await getCollectedMarkets();
+    const signals = await getCollectedSignals();
+    const news = await getCollectedNews();
+    const correlationsResult = await browser.storage.local.get(CONFIG.storage.correlations);
+    const correlations = (correlationsResult[CONFIG.storage.correlations] as {
+      matches: CorrelationMatch[];
+      newsMatches: NewsCorrelationMatch[];
+    }) ?? { matches: [], newsMatches: [] };
+
+    if (payload.format === 'csv') {
+      const data = exportToCsv({ markets, signals, news, correlations });
+      return { data, filename: `hypemarket-${Date.now()}.csv` };
+    } else {
+      const data = exportToJson({ markets, signals, news, correlations });
+      return { data, filename: `hypemarket-${Date.now()}.json` };
+    }
   });
 }
 
@@ -208,6 +265,9 @@ async function runCollection(): Promise<CollectionSnapshot> {
     [CONFIG.storage.lastCollectionAt]: snapshot.collectedAt,
   });
 
+  // Save a compact history entry for charting.
+  await appendHistoryEntry(snapshot, settings.maxHistoryEntries);
+
   console.log(`[HypeMarket] Collection complete: ${markets.length} markets, ${signals.length} signals, ${news.length} news items`);
   return snapshot;
 }
@@ -287,4 +347,58 @@ function mergeNews(existing: NewsItem[], incoming: NewsItem[]): NewsItem[] {
   }
   // Keep only the latest 200 news items.
   return Array.from(map.values()).slice(-200);
+}
+
+// ── History helpers (Phase 3: historical charts) ─────────────────
+
+/** Append a compact history entry after each collection. */
+async function appendHistoryEntry(snapshot: CollectionSnapshot, maxEntries: number): Promise<void> {
+  const result = await browser.storage.local.get(CONFIG.storage.history);
+  const history = (result[CONFIG.storage.history] as HistoryEntry[]) ?? [];
+
+  // Compute aggregate stats for this snapshot
+  const topVirality = [...snapshot.signals]
+    .sort((a, b) => b.virality - a.virality)
+    .slice(0, 5)
+    .map((s) => s.virality);
+
+  const avgSentiment = snapshot.signals.length > 0
+    ? snapshot.signals.reduce((sum, s) => sum + s.sentiment, 0) / snapshot.signals.length
+    : 0;
+
+  // Count correlations (approximate — use stored correlations if available)
+  const corrResult = await browser.storage.local.get(CONFIG.storage.correlations);
+  const corrData = corrResult[CONFIG.storage.correlations] as { matches: CorrelationMatch[]; newsMatches: NewsCorrelationMatch[] } | undefined;
+  const correlationCount = (corrData?.matches?.length ?? 0) + (corrData?.newsMatches?.length ?? 0);
+
+  const entry: HistoryEntry = {
+    timestamp: snapshot.collectedAt,
+    marketCount: snapshot.markets.length,
+    signalCount: snapshot.signals.length,
+    newsCount: snapshot.news.length,
+    correlationCount,
+    topVirality,
+    avgSentiment,
+  };
+
+  history.push(entry);
+
+  // Trim to max entries (keep most recent)
+  const trimmed = history.slice(-maxEntries);
+  await browser.storage.local.set({ [CONFIG.storage.history]: trimmed });
+}
+
+/** Get historical entries for charting. */
+async function getHistory(limit: number): Promise<HistoryEntry[]> {
+  const result = await browser.storage.local.get(CONFIG.storage.history);
+  const history = (result[CONFIG.storage.history] as HistoryEntry[]) ?? [];
+  return history.slice(-limit);
+}
+
+// ── Watchlist helpers (Phase 3: custom watchlists) ───────────────
+
+/** Get the user's watchlist. */
+async function getWatchlist(): Promise<WatchlistEntry[]> {
+  const result = await browser.storage.local.get(CONFIG.storage.watchlist);
+  return (result[CONFIG.storage.watchlist] as WatchlistEntry[]) ?? [];
 }

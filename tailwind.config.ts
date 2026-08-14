@@ -2,6 +2,7 @@ import type { Config } from 'tailwindcss';
 
 export default {
   content: ['./src/popup/**/*.{ts,tsx}', './src/dashboard/**/*.{ts,tsx}', './index.html'],
+  darkMode: 'class',
   theme: {
     extend: {
       colors: {
@@ -22,6 +23,14 @@ export default {
         bull: '#16a34a',
         bear: '#dc2626',
         neutral: '#6b7280',
+        // Light theme surface colours
+        light: {
+          bg: '#f8fafc',
+          surface: '#ffffff',
+          border: '#e2e8f0',
+          text: '#1e293b',
+          muted: '#64748b',
+        },
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
