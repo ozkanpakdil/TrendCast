@@ -1,13 +1,11 @@
 /**
- * Settings component — configure API keys, polling interval, enabled platforms.
+ * Settings component — configure collection interval, enabled sources,
+ * and highlight threshold.
  *
- * ⚠️ Pitfall: API keys are stored in chrome.storage.local, which is NOT
- *    encrypted. For production, consider using chrome.storage.session
- *    (MV3, in-memory only) or a native messaging host for key management.
- *    Never store keys in code or manifest.json.
+ * No API keys needed — the extension is 100% client-side.
  */
 
-import React, { useState } from 'react';
+import React from 'react';
 import type { ExtensionSettings } from '@/types';
 
 interface SettingsProps {
@@ -16,110 +14,106 @@ interface SettingsProps {
 }
 
 export function Settings({ settings, onUpdate }: SettingsProps) {
-  const [showKeys, setShowKeys] = useState(false);
-
   return (
     <div className="space-y-4">
-      {/* Polling interval */}
-      <Section title="Polling">
+      {/* Collection interval */}
+      <Section title="Collection">
         <label className="block">
-          <span className="text-xs text-slate-400">Refresh interval (minutes)</span>
+          <span className="text-xs text-slate-400">Collection interval (minutes)</span>
           <input
             type="number"
-            min={1}
-            max={60}
-            value={settings.pollIntervalMinutes}
-            onChange={(e) => onUpdate({ pollIntervalMinutes: parseInt(e.target.value) || 5 })}
+            min={5}
+            max={1440}
+            value={settings.collectionIntervalMinutes}
+            onChange={(e) =>
+              onUpdate({ collectionIntervalMinutes: parseInt(e.target.value) || 60 })
+            }
             className="w-full mt-1 px-2 py-1 text-xs bg-slate-800 border border-slate-700 rounded focus:outline-none focus:border-brand-400"
           />
+          <span className="text-[10px] text-slate-500 mt-0.5 block">
+            How often the background worker collects data (default: 60 = hourly)
+          </span>
         </label>
       </Section>
 
-      {/* Enabled platforms */}
-      <Section title="Social Platforms">
-        <div className="space-y-1">
-          {(['x', 'reddit', 'tiktok'] as const).map((platform) => (
-            <label key={platform} className="flex items-center gap-2 text-xs">
+      {/* Data sources */}
+      <Section title="Data Sources">
+        <p className="text-[10px] text-slate-500 mb-2">
+          Enable or disable data sources. Social platforms (X, TikTok) require
+          you to visit those sites for content scripts to scrape data.
+        </p>
+        <div className="space-y-1.5">
+          {(
+            [
+              ['polymarket', '🔵 Polymarket'],
+              ['kalshi', '🟢 Kalshi'],
+              ['x', '𝕏 X (Twitter)'],
+              ['reddit', '👽 Reddit'],
+              ['tiktok', '🎵 TikTok'],
+              ['bbc', '📰 BBC News'],
+              ['cnn', '📰 CNN'],
+            ] as [keyof ExtensionSettings['enabledSources'], string][]
+          ).map(([source, label]) => (
+            <label
+              key={source}
+              className="flex items-center justify-between text-xs py-1 px-2 rounded bg-slate-800 hover:bg-slate-750 transition-colors cursor-pointer"
+            >
+              <span className="text-slate-300">{label}</span>
               <input
                 type="checkbox"
-                checked={settings.enabledPlatforms[platform]}
+                checked={settings.enabledSources[source]}
                 onChange={(e) =>
                   onUpdate({
-                    enabledPlatforms: {
-                      ...settings.enabledPlatforms,
-                      [platform]: e.target.checked,
+                    enabledSources: {
+                      ...settings.enabledSources,
+                      [source]: e.target.checked,
                     },
                   })
                 }
-                className="rounded"
+                className="accent-brand-500"
               />
-              <span className="capitalize text-slate-300">{platform}</span>
             </label>
           ))}
         </div>
       </Section>
 
-      {/* Notification threshold */}
-      <Section title="Notifications">
+      {/* Highlight threshold */}
+      <Section title="Display">
         <label className="block">
           <span className="text-xs text-slate-400">
-            Virality threshold: {settings.notificationThreshold}/100
+            Highlight threshold: {settings.highlightThreshold}/100
           </span>
           <input
             type="range"
             min={0}
             max={100}
-            value={settings.notificationThreshold}
+            value={settings.highlightThreshold}
             onChange={(e) =>
-              onUpdate({ notificationThreshold: parseInt(e.target.value) })
+              onUpdate({ highlightThreshold: parseInt(e.target.value) })
             }
             className="w-full mt-1 accent-brand-500"
           />
+          <span className="text-[10px] text-slate-500 mt-0.5 block">
+            Social signals with virality above this score are highlighted in the dashboard
+          </span>
         </label>
       </Section>
 
-      {/* API keys */}
-      <Section
-        title="API Keys"
-        action={
-          <button
-            onClick={() => setShowKeys(!showKeys)}
-            className="text-[10px] text-brand-400 hover:underline"
-          >
-            {showKeys ? 'Hide' : 'Show'}
-          </button>
-        }
-      >
-        <p className="text-[10px] text-slate-500 mb-2">
-          Keys are stored locally in your browser. Never shared or sent to any server
-          except the respective API.
+      {/* New tab override */}
+      <Section title="New Tab">
+        <label className="flex items-center justify-between text-xs py-1 px-2 rounded bg-slate-800 cursor-pointer">
+          <span className="text-slate-300">Override new tab with dashboard</span>
+          <input
+            type="checkbox"
+            checked={settings.overrideNewTab}
+            onChange={(e) => onUpdate({ overrideNewTab: e.target.checked })}
+            className="accent-brand-500"
+          />
+        </label>
+        <p className="text-[10px] text-slate-500 mt-1">
+          When enabled, opening a new tab shows the HypeMarket dashboard.
+          Disable to keep your browser's default new tab page.
         </p>
-        <div className="space-y-2">
-          <KeyInput
-            label="Reddit Client ID"
-            value={settings.apiKeys.redditClientId ?? ''}
-            hidden={!showKeys}
-            onChange={(v) =>
-              onUpdate({ apiKeys: { ...settings.apiKeys, redditClientId: v } })
-            }
-          />
-          <KeyInput
-            label="Reddit Client Secret"
-            value={settings.apiKeys.redditClientSecret ?? ''}
-            hidden={!showKeys}
-            onChange={(v) =>
-              onUpdate({ apiKeys: { ...settings.apiKeys, redditClientSecret: v } })
-            }
-          />
-          <KeyInput
-            label="X (Twitter) Bearer Token"
-            value={settings.apiKeys.xBearer ?? ''}
-            hidden={!showKeys}
-            onChange={(v) =>
-              onUpdate({ apiKeys: { ...settings.apiKeys, xBearer: v } })
-            }
-          />
-        </div>
       </Section>
     </div>
   );
@@ -127,45 +121,17 @@ export function Settings({ settings, onUpdate }: SettingsProps) {
 
 function Section({
   title,
-  action,
   children,
 }: {
   title: string;
-  action?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <div>
-      <div className="flex items-center justify-between mb-1">
-        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide">{title}</h3>
-        {action}
-      </div>
+      <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">
+        {title}
+      </h3>
       {children}
     </div>
-  );
-}
-
-function KeyInput({
-  label,
-  value,
-  hidden,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  hidden: boolean;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <label className="block">
-      <span className="text-[10px] text-slate-500">{label}</span>
-      <input
-        type={hidden ? 'password' : 'text'}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder="Not set"
-        className="w-full mt-0.5 px-2 py-1 text-xs bg-slate-800 border border-slate-700 rounded focus:outline-none focus:border-brand-400 font-mono"
-      />
-    </label>
   );
 }

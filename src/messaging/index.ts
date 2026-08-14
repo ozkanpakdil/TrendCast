@@ -16,15 +16,23 @@
  */
 
 import { browser } from './browser';
-import type { Browser } from './browser';
 import type { Message, MessageType } from '@/types';
+
+/** Re-export Browser type for consumers that need it. */
+export type { Browser } from './browser';
 
 /** Send a message to the background worker (from popup or content script). */
 export async function sendMessage<T extends MessageType>(
   type: T,
   payload: Extract<Message, { type: T }>['payload'],
 ): Promise<unknown> {
-  return browser.runtime.sendMessage({ type, payload } as Message);
+  // The polyfill's sendMessage has its own generic inference that conflicts
+  // with our discriminated union. We cast the call to bypass the polyfill's
+  // type inference — type safety is enforced at the call site via T.
+  return (browser.runtime.sendMessage as (msg: unknown) => Promise<unknown>)({
+    type,
+    payload,
+  });
 }
 
 /** Send a message to a specific tab's content script (from background). */
@@ -33,7 +41,10 @@ export async function sendTabMessage<T extends MessageType>(
   type: T,
   payload: Extract<Message, { type: T }>['payload'],
 ): Promise<unknown> {
-  return browser.tabs.sendMessage(tabId, { type, payload } as Message);
+  return (browser.tabs.sendMessage as (tabId: number, msg: unknown) => Promise<unknown>)(
+    tabId,
+    { type, payload },
+  );
 }
 
 /**
@@ -49,17 +60,24 @@ export function onMessage<T extends MessageType>(
   type: T,
   handler: (
     payload: Extract<Message, { type: T }>['payload'],
-    sender: Browser.Runtime.MessageSender,
+    sender: Parameters<Parameters<typeof browser.runtime.onMessage.addListener>[0]>[1],
   ) => Promise<unknown> | unknown,
 ): () => void {
   const listener = (
-    message: Message,
-    sender: Browser.Runtime.MessageSender,
+    message: unknown,
+    sender: Parameters<Parameters<typeof browser.runtime.onMessage.addListener>[0]>[1],
     sendResponse: (response: unknown) => void,
   ) => {
-    if (message?.type !== type) return false;
+    if (typeof message !== 'object' || message === null || (message as Message).type !== type) return;
 
-    Promise.resolve(handler(message.payload, sender))
+    // Cast payload: TypeScript can't narrow generic T on discriminated unions
+    // at compile time — Extract<Message, { type: T }>['payload'] becomes an
+    // intersection of all payloads instead of the correct single variant.
+    // We've verified message.type === type at runtime, so the cast is safe.
+    // Type safety is enforced at call sites via sendMessage's generic.
+    const typedMessage = message as { type: T; payload: unknown };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    Promise.resolve(handler(typedMessage.payload as any, sender))
       .then((result) => sendResponse({ ok: true, data: result }))
       .catch((err) => sendResponse({ ok: false, error: String(err) }));
 
@@ -67,7 +85,14 @@ export function onMessage<T extends MessageType>(
     return true;
   };
 
-  browser.runtime.onMessage.addListener(listener);
+  // Cast: the polyfill's OnMessageListener type expects `true` as the only
+  // return type, but we also return undefined for non-matching messages.
+  browser.runtime.onMessage.addListener(
+    listener as Parameters<typeof browser.runtime.onMessage.addListener>[0],
+  );
 
-  return () => browser.runtime.onMessage.removeListener(listener);
+  return () =>
+    browser.runtime.onMessage.removeListener(
+      listener as Parameters<typeof browser.runtime.onMessage.removeListener>[0],
+    );
 }

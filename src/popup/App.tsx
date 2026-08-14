@@ -1,25 +1,44 @@
 /**
- * Main popup application component.
+ * Main popup application component — simplified quick-launcher.
  *
- * Tabs:
- *   - Dashboard: overview of correlated markets + social signals
- *   - Markets: browse cached prediction market contracts
- *   - Settings: configure API keys, polling interval, enabled platforms
+ * The popup is now a quick-launcher that shows:
+ *   - Last collection time
+ *   - "Open Dashboard" button (opens the new tab dashboard)
+ *   - "Collect Now" button (triggers manual collection)
+ *   - Source toggles (enable/disable each data source)
+ *   - Quick stats from the latest snapshot
+ *
+ * The full dashboard is in the new tab override (src/dashboard/).
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { Dashboard } from './components/Dashboard';
-import { MarketsView } from './components/MarketsView';
+import { useState, useCallback } from 'react';
 import { Settings } from './components/Settings';
-import { useCachedMarkets } from './hooks/useCachedMarkets';
 import { useSettings } from './hooks/useSettings';
+import { useSnapshot } from './hooks/useSnapshot';
+import { browser } from '@/messaging/browser';
 
-type Tab = 'dashboard' | 'markets' | 'settings';
+type Tab = 'home' | 'settings';
 
 export function App() {
-  const [activeTab, setActiveTab] = useState<Tab>('dashboard');
-  const { markets, loading: marketsLoading, refresh } = useCachedMarkets();
+  const [activeTab, setActiveTab] = useState<Tab>('home');
   const { settings, updateSettings } = useSettings();
+  const { snapshot, collecting, lastCollectionAt, triggerCollection } = useSnapshot();
+
+  const openDashboard = useCallback(() => {
+    browser.tabs.create({ url: 'chrome://newtab' });
+  }, []);
+
+  const lastCollectionText = lastCollectionAt
+    ? new Date(lastCollectionAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    : 'Never';
+
+  const stats = snapshot
+    ? {
+        markets: snapshot.markets.length,
+        signals: snapshot.signals.length,
+        news: snapshot.news.length,
+      }
+    : { markets: 0, signals: 0, news: 0 };
 
   return (
     <div className="flex flex-col h-[500px] w-[380px] bg-slate-900 text-slate-100 font-sans">
@@ -29,36 +48,88 @@ export function App() {
           <span className="text-xl">📊</span>
           <h1 className="text-base font-bold text-brand-400">HypeMarket</h1>
         </div>
-        <button
-          onClick={refresh}
-          className="text-xs px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 transition-colors"
-          title="Refresh market data"
-        >
-          {marketsLoading ? '⟳ Loading…' : '↻ Refresh'}
-        </button>
+        <nav className="flex gap-1">
+          {(['home', 'settings'] as Tab[]).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
+                activeTab === tab
+                  ? 'bg-brand-500 text-white'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              {tab === 'home' ? '🏠 Home' : '⚙️ Settings'}
+            </button>
+          ))}
+        </nav>
       </header>
 
-      {/* Tab navigation */}
-      <nav className="flex border-b border-slate-700 bg-slate-800">
-        {(['dashboard', 'markets', 'settings'] as Tab[]).map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`flex-1 py-2 text-xs font-medium capitalize transition-colors ${
-              activeTab === tab
-                ? 'text-brand-400 border-b-2 border-brand-400 bg-slate-900'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            {tab}
-          </button>
-        ))}
-      </nav>
-
       {/* Tab content */}
-      <main className="flex-1 overflow-y-auto p-3">
-        {activeTab === 'dashboard' && <Dashboard markets={markets} settings={settings} />}
-        {activeTab === 'markets' && <MarketsView markets={markets} loading={marketsLoading} />}
+      <main className="flex-1 overflow-y-auto p-4">
+        {activeTab === 'home' && (
+          <div className="space-y-4">
+            {/* Open Dashboard button */}
+            <button
+              onClick={openDashboard}
+              className="w-full py-3 px-4 rounded-lg bg-brand-500 hover:bg-brand-600 text-white text-sm font-bold transition-colors flex items-center justify-center gap-2"
+            >
+              <span className="text-lg">🚀</span>
+              Open Dashboard
+            </button>
+
+            {/* Collection controls */}
+            <div className="rounded-lg bg-slate-800 p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-slate-400">Last collection:</span>
+                <span className="text-xs text-slate-200 font-medium">{lastCollectionText}</span>
+              </div>
+              <button
+                onClick={triggerCollection}
+                disabled={collecting}
+                className="w-full py-2 px-3 rounded-lg bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed text-slate-200 text-xs font-medium transition-colors"
+              >
+                {collecting ? '⟳ Collecting…' : '↻ Collect Now'}
+              </button>
+            </div>
+
+            {/* Quick stats */}
+            <div className="grid grid-cols-3 gap-2">
+              <StatCard label="Markets" value={stats.markets} icon="📈" />
+              <StatCard label="Signals" value={stats.signals} icon="🔥" />
+              <StatCard label="News" value={stats.news} icon="📰" />
+            </div>
+
+            {/* Enabled sources summary */}
+            <div className="rounded-lg bg-slate-800 p-3">
+              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">
+                Active Sources
+              </h3>
+              <div className="flex flex-wrap gap-1.5">
+                {Object.entries(settings.enabledSources).map(([source, enabled]) => (
+                  <span
+                    key={source}
+                    className={`text-[10px] px-2 py-1 rounded-full font-medium ${
+                      enabled
+                        ? 'bg-brand-500/20 text-brand-300'
+                        : 'bg-slate-700 text-slate-500'
+                    }`}
+                  >
+                    {source}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {/* Info */}
+            <p className="text-[10px] text-slate-500 text-center leading-relaxed">
+              HypeMarket runs entirely in your browser. No API keys, no servers.
+              <br />
+              Data is collected hourly using your own browser sessions.
+            </p>
+          </div>
+        )}
+
         {activeTab === 'settings' && (
           <Settings settings={settings} onUpdate={updateSettings} />
         )}
@@ -66,8 +137,26 @@ export function App() {
 
       {/* Footer */}
       <footer className="px-4 py-2 bg-slate-800 border-t border-slate-700 text-[10px] text-slate-500 text-center">
-        HypeMarket v0.1.0 · Sentiment × Prediction Markets
+        HypeMarket v0.1.0 · 100% client-side · No API keys
       </footer>
+    </div>
+  );
+}
+
+function StatCard({
+  label,
+  value,
+  icon,
+}: {
+  label: string;
+  value: number;
+  icon: string;
+}) {
+  return (
+    <div className="bg-slate-800 rounded-lg p-2 text-center">
+      <div className="text-lg">{icon}</div>
+      <div className="text-lg font-bold text-slate-200">{value}</div>
+      <div className="text-[10px] text-slate-500 uppercase">{label}</div>
     </div>
   );
 }

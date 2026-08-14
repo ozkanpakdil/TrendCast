@@ -2,8 +2,12 @@
  * Content script for social platforms (X, Reddit, TikTok).
  *
  * Responsibility:
- *   Detect trending topics / keywords on the current page and inject
- *   an overlay showing correlated prediction market odds.
+ *   Scrape trending posts/keywords from the current page and report them
+ *   to the background worker via REPORT_SOCIAL_DATA. The background stores
+ *   them in chrome.storage.local for the dashboard to display.
+ *
+ *   Also injects an odds overlay showing correlated prediction market odds
+ *   when matches are found.
  *
  * ⚠️ Pitfall: Each social platform has a different DOM structure. We
  *    detect the platform from the hostname and use platform-specific
@@ -19,11 +23,9 @@
  */
 
 import { sendMessage } from '@/messaging';
-import type { CorrelationMatch, SocialSignal } from '@/types';
+import type { CorrelationMatch, SocialSignal, SocialPlatform } from '@/types';
 import { extractKeywords } from '@/utils/keywords';
 import { CONFIG } from '@/config';
-
-type SocialPlatform = 'x' | 'reddit' | 'tiktok';
 
 /** Detect which social platform we're on. */
 function detectPlatform(): SocialPlatform | null {
@@ -34,57 +36,135 @@ function detectPlatform(): SocialPlatform | null {
   return null;
 }
 
-/** Extract trending text/keywords from the current page (platform-specific). */
-function extractPageKeywords(): string[] {
+/** Scrape social signals from the current page (platform-specific). */
+function scrapeSignals(): SocialSignal[] {
   const platform = detectPlatform();
   if (!platform) return [];
 
   switch (platform) {
     case 'x':
-      return extractXKeywords();
+      return scrapeXSignals();
     case 'reddit':
-      return extractRedditKeywords();
+      return scrapeRedditSignals();
     case 'tiktok':
-      return extractTiktokKeywords();
+      return scrapeTiktokSignals();
   }
 }
 
-/** Extract keywords from visible tweets on X. */
-function extractXKeywords(): string[] {
-  // X tweet elements use `article` tags with `data-testid="tweet"`.
+/** Scrape tweets from X. */
+function scrapeXSignals(): SocialSignal[] {
+  const signals: SocialSignal[] = [];
   const tweets = document.querySelectorAll('article[data-testid="tweet"]');
-  const texts: string[] = [];
-  tweets.forEach((tweet) => {
+
+  tweets.forEach((tweet, i) => {
     const textEl = tweet.querySelector('[data-testid="tweetText"]');
-    if (textEl) texts.push(textEl.textContent ?? '');
+    const text = textEl?.textContent?.trim() ?? '';
+    if (!text) return;
+
+    // Extract engagement metrics from the tweet's action buttons.
+    const replyBtn = tweet.querySelector('[data-testid="reply"]');
+    const retweetBtn = tweet.querySelector('[data-testid="retweet"]');
+    const likeBtn = tweet.querySelector('[data-testid="like"]');
+    const viewsEl = tweet.querySelector('a[href*="/analytics"]');
+
+    const likes = parseMetric(likeBtn?.textContent ?? '0');
+    const shares = parseMetric(retweetBtn?.textContent ?? '0');
+    const comments = parseMetric(replyBtn?.textContent ?? '0');
+    const views = parseMetric(viewsEl?.textContent ?? '0');
+
+    const engagement = likes + shares + comments;
+    const virality = Math.min(100, Math.log10(engagement + 1) * 25);
+
+    signals.push({
+      id: `x:${Date.now()}-${i}`,
+      platform: 'x',
+      text,
+      author: 'x-user',
+      metrics: { likes, shares, comments, views: views || undefined },
+      timestamp: new Date().toISOString(),
+      keywords: extractKeywords(text),
+      sentiment: 0, // X sentiment requires NLP — neutral default for now
+      virality,
+    });
   });
-  return extractKeywords(texts.join(' '));
+
+  return signals;
 }
 
-/** Extract keywords from Reddit posts. */
-function extractRedditKeywords(): string[] {
-  // Reddit post titles use `h3` inside post elements.
-  const titles = document.querySelectorAll('h3, [data-testid="post-title"]');
-  const texts: string[] = [];
-  titles.forEach((el) => texts.push(el.textContent ?? ''));
-  return extractKeywords(texts.join(' '));
+/** Scrape posts from Reddit. */
+function scrapeRedditSignals(): SocialSignal[] {
+  const signals: SocialSignal[] = [];
+  const posts = document.querySelectorAll('[data-testid="post-container"], shreddit-post, article');
+
+  posts.forEach((post, i) => {
+    const titleEl = post.querySelector('h3, [data-testid="post-title"], a[slot="title"]');
+    const title = titleEl?.textContent?.trim() ?? '';
+    if (!title) return;
+
+    // Try to extract upvotes and comments.
+    const voteEl = post.querySelector('[data-testid="post-upvote-count"], shreddit-post [score]');
+    const commentEl = post.querySelector('[data-testid="post-comment-count"]');
+    const ups = parseMetric(voteEl?.textContent ?? '0');
+    const comments = parseMetric(commentEl?.textContent ?? '0');
+
+    const engagement = ups + comments;
+    const virality = Math.min(100, Math.log10(engagement + 1) * 25);
+
+    signals.push({
+      id: `reddit:${Date.now()}-${i}`,
+      platform: 'reddit',
+      text: title,
+      author: 'r/unknown',
+      metrics: { likes: ups, shares: 0, comments },
+      timestamp: new Date().toISOString(),
+      keywords: extractKeywords(title),
+      sentiment: 0,
+      virality,
+    });
+  });
+
+  return signals;
 }
 
-/** Extract keywords from TikTok discover/trending page. */
-function extractTiktokKeywords(): string[] {
-  // TikTok trend titles are in `div` elements with trend-related classes.
-  // This is fragile — TikTok changes classes frequently.
-  const trendEls = document.querySelectorAll('[data-e2e="trend-desc"], .tiktok-trend-title');
-  const texts: string[] = [];
-  trendEls.forEach((el) => texts.push(el.textContent ?? ''));
-  // Also grab the page title as a fallback.
-  texts.push(document.title);
-  return extractKeywords(texts.join(' '));
+/** Scrape trending topics from TikTok. */
+function scrapeTiktokSignals(): SocialSignal[] {
+  const signals: SocialSignal[] = [];
+  const trendEls = document.querySelectorAll('[data-e2e="trend-desc"], [class*="trend-title"]');
+
+  trendEls.forEach((el, i) => {
+    const text = el.textContent?.trim() ?? '';
+    if (!text) return;
+
+    signals.push({
+      id: `tiktok:${Date.now()}-${i}`,
+      platform: 'tiktok',
+      text,
+      author: 'tiktok-trend',
+      metrics: { likes: 0, shares: 0, comments: 0 },
+      timestamp: new Date().toISOString(),
+      keywords: extractKeywords(text),
+      sentiment: 0,
+      virality: 50, // Default — TikTok metrics are hard to scrape reliably
+    });
+  });
+
+  return signals;
+}
+
+/** Parse a metric string like "1.2K" or "3.4M" into a number. */
+function parseMetric(text: string): number {
+  const cleaned = text.trim().replace(/,/g, '');
+  const match = cleaned.match(/([\d.]+)\s*([KM])?/i);
+  if (!match) return 0;
+  const num = parseFloat(match[1]);
+  const suffix = match[2]?.toUpperCase();
+  if (suffix === 'K') return Math.round(num * 1000);
+  if (suffix === 'M') return Math.round(num * 1_000_000);
+  return Math.round(num);
 }
 
 /** Inject the odds overlay into the page. */
 function injectOverlay(matches: CorrelationMatch[]): void {
-  // Remove existing overlay if present.
   const existing = document.getElementById(CONFIG.overlay.containerId);
   if (existing) existing.remove();
 
@@ -94,7 +174,6 @@ function injectOverlay(matches: CorrelationMatch[]): void {
   container.id = CONFIG.overlay.containerId;
   container.className = 'hypemarket-overlay';
 
-  // Build the overlay HTML.
   const topMatches = matches.slice(0, 5);
   container.innerHTML = `
     <div class="hypemarket-overlay__header">
@@ -121,7 +200,6 @@ function injectOverlay(matches: CorrelationMatch[]): void {
     </div>
   `;
 
-  // Close button handler.
   container.querySelector('.hypemarket-overlay__close')?.addEventListener('click', () => {
     container.remove();
   });
@@ -129,7 +207,6 @@ function injectOverlay(matches: CorrelationMatch[]): void {
   document.body.appendChild(container);
 }
 
-/** Escape HTML to prevent XSS when injecting user-visible text. */
 function escapeHtml(text: string): string {
   const div = document.createElement('div');
   div.textContent = text;
@@ -139,53 +216,49 @@ function escapeHtml(text: string): string {
 // ── Main logic ───────────────────────────────────────────────────
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-let lastKeywordsHash = '';
+let lastScanHash = '';
 
-async function scanAndCorrelate(): Promise<void> {
-  const keywords = extractPageKeywords();
-  if (keywords.length === 0) return;
+async function scanAndReport(): Promise<void> {
+  const signals = scrapeSignals();
+  if (signals.length === 0) return;
 
-  // Avoid re-processing the same keywords.
-  const hash = keywords.sort().join(',');
-  if (hash === lastKeywordsHash) return;
-  lastKeywordsHash = hash;
+  // Avoid re-reporting the same signals.
+  const hash = signals.map((s) => s.text).sort().join('|');
+  if (hash === lastScanHash) return;
+  lastScanHash = hash;
 
-  console.log('[HypeMarket] Extracted keywords:', keywords);
+  console.log(`[HypeMarket] Scraped ${signals.length} signals from ${detectPlatform()}`);
 
   try {
-    // Fetch social signals (from background, which calls Reddit API etc.)
-    const platform = detectPlatform();
-    if (!platform) return;
+    // Report signals to background for storage.
+    await sendMessage('REPORT_SOCIAL_DATA', { signals });
 
-    const signalsResult = await sendMessage('FETCH_SOCIAL_SIGNALS', {
-      platform,
-      keywords,
-    });
-    const signalsResponse = signalsResult as { ok: boolean; data: SocialSignal[] };
-    const signals = signalsResponse?.data ?? [];
-
-    // Fetch cached markets from background.
-    const marketsResult = await sendMessage('FETCH_MARKETS', { platform: 'polymarket' });
-    const marketsResponse = marketsResult as { ok: boolean; data: MarketContract[] };
-
-    // Run correlation (import dynamically to avoid bundling engine in content script).
+    // Also try to correlate with cached markets for the overlay.
+    // We import the correlation engine dynamically to avoid bundling it.
     const { correlate } = await import('@/services/engine/correlation');
-    const matches = correlate(signals, marketsResponse?.data ?? []);
+    const { browser } = await import('@/messaging/browser');
+    const { CONFIG } = await import('@/config');
 
-    if (matches.length > 0) {
-      injectOverlay(matches);
+    const result = await browser.storage.local.get(CONFIG.storage.collectedMarkets);
+    const markets = (result[CONFIG.storage.collectedMarkets] as MarketContract[]) ?? [];
+
+    if (markets.length > 0) {
+      const matches = correlate(signals, markets);
+      if (matches.length > 0) {
+        injectOverlay(matches);
+      }
     }
   } catch (err) {
     console.error('[HypeMarket] Scan failed:', err);
   }
 }
 
-// Need to import MarketContract type for the cast above.
+// Need MarketContract type for the cast above.
 import type { MarketContract } from '@/types';
 
 function debouncedScan(): void {
   if (debounceTimer) clearTimeout(debounceTimer);
-  debounceTimer = setTimeout(scanAndCorrelate, CONFIG.overlay.mutationDebounceMs);
+  debounceTimer = setTimeout(scanAndReport, CONFIG.overlay.mutationDebounceMs);
 }
 
 // ── MutationObserver ─────────────────────────────────────────────
@@ -193,4 +266,4 @@ const observer = new MutationObserver(() => debouncedScan());
 observer.observe(document.body, { childList: true, subtree: true });
 
 // Initial scan.
-scanAndCorrelate();
+scanAndReport();

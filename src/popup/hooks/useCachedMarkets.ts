@@ -1,15 +1,13 @@
 /**
- * Hook to read and refresh cached prediction market contracts.
+ * Hook to read collected prediction market contracts from chrome.storage.
  *
- * On mount, sends a FETCH_MARKETS message to the background worker for
- * both platforms. The worker fetches from the APIs and caches in storage.
- * We then read from storage for instant display.
+ * In the new architecture, the background worker collects markets hourly
+ * and stores them in chrome.storage.local. This hook reads from storage
+ * for instant display. No more FETCH_MARKETS message — data is already there.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { browser } from '@/messaging/browser';
-import type { Browser } from '@/messaging/browser';
-import { sendMessage } from '@/messaging';
 import { CONFIG } from '@/config';
 import type { MarketContract } from '@/types';
 
@@ -17,38 +15,29 @@ export function useCachedMarkets() {
   const [markets, setMarkets] = useState<MarketContract[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const loadFromStorage = useCallback(async () => {
-    const result = await browser.storage.local.get(CONFIG.storage.cachedMarkets);
-    const cached = (result[CONFIG.storage.cachedMarkets] as MarketContract[]) ?? [];
+  const loadFromStorage = async () => {
+    const result = await browser.storage.local.get(CONFIG.storage.collectedMarkets);
+    const cached = (result[CONFIG.storage.collectedMarkets] as MarketContract[]) ?? [];
     setMarkets(cached);
     setLoading(false);
+  };
+
+  useEffect(() => {
+    loadFromStorage();
   }, []);
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    // Fetch both platforms in parallel.
-    await Promise.all([
-      sendMessage('FETCH_MARKETS', { platform: 'polymarket' }),
-      sendMessage('FETCH_MARKETS', { platform: 'kalshi' }),
-    ]).catch((err) => console.error('[HypeMarket] Refresh failed:', err));
-    await loadFromStorage();
-  }, [loadFromStorage]);
-
+  // Listen for storage changes (background worker updates after collection).
   useEffect(() => {
-    // Load cached data immediately, then refresh from APIs.
-    loadFromStorage().then(() => refresh());
-  }, [loadFromStorage, refresh]);
-
-  // Listen for storage changes (background worker updates cache).
-  useEffect(() => {
-    const listener = (changes: Record<string, Browser.Storage.StorageChange>) => {
-      if (changes[CONFIG.storage.cachedMarkets]) {
-        setMarkets((changes[CONFIG.storage.cachedMarkets].newValue as MarketContract[]) ?? []);
+    const listener = (changes: Record<string, { newValue?: unknown }>) => {
+      if (changes[CONFIG.storage.collectedMarkets]) {
+        setMarkets(
+          (changes[CONFIG.storage.collectedMarkets].newValue as MarketContract[]) ?? [],
+        );
       }
     };
     browser.storage.onChanged.addListener(listener);
     return () => browser.storage.onChanged.removeListener(listener);
   }, []);
 
-  return { markets, loading, refresh };
+  return { markets, loading };
 }

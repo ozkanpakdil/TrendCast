@@ -11,19 +11,27 @@ import pkg from '../package.json';
  * ── Cross-browser notes ──────────────────────────────────────────
  * Chrome (MV3):
  *   • Background uses `service_worker` (non-persistent, ephemeral).
- *   • `chrome.action` for the toolbar icon.
+ *   • `chrome.action` for the toolbar icon (quick-launcher popup).
+ *   • `chrome_url_overrides` replaces the new tab page with our dashboard.
  *
  * Firefox (MV3 — supported since Firefox 109+):
  *   • Background can use `service_worker` (Firefox 121+) OR `scripts`
  *     for older versions. We emit `scripts` as a fallback at build time
  *     (see vite.config.ts `TARGET=firefox`).
  *   • `browser_action` is the legacy key; MV3 uses `action` in both.
+ *   • `chrome_url_overrides` is supported in Firefox.
  *
  * ⚠️ Pitfall: Firefox does not support `chrome.sidePanel`. We avoid it
- *    and use a popup instead for cross-browser parity.
+ *    and use a popup + new tab override for cross-browser parity.
  *
  * ⚠️ Pitfall: `host_permissions` are separate from `permissions` in MV3.
  *    Keep them separate so users see clear consent prompts on install.
+ *
+ * ── Client-side architecture ─────────────────────────────────────
+ * No API keys. The extension uses the user's own browser sessions
+ * to scrape data. Host permissions allow content scripts to run on
+ * supported sites and allow the background worker to open background
+ * tabs for hourly collection.
  * ─────────────────────────────────────────────────────────────────
  */
 export default defineManifest({
@@ -32,7 +40,7 @@ export default defineManifest({
   description: pkg.description,
   version: pkg.version,
 
-  // Toolbar icon + popup
+  // Toolbar icon + popup (quick-launcher)
   action: {
     default_popup: 'src/popup/index.html',
     default_title: 'HypeMarket — Sentiment × Markets',
@@ -42,6 +50,18 @@ export default defineManifest({
       '48': 'icons/icon-48.png',
       '128': 'icons/icon-128.png',
     },
+  },
+
+  // ── New Tab Override ──────────────────────────────────────────
+  // Replaces the browser's new tab page with the HypeMarket dashboard.
+  // This is the primary UI — users see all hypes, news, and correlated
+  // market odds every time they open a new tab.
+  //
+  // ⚠️ Pitfall: `chrome_url_overrides.newtab` must point to an HTML file
+  //    in the extension package. It runs in the extension's context
+  //    (not a content script), so it has full access to extension APIs.
+  chrome_url_overrides: {
+    newtab: 'src/dashboard/index.html',
   },
 
   icons: {
@@ -61,9 +81,14 @@ export default defineManifest({
 
   // ── Content Scripts ────────────────────────────────────────────
   // Split by domain group so we only inject what's needed.
+  //
+  // ⚠️ Pitfall: Content scripts run in an isolated world. They can read
+  //    the DOM but cannot access page JavaScript variables. All scraping
+  //    is DOM-based. The user's login session cookies are sent by the
+  //    browser automatically — we don't handle credentials at all.
   content_scripts: [
     {
-      // Prediction markets — read contract context from the page
+      // Prediction markets — scrape market data from the page DOM
       matches: [
         '*://polymarket.com/*',
         '*://*.polymarket.com/*',
@@ -74,7 +99,7 @@ export default defineManifest({
       run_at: 'document_idle',
     },
     {
-      // Social platforms — inject odds overlays
+      // Social platforms — scrape trending posts + inject odds overlays
       matches: [
         '*://x.com/*',
         '*://twitter.com/*',
@@ -85,32 +110,45 @@ export default defineManifest({
       css: ['src/content/socials/overlay.css'],
       run_at: 'document_idle',
     },
+    {
+      // News sites — scrape headlines (no login required)
+      matches: [
+        '*://www.bbc.com/*',
+        '*://bbc.com/*',
+        '*://www.cnn.com/*',
+        '*://cnn.com/*',
+      ],
+      js: ['src/content/news/index.ts'],
+      run_at: 'document_idle',
+    },
   ],
 
   // ── Permissions ────────────────────────────────────────────────
   // Minimal permissions principle: only request what we actually use.
   permissions: [
-    'storage', // persist settings, cached odds, correlation state
-    'alarms', // scheduled polling (replaces setInterval in MV3)
-    'tabs', // detect active tab URL for context-aware injection
-    'scripting', // programmatic content script injection (if needed)
-    'notifications', // alert user on high-sentiment spikes
+    'storage', // persist settings, collected data, correlation state
+    'alarms', // scheduled hourly collection (replaces setInterval in MV3)
+    'tabs', // open background tabs for collection, detect active tab URL
+    'scripting', // programmatic content script injection for bg tab collection
   ],
 
   // Host permissions — declared separately per MV3 spec.
   // ⚠️ These trigger user consent prompts on install.
+  // These allow content scripts to run on these sites AND allow the
+  // background worker to open background tabs to these URLs for scraping.
+  // The user's existing login sessions are used automatically — no API keys.
   host_permissions: [
-    // Prediction market APIs
+    // Prediction markets (user's own session if logged in)
     'https://*.polymarket.com/*',
-    'https://clob.polymarket.com/*',
     'https://*.kalshi.com/*',
-    'https://api.kalshi.com/*',
-    // Social APIs (where applicable — X requires bearer token)
-    'https://api.twitter.com/*',
+    // Social platforms (user's own session if logged in)
     'https://*.x.com/*',
-    'https://www.reddit.com/*',
-    'https://oauth.reddit.com/*',
-    'https://www.tiktok.com/*',
+    'https://*.twitter.com/*',
+    'https://*.reddit.com/*',
+    'https://*.tiktok.com/*',
+    // News sites (no login required)
+    'https://*.bbc.com/*',
+    'https://*.cnn.com/*',
   ],
 
   // ── Web Accessible Resources ───────────────────────────────────
@@ -125,6 +163,8 @@ export default defineManifest({
         '*://tiktok.com/*',
         '*://polymarket.com/*',
         '*://kalshi.com/*',
+        '*://bbc.com/*',
+        '*://cnn.com/*',
       ],
     },
   ],

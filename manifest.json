@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "HypeMarket — Social Sentiment × Prediction Markets",
-  "description": "Track social sentiment across X, Reddit, and TikTok and correlate it in real-time with Polymarket and Kalshi prediction market odds.",
+  "description": "Track social sentiment across X, Reddit, TikTok, BBC, CNN and correlate it in real-time with Polymarket and Kalshi prediction market odds. 100% client-side — uses your own browser sessions, no API keys.",
   "version": "0.1.0",
   "action": {
     "default_popup": "src/popup/index.html",
@@ -12,6 +12,9 @@
       "48": "icons/icon-48.png",
       "128": "icons/icon-128.png"
     }
+  },
+  "chrome_url_overrides": {
+    "newtab": "src/dashboard/index.html"
   },
   "icons": {
     "16": "icons/icon-16.png",
@@ -44,19 +47,28 @@
       "js": ["src/content/socials/index.ts"],
       "css": ["src/content/socials/overlay.css"],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "*://www.bbc.com/*",
+        "*://bbc.com/*",
+        "*://www.cnn.com/*",
+        "*://cnn.com/*"
+      ],
+      "js": ["src/content/news/index.ts"],
+      "run_at": "document_idle"
     }
   ],
-  "permissions": ["storage", "alarms", "tabs", "scripting", "notifications"],
+  "permissions": ["storage", "alarms", "tabs", "scripting"],
   "host_permissions": [
     "https://*.polymarket.com/*",
-    "https://clob.polymarket.com/*",
     "https://*.kalshi.com/*",
-    "https://api.kalshi.com/*",
-    "https://api.twitter.com/*",
     "https://*.x.com/*",
-    "https://www.reddit.com/*",
-    "https://oauth.reddit.com/*",
-    "https://www.tiktok.com/*"
+    "https://*.twitter.com/*",
+    "https://*.reddit.com/*",
+    "https://*.tiktok.com/*",
+    "https://*.bbc.com/*",
+    "https://*.cnn.com/*"
   ],
   "web_accessible_resources": [
     {
@@ -67,7 +79,9 @@
         "*://reddit.com/*",
         "*://tiktok.com/*",
         "*://polymarket.com/*",
-        "*://kalshi.com/*"
+        "*://kalshi.com/*",
+        "*://bbc.com/*",
+        "*://cnn.com/*"
       ]
     }
   ],

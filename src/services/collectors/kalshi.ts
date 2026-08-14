@@ -1,13 +1,16 @@
 /**
- * Kalshi REST API client (v2).
+ * Kalshi data collector.
  *
- * Kalshi's public market data is accessible without authentication.
- * Authenticated endpoints (trading, account) require a session token
- * obtained via RSA key exchange — not needed for our read-only use case.
+ * Uses Kalshi's public market data endpoint (no authentication required
+ * for read-only market data). The background worker calls this directly
+ * via `fetch()`.
+ *
+ * If the user is browsing kalshi.com, the content script can also scrape
+ * market data from the DOM and report it via REPORT_MARKET_DATA.
  *
  * Docs: https://trading-api.readme.io/kalshi/v2/overview
  *
- * ⚠️ Pitfall: Kalshi uses "event" and "market" as separate concepts.
+ * ⚠️ Kalshi uses "event" and "market" as separate concepts.
  *    An event (e.g. "Bitcoin Price") contains multiple markets
  *    (e.g. "BTC > $100k", "BTC > $120k"). We flatten markets and
  *    attach the event title as context.
@@ -15,10 +18,7 @@
 
 import type { MarketContract, MarketOutcome } from '@/types';
 import { CONFIG } from '@/config';
-import { RateLimiter } from '@/utils/rate-limiter';
 import { extractKeywords } from '@/utils/keywords';
-
-const limiter = new RateLimiter(CONFIG.rateLimits.kalshi);
 
 /** Raw Kalshi market shape (subset). */
 interface KalshiMarket {
@@ -37,11 +37,12 @@ interface KalshiMarket {
   event_ticker?: string;
 }
 
-/** Fetch active Kalshi markets. */
-export async function fetchKalshiMarkets(limit = 100): Promise<MarketContract[]> {
-  await limiter.waitForToken();
-
-  const url = `${CONFIG.apis.kalshi.rest}/markets?status=open&limit=${limit}`;
+/**
+ * Fetch active Kalshi markets from the public API.
+ * No authentication required for read-only market data.
+ */
+export async function collectKalshiMarkets(limit = 100): Promise<MarketContract[]> {
+  const url = `${CONFIG.scrape.kalshi.api}&limit=${limit}`;
 
   const response = await fetch(url, {
     headers: { Accept: 'application/json' },
@@ -53,23 +54,9 @@ export async function fetchKalshiMarkets(limit = 100): Promise<MarketContract[]>
 
   const data: { markets: KalshiMarket[] } = await response.json();
 
-  return data.markets.map(normaliseKalshiMarket).filter((m): m is MarketContract => m !== null);
-}
-
-/** Fetch a single market by ticker (used by content scripts on kalshi.com). */
-export async function fetchKalshiMarketByTicker(ticker: string): Promise<MarketContract | null> {
-  await limiter.waitForToken();
-
-  const url = `${CONFIG.apis.kalshi.rest}/markets/${encodeURIComponent(ticker)}`;
-
-  const response = await fetch(url, {
-    headers: { Accept: 'application/json' },
-  });
-
-  if (!response.ok) return null;
-
-  const data: { market: KalshiMarket } = await response.json();
-  return normaliseKalshiMarket(data.market);
+  return data.markets
+    .map(normaliseKalshiMarket)
+    .filter((m): m is MarketContract => m !== null);
 }
 
 /** Convert a Kalshi market into our normalised `MarketContract`. */
@@ -83,7 +70,6 @@ function normaliseKalshiMarket(raw: KalshiMarket): MarketContract | null {
       outcomes.push({ label: 'Yes', price: yesPrice });
       outcomes.push({ label: 'No', price: 1 - yesPrice });
     } else if (raw.yes_ask != null) {
-      // Fallback to ask price if last_price is unavailable.
       const price = raw.yes_ask / 100;
       outcomes.push({ label: 'Yes', price });
       outcomes.push({ label: 'No', price: 1 - price });
@@ -94,7 +80,7 @@ function normaliseKalshiMarket(raw: KalshiMarket): MarketContract | null {
     const fullTitle = raw.subtitle ? `${raw.title} — ${raw.subtitle}` : raw.title;
 
     return {
-      id: raw.ticker, // Kalshi uses ticker as the unique ID
+      id: raw.ticker,
       platform: 'kalshi',
       question: fullTitle,
       outcomes,

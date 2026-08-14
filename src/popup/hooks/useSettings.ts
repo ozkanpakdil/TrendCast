@@ -1,5 +1,6 @@
 /**
  * Hook to read and update extension settings from chrome.storage.
+ * Settings now use the new client-side shape (no API keys).
  */
 
 import { useState, useEffect, useCallback } from 'react';
