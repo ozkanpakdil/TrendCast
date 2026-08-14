@@ -9,7 +9,7 @@
  * https://finance.yahoo.com/markets/stocks/most-active/heatmap/
  */
 
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo, memo } from 'react';
 import type { MarketContract, WatchlistEntry } from '@/types';
 import { sendMessage } from '@/messaging';
 import { browser } from '@/messaging/browser';
@@ -83,7 +83,7 @@ function getMarketUrl(market: MarketContract): string | undefined {
   return undefined;
 }
 
-export function MarketOdds({ markets }: MarketOddsProps) {
+export function MarketOddsImpl({ markets }: MarketOddsProps) {
   const [watchlist, setWatchlist] = useState<WatchlistEntry[]>([]);
   const [viewMode, setViewMode] = useState<'heatmap' | 'grid'>('heatmap');
   const containerRef = useRef<HTMLDivElement>(null);
@@ -93,8 +93,13 @@ export function MarketOdds({ markets }: MarketOddsProps) {
   const fetchWatchlist = useCallback(async () => {
     try {
       const result = await sendMessage('GET_WATCHLIST', {});
-      if (result && typeof result === 'object' && 'watchlist' in result) {
-        setWatchlist((result as { watchlist: WatchlistEntry[] }).watchlist);
+      // The messaging layer wraps responses as { ok: true, data: ... }
+      const unwrapped =
+        result && typeof result === 'object' && 'ok' in result
+          ? (result as { ok: boolean; data: unknown }).data
+          : result;
+      if (unwrapped && typeof unwrapped === 'object' && 'watchlist' in unwrapped) {
+        setWatchlist((unwrapped as { watchlist: WatchlistEntry[] }).watchlist);
       }
     } catch {
       try {
@@ -117,19 +122,26 @@ export function MarketOdds({ markets }: MarketOddsProps) {
     return () => browser.storage.onChanged.removeListener(listener);
   }, [fetchWatchlist]);
 
-  // Track container size for treemap layout
+  // Track container size for treemap layout — debounced via rAF
   useEffect(() => {
     if (!containerRef.current) return;
+    let rafId = 0;
     const ro = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const { width, height } = entry.contentRect;
-        if (width > 0 && height > 0) {
-          setDims({ width: Math.round(width), height: Math.round(height) });
+      cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        for (const entry of entries) {
+          const { width, height } = entry.contentRect;
+          if (width > 0 && height > 0) {
+            setDims({ width: Math.round(width), height: Math.round(height) });
+          }
         }
-      }
+      });
     });
     ro.observe(containerRef.current);
-    return () => ro.disconnect();
+    return () => {
+      cancelAnimationFrame(rafId);
+      ro.disconnect();
+    };
   }, []);
 
   const handleStarToggle = useCallback(async (market: MarketContract, isWatched: boolean) => {
@@ -169,15 +181,22 @@ export function MarketOdds({ markets }: MarketOddsProps) {
     return squarify(inputs, 0, 0, dims.width, dims.height);
   }, [sorted, dims.width, dims.height]);
 
-  // Build a lookup from rect id → market + rect.
+  // Build a lookup map from market id → market (O(n), reused by marketMap).
+  const marketById = useMemo(() => {
+    const map = new Map<string, MarketContract>();
+    for (const m of sorted) map.set(`${m.platform}:${m.id}`, m);
+    return map;
+  }, [sorted]);
+
+  // Build a lookup from rect id → market + rect — O(n) using marketById map.
   const marketMap = useMemo(() => {
     const map = new Map<string, { market: MarketContract; rect: TreemapRect }>();
     for (const rect of rects) {
-      const market = sorted.find((m) => `${m.platform}:${m.id}` === rect.id);
+      const market = marketById.get(rect.id);
       if (market) map.set(rect.id, { market, rect });
     }
     return map;
-  }, [rects, sorted]);
+  }, [rects, marketById]);
 
   if (sorted.length === 0) {
     return (
@@ -401,3 +420,5 @@ export function MarketOdds({ markets }: MarketOddsProps) {
     </div>
   );
 }
+
+export const MarketOdds = memo(MarketOddsImpl);

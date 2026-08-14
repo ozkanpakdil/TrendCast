@@ -26,10 +26,67 @@ import type {
   SocialSignal,
 } from '@/types';
 import { keywordSimilarity } from '@/utils/keywords';
-import { entitySimilarity, extractEntityKeywords } from '@/utils/entities';
+import { extractEntityKeywords, extractEntities } from '@/utils/entities';
 
 /** Minimum confidence score to include a match (0–1). */
 const MIN_CONFIDENCE = 0.75;
+
+/**
+ * Cache of extracted entities keyed by text string.
+ * Avoids re-running expensive NER regexes on the same text across
+ * multiple correlation functions (correlate, correlateNews, correlateNewsSocial).
+ */
+class EntityCache {
+  private entityKeywords = new Map<string, string[]>();
+  private entityMaps = new Map<string, Map<string, number>>();
+
+  getKeywords(text: string): string[] {
+    let cached = this.entityKeywords.get(text);
+    if (!cached) {
+      cached = extractEntityKeywords(text);
+      this.entityKeywords.set(text, cached);
+    }
+    return cached;
+  }
+
+  getConfidenceMap(text: string): Map<string, number> {
+    let cached = this.entityMaps.get(text);
+    if (!cached) {
+      const entities = extractEntities(text);
+      cached = new Map(entities.map((e) => [e.normalized, e.confidence]));
+      this.entityMaps.set(text, cached);
+    }
+    return cached;
+  }
+}
+
+/**
+ * Compute entity similarity using cached entity maps.
+ * Replaces the text-based entitySimilarity with a cache-aware version.
+ */
+function cachedEntitySimilarity(
+  textA: string,
+  textB: string,
+  cache: EntityCache,
+): number {
+  const mapA = cache.getConfidenceMap(textA);
+  const mapB = cache.getConfidenceMap(textB);
+
+  if (mapA.size === 0 || mapB.size === 0) return 0;
+
+  let intersectionWeight = 0;
+  let unionWeight = 0;
+
+  const allKeys = new Set([...mapA.keys(), ...mapB.keys()]);
+  for (const key of allKeys) {
+    const wA = mapA.get(key) ?? 0;
+    const wB = mapB.get(key) ?? 0;
+    intersectionWeight += Math.min(wA, wB);
+    unionWeight += Math.max(wA, wB);
+  }
+
+  return unionWeight > 0 ? intersectionWeight / unionWeight : 0;
+}
 
 /**
  * Lower threshold when the two texts share at least one named entity.
@@ -57,10 +114,11 @@ export function correlate(
   contracts: MarketContract[],
 ): CorrelationMatch[] {
   const matches: CorrelationMatch[] = [];
+  const cache = new EntityCache();
 
   for (const signal of signals) {
     for (const contract of contracts) {
-      const result = correlatePair(signal, contract);
+      const result = correlatePair(signal, contract, cache);
       if (result) matches.push(result);
     }
   }
@@ -69,9 +127,13 @@ export function correlate(
 }
 
 /** Correlate a single signal-contract pair. */
-function correlatePair(signal: SocialSignal, contract: MarketContract): CorrelationMatch | null {
+function correlatePair(
+  signal: SocialSignal,
+  contract: MarketContract,
+  cache: EntityCache,
+): CorrelationMatch | null {
   // Entity-based similarity (primary) — uses NER for precise matching
-  const entSim = entitySimilarity(signal.text, contract.question);
+  const entSim = cachedEntitySimilarity(signal.text, contract.question, cache);
 
   // Keyword-based similarity (secondary) — broader fallback
   const kwSim = keywordSimilarity(signal.keywords, contract.keywords);
@@ -93,17 +155,15 @@ function correlatePair(signal: SocialSignal, contract: MarketContract): Correlat
   const confidence = Math.min(1, baseSim + boost + viralityWeight);
 
   // Use lower threshold when texts share at least one named entity (e.g., X trends)
-  const signalEntities = extractEntityKeywords(signal.text);
-  const contractEntities = extractEntityKeywords(contract.question);
-  const hasEntityMatch = signalEntities.some((e) => contractEntities.includes(e));
+  const sEntities = cache.getKeywords(signal.text);
+  const cEntities = cache.getKeywords(contract.question);
+  const hasEntityMatch = sEntities.some((e) => cEntities.includes(e));
   const threshold = hasEntityMatch ? MIN_CONFIDENCE_ENTITY_MATCH : MIN_CONFIDENCE;
   if (confidence < threshold) return null;
 
   // Collect matched keywords from both entity and keyword overlap
   const matchedKeywords = signal.keywords.filter((k) => contract.keywords.includes(k));
-  const entityKeywords = extractEntityKeywords(signal.text).filter((ek) =>
-    extractEntityKeywords(contract.question).includes(ek),
-  );
+  const entityKeywords = sEntities.filter((ek) => cEntities.includes(ek));
   const allMatched = [...new Set([...matchedKeywords, ...entityKeywords])];
 
   return {
@@ -124,10 +184,11 @@ export function correlateNews(
   contracts: MarketContract[],
 ): NewsCorrelationMatch[] {
   const matches: NewsCorrelationMatch[] = [];
+  const cache = new EntityCache();
 
   for (const item of news) {
     for (const contract of contracts) {
-      const result = correlateNewsPair(item, contract);
+      const result = correlateNewsPair(item, contract, cache);
       if (result) matches.push(result);
     }
   }
@@ -139,9 +200,10 @@ export function correlateNews(
 function correlateNewsPair(
   news: NewsItem,
   contract: MarketContract,
+  cache: EntityCache,
 ): NewsCorrelationMatch | null {
   // Entity-based similarity (primary)
-  const entSim = entitySimilarity(news.headline, contract.question);
+  const entSim = cachedEntitySimilarity(news.headline, contract.question, cache);
 
   // Keyword-based similarity (secondary)
   const kwSim = keywordSimilarity(news.keywords, contract.keywords);
@@ -153,17 +215,15 @@ function correlateNewsPair(
   const confidence = Math.min(1, baseSim + 0.05);
 
   // Use lower threshold when texts share at least one named entity
-  const newsEntities = extractEntityKeywords(news.headline);
-  const contractEntities = extractEntityKeywords(contract.question);
-  const hasEntityMatch = newsEntities.some((e) => contractEntities.includes(e));
+  const nEntities = cache.getKeywords(news.headline);
+  const cEntities = cache.getKeywords(contract.question);
+  const hasEntityMatch = nEntities.some((e) => cEntities.includes(e));
   const threshold = hasEntityMatch ? MIN_CONFIDENCE_ENTITY_MATCH : MIN_CONFIDENCE;
   if (confidence < threshold) return null;
 
   // Collect matched keywords from both entity and keyword overlap
   const matchedKeywords = news.keywords.filter((k) => contract.keywords.includes(k));
-  const entityKeywords = newsEntities.filter((ek) =>
-    contractEntities.includes(ek),
-  );
+  const entityKeywords = nEntities.filter((ek) => cEntities.includes(ek));
   const allMatched = [...new Set([...matchedKeywords, ...entityKeywords])];
 
   return {
@@ -185,10 +245,11 @@ export function correlateNewsSocial(
   signals: SocialSignal[],
 ): NewsSocialCorrelationMatch[] {
   const matches: NewsSocialCorrelationMatch[] = [];
+  const cache = new EntityCache();
 
   for (const item of news) {
     for (const signal of signals) {
-      const result = correlateNewsSocialPair(item, signal);
+      const result = correlateNewsSocialPair(item, signal, cache);
       if (result) matches.push(result);
     }
   }
@@ -200,9 +261,10 @@ export function correlateNewsSocial(
 function correlateNewsSocialPair(
   news: NewsItem,
   signal: SocialSignal,
+  cache: EntityCache,
 ): NewsSocialCorrelationMatch | null {
   // Entity-based similarity (primary)
-  const entSim = entitySimilarity(news.headline, signal.text);
+  const entSim = cachedEntitySimilarity(news.headline, signal.text, cache);
 
   // Keyword-based similarity (secondary)
   const kwSim = keywordSimilarity(news.keywords, signal.keywords);
@@ -215,17 +277,15 @@ function correlateNewsSocialPair(
   const confidence = Math.min(1, baseSim + viralityWeight);
 
   // Use lower threshold when texts share at least one named entity
-  const newsEntities = extractEntityKeywords(news.headline);
-  const signalEntities = extractEntityKeywords(signal.text);
-  const hasEntityMatch = newsEntities.some((e) => signalEntities.includes(e));
+  const nEntities = cache.getKeywords(news.headline);
+  const sEntities = cache.getKeywords(signal.text);
+  const hasEntityMatch = nEntities.some((e) => sEntities.includes(e));
   const threshold = hasEntityMatch ? MIN_CONFIDENCE_ENTITY_MATCH : MIN_CONFIDENCE;
   if (confidence < threshold) return null;
 
   // Collect matched keywords from both entity and keyword overlap
   const matchedKeywords = news.keywords.filter((k) => signal.keywords.includes(k));
-  const entityKeywords = newsEntities.filter((ek) =>
-    signalEntities.includes(ek),
-  );
+  const entityKeywords = nEntities.filter((ek) => sEntities.includes(ek));
   const allMatched = [...new Set([...matchedKeywords, ...entityKeywords])];
 
   return {

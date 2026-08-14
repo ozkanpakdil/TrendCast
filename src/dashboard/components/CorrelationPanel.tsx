@@ -14,7 +14,7 @@
  * Features: zoom/pan, hover highlights, click to open, filter, list view.
  */
 
-import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback, memo } from 'react';
 import type {
   CorrelationMatch,
   NewsCorrelationMatch,
@@ -63,7 +63,8 @@ interface GraphEdge {
 
 const MAX_NODES = 60;
 const MAX_EDGES = 80;
-const SIMULATION_STEPS = 100; // reduced from 300 for faster layout
+const SIMULATION_STEPS = 100; // total steps
+const STEPS_PER_FRAME = 5; // steps per rAF chunk — keeps UI responsive
 const REPULSION = 14000; // increased to spread nodes further apart
 const SPRING_LENGTH = 100;
 const SPRING_STRENGTH = 0.05;
@@ -142,7 +143,7 @@ function timeAgo(epochMs: number): string {
 
 // ── Component ────────────────────────────────────────────────────
 
-export function CorrelationPanel({
+export function CorrelationPanelImpl({
   matches,
   newsMatches,
   newsSocialMatches,
@@ -317,7 +318,11 @@ export function CorrelationPanel({
     return { nodes: nodeList, edges: finalEdges };
   }, [matches, newsMatches, newsSocialMatches]);
 
-  // Run force simulation
+  // Run force simulation in chunked rAF frames to keep UI responsive.
+  // Instead of running all 100 steps synchronously in one rAF (which blocks
+  // the main thread for ~50-100ms), we run STEPS_PER_FRAME steps per rAF
+  // and yield back to the browser between chunks. This allows the browser
+  // to paint and handle input between simulation chunks.
   useEffect(() => {
     if (!showGraph || nodes.length === 0) {
       setSimulated(false);
@@ -330,72 +335,81 @@ export function CorrelationPanel({
     setZoom(1);
     setPan({ x: 0, y: 0 });
 
-    let step = 0;
     let rafId: number;
+    let step = 0;
+    const ns = nodesRef.current;
+    const es = edgesRef.current;
 
-    const simulate = () => {
-      const ns = nodesRef.current;
-      const es = edgesRef.current;
+    // Pre-build node map for edge lookups (reused across chunks)
+    const nodeMap = new Map(ns.map((n) => [n.id, n]));
 
-      for (let i = 0; i < ns.length; i++) {
-        for (let j = i + 1; j < ns.length; j++) {
-          const dx = ns[j].x - ns[i].x;
-          const dy = ns[j].y - ns[i].y;
-          const distSq = dx * dx + dy * dy + 0.01;
-          const dist = Math.sqrt(distSq);
-          const force = REPULSION / distSq;
+    const runChunk = () => {
+      const endStep = Math.min(step + STEPS_PER_FRAME, SIMULATION_STEPS);
+
+      for (; step < endStep; step++) {
+        // O(n²) repulsion — n is capped at MAX_NODES (60), so 3600 ops/step max.
+        for (let i = 0; i < ns.length; i++) {
+          for (let j = i + 1; j < ns.length; j++) {
+            const dx = ns[j].x - ns[i].x;
+            const dy = ns[j].y - ns[i].y;
+            const distSq = dx * dx + dy * dy + 0.01;
+            const dist = Math.sqrt(distSq);
+            const force = REPULSION / distSq;
+            const fx = (dx / dist) * force;
+            const fy = (dy / dist) * force;
+            ns[i].vx -= fx;
+            ns[i].vy -= fy;
+            ns[j].vx += fx;
+            ns[j].vy += fy;
+          }
+        }
+
+        // Spring forces along edges
+        for (const e of es) {
+          const s = nodeMap.get(e.source);
+          const t = nodeMap.get(e.target);
+          if (!s || !t) continue;
+          const dx = t.x - s.x;
+          const dy = t.y - s.y;
+          const dist = Math.sqrt(dx * dx + dy * dy) + 0.01;
+          const force = (dist - SPRING_LENGTH) * SPRING_STRENGTH * (0.3 + e.confidence * 0.7);
           const fx = (dx / dist) * force;
           const fy = (dy / dist) * force;
-          ns[i].vx -= fx;
-          ns[i].vy -= fy;
-          ns[j].vx += fx;
-          ns[j].vy += fy;
+          s.vx += fx;
+          s.vy += fy;
+          t.vx -= fx;
+          t.vy -= fy;
+        }
+
+        // Pull each node toward its type zone center + apply damping
+        for (const n of ns) {
+          const zone = ZONE_CENTERS[n.type];
+          n.vx += (zone.x - n.x) * CENTER_FORCE;
+          n.vy += (zone.y - n.y) * CENTER_FORCE;
+          n.vx *= DAMPING;
+          n.vy *= DAMPING;
+          n.x += n.vx;
+          n.y += n.vy;
         }
       }
 
-      const nodeMap = new Map(ns.map((n) => [n.id, n]));
-      for (const e of es) {
-        const s = nodeMap.get(e.source);
-        const t = nodeMap.get(e.target);
-        if (!s || !t) continue;
-        const dx = t.x - s.x;
-        const dy = t.y - s.y;
-        const dist = Math.sqrt(dx * dx + dy * dy) + 0.01;
-        const force = (dist - SPRING_LENGTH) * SPRING_STRENGTH * (0.3 + e.confidence * 0.7);
-        const fx = (dx / dist) * force;
-        const fy = (dy / dist) * force;
-        s.vx += fx;
-        s.vy += fy;
-        t.vx -= fx;
-        t.vy -= fy;
-      }
-
-      // Pull each node toward its type zone center (not global center)
-      for (const n of ns) {
-        const zone = ZONE_CENTERS[n.type];
-        n.vx += (zone.x - n.x) * CENTER_FORCE;
-        n.vy += (zone.y - n.y) * CENTER_FORCE;
-        n.vx *= DAMPING;
-        n.vy *= DAMPING;
-        n.x += n.vx;
-        n.y += n.vy;
-      }
-
-      step++;
-      setTick(step);
+      // Update render after each chunk so the user sees progressive layout
+      setTick((t) => t + 1);
 
       if (step < SIMULATION_STEPS) {
-        rafId = requestAnimationFrame(simulate);
+        // Schedule next chunk — yields to browser between frames
+        rafId = requestAnimationFrame(runChunk);
       } else {
         setSimulated(true);
       }
     };
 
-    rafId = requestAnimationFrame(simulate);
+    rafId = requestAnimationFrame(runChunk);
+
     return () => cancelAnimationFrame(rafId);
   }, [showGraph, nodes, edges]);
 
-  // Filter nodes for display
+  // Filter nodes for display — depends on tick (post-simulation) and filter
   const visibleNodes = useMemo(() => {
     if (filter === 'all') return nodesRef.current;
     return nodesRef.current.filter((n) => n.type === filter);
@@ -490,6 +504,61 @@ export function CorrelationPanel({
 
   // SVG transform for zoom/pan
   const svgTransform = `translate(${pan.x}, ${pan.y}) scale(${zoom})`;
+
+  // Memoized list-view items — avoid re-sorting on every render
+  const socialListItems = useMemo(
+    () =>
+      [...matches]
+        .sort((a, b) => b.confidence - a.confidence)
+        .slice(0, 15)
+        .map((m) => ({
+          id: `sm-${m.signal.id}-${m.contract.id}`,
+          confidence: m.confidence,
+          keywords: m.matchedKeywords,
+          primary: m.contract.question,
+          secondary: m.signal.text,
+          source: m.signal.platform,
+          target: m.contract.platform,
+          url: m.contract.url,
+        })),
+    [matches],
+  );
+
+  const newsListItems = useMemo(
+    () =>
+      [...newsMatches]
+        .sort((a, b) => b.confidence - a.confidence)
+        .slice(0, 15)
+        .map((m) => ({
+          id: `nm-${m.news.id}-${m.contract.id}`,
+          confidence: m.confidence,
+          keywords: m.matchedKeywords,
+          primary: m.contract.question,
+          secondary: m.news.headline,
+          source: m.news.source,
+          target: m.contract.platform,
+          url: m.news.url,
+        })),
+    [newsMatches],
+  );
+
+  const newsSocialListItems = useMemo(
+    () =>
+      [...newsSocialMatches]
+        .sort((a, b) => b.confidence - a.confidence)
+        .slice(0, 15)
+        .map((m) => ({
+          id: `ns-${m.news.id}-${m.signal.id}`,
+          confidence: m.confidence,
+          keywords: m.matchedKeywords,
+          primary: m.news.headline,
+          secondary: m.signal.text,
+          source: m.news.source,
+          target: m.signal.platform,
+          url: m.signal.url,
+        })),
+    [newsSocialMatches],
+  );
 
   // ── Render ────────────────────────────────────────────────────
 
@@ -868,61 +937,27 @@ export function CorrelationPanel({
           <CorrelationList
             title="📊 Social → Market"
             count={matches.length}
-            items={matches
-              .sort((a, b) => b.confidence - a.confidence)
-              .slice(0, 15)
-              .map((m) => ({
-                id: `sm-${m.signal.id}-${m.contract.id}`,
-                confidence: m.confidence,
-                keywords: m.matchedKeywords,
-                primary: m.contract.question,
-                secondary: m.signal.text,
-                source: m.signal.platform,
-                target: m.contract.platform,
-                url: m.contract.url,
-              }))}
+            items={socialListItems}
           />
 
           <CorrelationList
             title="📰 News → Market"
             count={newsMatches.length}
-            items={newsMatches
-              .sort((a, b) => b.confidence - a.confidence)
-              .slice(0, 15)
-              .map((m) => ({
-                id: `nm-${m.news.id}-${m.contract.id}`,
-                confidence: m.confidence,
-                keywords: m.matchedKeywords,
-                primary: m.contract.question,
-                secondary: m.news.headline,
-                source: m.news.source,
-                target: m.contract.platform,
-                url: m.news.url,
-              }))}
+            items={newsListItems}
           />
 
           <CorrelationList
             title="📰→👽 News → Social"
             count={newsSocialMatches.length}
-            items={newsSocialMatches
-              .sort((a, b) => b.confidence - a.confidence)
-              .slice(0, 15)
-              .map((m) => ({
-                id: `ns-${m.news.id}-${m.signal.id}`,
-                confidence: m.confidence,
-                keywords: m.matchedKeywords,
-                primary: m.news.headline,
-                secondary: m.signal.text,
-                source: m.news.source,
-                target: m.signal.platform,
-                url: m.signal.url,
-              }))}
+            items={newsSocialListItems}
           />
         </div>
       )}
     </div>
   );
 }
+
+export const CorrelationPanel = memo(CorrelationPanelImpl);
 
 // ── List view sub-component ──────────────────────────────────────
 

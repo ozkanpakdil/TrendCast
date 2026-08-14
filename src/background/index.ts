@@ -293,7 +293,37 @@ async function runCollection(): Promise<CollectionSnapshot> {
   console.log(
     `[TrendCast] ━━ Collection complete: ${markets.length} markets, ${signals.length} signals, ${news.length} news ━━`,
   );
+
+  // Pre-compute correlations in the background so the dashboard
+  // can display them instantly when the user opens the Correlations tab.
+  // This runs after collection completes, leveraging the time before the
+  // user navigates to the correlations tab.
+  runCorrelationPrecompute(markets, signals, news).catch((err) =>
+    console.error('[TrendCast] Pre-compute correlations failed:', err),
+  );
+
   return snapshot;
+}
+
+/**
+ * Pre-compute correlations and store the result.
+ * Called after collection completes so the dashboard can load
+ * cached correlations instantly without waiting for CORRELATE_ALL.
+ */
+async function runCorrelationPrecompute(
+  markets: MarketContract[],
+  signals: SocialSignal[],
+  news: NewsItem[],
+): Promise<void> {
+  const matches = correlate(signals, markets);
+  const newsMatches = correlateNews(news, markets);
+  const newsSocialMatches = correlateNewsSocial(news, signals);
+
+  const result = { matches, newsMatches, newsSocialMatches };
+  await browser.storage.local.set({ [CONFIG.storage.correlations]: result });
+  console.log(
+    `[TrendCast] Pre-computed ${matches.length} signal→market, ${newsMatches.length} news→market, ${newsSocialMatches.length} news→social`,
+  );
 }
 
 // ── Storage helpers ───────────────────────────────────────────────
@@ -403,6 +433,42 @@ async function appendHistoryEntry(snapshot: CollectionSnapshot, maxEntries: numb
     correlationCount,
     topVirality,
     avgSentiment,
+    // All markets sorted by volume (for detail panel with links, capped at 50)
+    topMarkets: [...snapshot.markets]
+      .sort((a, b) => (b.volume24h ?? 0) - (a.volume24h ?? 0))
+      .slice(0, 50)
+      .map((m) => ({
+        id: m.id,
+        platform: m.platform,
+        question: m.question,
+        yesPrice: m.outcomes.find((o) => o.label.toLowerCase() === 'yes')?.price,
+        volume24h: m.volume24h,
+        url: m.url,
+      })),
+    // All signals sorted by virality (for detail panel with links, capped at 50)
+    topSignals: [...snapshot.signals]
+      .sort((a, b) => b.virality - a.virality)
+      .slice(0, 50)
+      .map((s) => ({
+        id: s.id,
+        platform: s.platform,
+        text: s.text,
+        author: s.author,
+        virality: s.virality,
+        sentiment: s.sentiment,
+        url: s.url,
+      })),
+    // All news items sorted by recency (for detail panel with links, capped at 50)
+    topNews: [...snapshot.news]
+      .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
+      .slice(0, 50)
+      .map((n) => ({
+        id: n.id,
+        source: n.source,
+        headline: n.headline,
+        url: n.url,
+        publishedAt: n.publishedAt,
+      })),
   };
 
   history.push(entry);

@@ -3,6 +3,7 @@
  * Shows source, headline, publish time, and thumbnail if available.
  */
 
+import { useMemo, memo } from 'react';
 import type { NewsItem } from '@/types';
 
 interface NewsFeedProps {
@@ -14,9 +15,13 @@ const sourceColors: Record<string, string> = {
   cnn: 'bg-red-800/50 text-red-200',
 };
 
-export function NewsFeed({ news }: NewsFeedProps) {
-  const sorted = [...news].sort(
-    (a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime(),
+function NewsFeedImpl({ news }: NewsFeedProps) {
+  const sorted = useMemo(
+    () =>
+      [...news].sort(
+        (a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime(),
+      ),
+    [news],
   );
 
   return (
@@ -71,3 +76,5 @@ export function NewsFeed({ news }: NewsFeedProps) {
     </div>
   );
 }
+
+export const NewsFeed = memo(NewsFeedImpl);

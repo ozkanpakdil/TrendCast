@@ -156,9 +156,40 @@ export interface CollectionSnapshot {
   news: NewsItem[];
 }
 
+/** A compact market reference for history detail panels. */
+export interface HistoryMarketRef {
+  id: string;
+  platform: MarketPlatform;
+  question: string;
+  /** Best Yes price (0–1) if available. */
+  yesPrice?: number;
+  volume24h?: number;
+  url?: string;
+}
+
+/** A compact social signal reference for history detail panels. */
+export interface HistorySignalRef {
+  id: string;
+  platform: SocialPlatform;
+  text: string;
+  author: string;
+  virality: number;
+  sentiment: number;
+  url?: string;
+}
+
+/** A compact news reference for history detail panels. */
+export interface HistoryNewsRef {
+  id: string;
+  source: NewsSource;
+  headline: string;
+  url: string;
+  publishedAt: string;
+}
+
 /**
  * A compact historical snapshot for charting.
- * Only stores aggregate counts + top items to keep storage small.
+ * Stores aggregate counts + top items (with links) for the detail panel.
  */
 export interface HistoryEntry {
   /** Epoch ms. */
@@ -175,6 +206,12 @@ export interface HistoryEntry {
   topVirality: number[];
   /** Average sentiment at this point (-1 to +1). */
   avgSentiment: number;
+  /** All markets collected at this point (for detail panel, capped at 50). */
+  topMarkets?: HistoryMarketRef[];
+  /** All social signals collected at this point (for detail panel, capped at 50). */
+  topSignals?: HistorySignalRef[];
+  /** All news items collected at this point (for detail panel, capped at 50). */
+  topNews?: HistoryNewsRef[];
 }
 
 // ── Watchlist ─────────────────────────────────────────────────────

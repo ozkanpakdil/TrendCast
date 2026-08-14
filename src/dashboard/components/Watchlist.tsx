@@ -8,7 +8,7 @@
  * Phase 3 roadmap item: custom watchlists.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { browser } from '@/messaging/browser';
 import { CONFIG } from '@/config';
 import { sendMessage } from '@/messaging';
@@ -24,15 +24,20 @@ const platformBadges: Record<string, { icon: string; color: string }> = {
   kalshi: { icon: '🟢', color: 'bg-green-900/50 text-green-300' },
 };
 
-export function Watchlist({ markets }: WatchlistProps) {
+export function WatchlistImpl({ markets }: WatchlistProps) {
   const [watchlist, setWatchlist] = useState<WatchlistEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchWatchlist = useCallback(async () => {
     try {
       const result = await sendMessage('GET_WATCHLIST', {});
-      if (result && typeof result === 'object' && 'watchlist' in result) {
-        setWatchlist((result as { watchlist: WatchlistEntry[] }).watchlist);
+      // The messaging layer wraps responses as { ok: true, data: ... }
+      const unwrapped =
+        result && typeof result === 'object' && 'ok' in result
+          ? (result as { ok: boolean; data: unknown }).data
+          : result;
+      if (unwrapped && typeof unwrapped === 'object' && 'watchlist' in unwrapped) {
+        setWatchlist((unwrapped as { watchlist: WatchlistEntry[] }).watchlist);
       }
     } catch (err) {
       console.error('[TrendCast] Failed to fetch watchlist:', err);
@@ -89,8 +94,11 @@ export function Watchlist({ markets }: WatchlistProps) {
     );
   }
 
-  // Sort watchlist by addedAt (newest first)
-  const sorted = [...watchlist].sort((a, b) => b.addedAt - a.addedAt);
+  // Sort watchlist by addedAt (newest first) — memoized
+  const sorted = useMemo(
+    () => [...watchlist].sort((a, b) => b.addedAt - a.addedAt),
+    [watchlist],
+  );
 
   return (
     <div className="space-y-2">
@@ -181,6 +189,8 @@ export function Watchlist({ markets }: WatchlistProps) {
     </div>
   );
 }
+
+export const Watchlist = memo(WatchlistImpl);
 
 /**
  * Star toggle button for adding/removing a market from the watchlist.

@@ -23,7 +23,7 @@
  *   └──────────────────────────────────────────────────────────┘
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { HypeFeed } from './components/HypeFeed';
 import { NewsFeed } from './components/NewsFeed';
 import { MarketOdds } from './components/MarketOdds';
@@ -76,11 +76,22 @@ export function App() {
     }
   }, [theme]);
 
-  // Auto-run correlation when snapshot updates
+  // Pre-compute correlations when the dashboard first loads with data.
+  // The background worker already pre-computes after collection, but this
+  // ensures fresh correlations are available even if the background worker
+  // was idle (e.g., user opened a new tab between alarm intervals).
+  // The useCorrelations hook loads cached results from storage on mount,
+  // so this effect only fires a background re-compute if needed.
+  const corrInitRef = useRef(false);
   useEffect(() => {
-    if (snapshot && (snapshot.markets.length > 0 || snapshot.signals.length > 0)) {
-      runCorrelation();
-    }
+    // Only run once per dashboard session, and only if we have data
+    if (corrInitRef.current) return;
+    if (!snapshot) return;
+    if (snapshot.markets.length === 0 && snapshot.signals.length === 0) return;
+    corrInitRef.current = true;
+    // Fire and forget — the hook loads cached results from storage first,
+    // and this ensures a fresh computation in the background.
+    runCorrelation();
   }, [snapshot, runCorrelation]);
 
   const toggleTheme = useCallback(async () => {

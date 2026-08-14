@@ -8,7 +8,7 @@
  * Same pattern as MarketOdds: heatmap (treemap) + grid (uniform boxes) toggle.
  */
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, memo } from 'react';
 import type { SocialSignal } from '@/types';
 import { squarify, type TreemapRect } from '../utils/treemap';
 
@@ -58,24 +58,32 @@ function formatEngagement(signal: SocialSignal): string {
   return parts.join('  ');
 }
 
-export function HypeFeed({ signals, highlightThreshold }: HypeFeedProps) {
+function HypeFeedImpl({ signals, highlightThreshold }: HypeFeedProps) {
   const [viewMode, setViewMode] = useState<'heatmap' | 'grid'>('heatmap');
   const containerRef = useRef<HTMLDivElement>(null);
   const [dims, setDims] = useState({ width: 800, height: 600 });
 
-  // Track container size for treemap layout
+  // Track container size for treemap layout — debounced via rAF to avoid
+  // rapid recomputation during layout transitions.
   useEffect(() => {
     if (!containerRef.current) return;
+    let rafId = 0;
     const ro = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const { width, height } = entry.contentRect;
-        if (width > 0 && height > 0) {
-          setDims({ width: Math.round(width), height: Math.round(height) });
+      cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        for (const entry of entries) {
+          const { width, height } = entry.contentRect;
+          if (width > 0 && height > 0) {
+            setDims({ width: Math.round(width), height: Math.round(height) });
+          }
         }
-      }
+      });
     });
     ro.observe(containerRef.current);
-    return () => ro.disconnect();
+    return () => {
+      cancelAnimationFrame(rafId);
+      ro.disconnect();
+    };
   }, []);
 
   // Sort by virality descending, take top 50.
@@ -100,6 +108,13 @@ export function HypeFeed({ signals, highlightThreshold }: HypeFeedProps) {
     [signals],
   );
 
+  // Build a lookup map from signal id → signal (O(n), reused by signalMap).
+  const signalById = useMemo(() => {
+    const map = new Map<string, SocialSignal>();
+    for (const s of sorted) map.set(`${s.platform}:${s.id}`, s);
+    return map;
+  }, [sorted]);
+
   // Compute treemap rectangles — tile size proportional to virality.
   const rects = useMemo(() => {
     if (sorted.length === 0) return [];
@@ -110,15 +125,15 @@ export function HypeFeed({ signals, highlightThreshold }: HypeFeedProps) {
     return squarify(inputs, 0, 0, dims.width, dims.height);
   }, [sorted, dims.width, dims.height]);
 
-  // Build a lookup from rect id → signal + rect.
+  // Build a lookup from rect id → signal + rect — O(n) using signalById map.
   const signalMap = useMemo(() => {
     const map = new Map<string, { signal: SocialSignal; rect: TreemapRect }>();
     for (const rect of rects) {
-      const signal = sorted.find((s) => `${s.platform}:${s.id}` === rect.id);
+      const signal = signalById.get(rect.id);
       if (signal) map.set(rect.id, { signal, rect });
     }
     return map;
-  }, [rects, sorted]);
+  }, [rects, signalById]);
 
   if (sorted.length === 0) {
     return (
@@ -333,3 +348,5 @@ export function HypeFeed({ signals, highlightThreshold }: HypeFeedProps) {
     </div>
   );
 }
+
+export const HypeFeed = memo(HypeFeedImpl);
