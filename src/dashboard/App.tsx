@@ -252,11 +252,9 @@ export function App() {
             {activeTab === 'markets' && (
               <section>
                 <h2 className={`text-sm font-bold uppercase tracking-wider mb-3 ${sectionTitle}`}>
-                  📈 Prediction Market Odds
+                  📈 Prediction Market Odds — Volume Heatmap
                 </h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  <MarketOdds markets={snapshot?.markets ?? []} />
-                </div>
+                <MarketOdds markets={snapshot?.markets ?? []} />
               </section>
             )}
 

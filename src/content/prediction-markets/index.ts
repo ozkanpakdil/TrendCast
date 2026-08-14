@@ -113,6 +113,7 @@ function scrapePolymarketDom(): MarketContract[] {
       keywords: extractKeywords(question),
       lastUpdated: Date.now(),
       slug: window.location.pathname.split('/').pop() ?? undefined,
+      url: window.location.href,
     });
   });
 
@@ -154,6 +155,7 @@ function scrapeKalshiDom(): MarketContract[] {
     keywords: extractKeywords(question),
     lastUpdated: Date.now(),
     slug: window.location.pathname.split('/').pop() ?? undefined,
+    url: window.location.href,
   });
 
   return markets;
