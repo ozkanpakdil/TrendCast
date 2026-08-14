@@ -85,7 +85,7 @@ export interface SocialSignal {
  * News sources that don't require login.
  * BBC and CNN headlines are scraped from their public RSS/feed pages.
  */
-export type NewsSource = 'bbc' | 'cnn';
+export type NewsSource = 'bbc' | 'cnn' | 'yahoo' | 'googleFinance';
 
 /** A normalised news headline. */
 export interface NewsItem {
@@ -123,6 +123,22 @@ export interface NewsCorrelationMatch {
   confidence: number;
   matchedKeywords: string[];
   correlatedAt: number;
+}
+
+/** A matched correlation between a news item and a social signal. */
+export interface NewsSocialCorrelationMatch {
+  news: NewsItem;
+  signal: SocialSignal;
+  confidence: number;
+  matchedKeywords: string[];
+  correlatedAt: number;
+}
+
+/** All correlation results from the engine. */
+export interface CorrelationResult {
+  matches: CorrelationMatch[];
+  newsMatches: NewsCorrelationMatch[];
+  newsSocialMatches: NewsSocialCorrelationMatch[];
 }
 
 // ── Collection ────────────────────────────────────────────────────
@@ -212,7 +228,7 @@ export type Message =
   | { type: 'SCRAPE_RESULT'; payload: { source: string; data: unknown } }
   // Dashboard → Background: correlate all collected data
   | { type: 'CORRELATE_ALL'; payload: Record<string, never> }
-  | { type: 'CORRELATION_RESULT'; payload: { matches: CorrelationMatch[]; newsMatches: NewsCorrelationMatch[] } }
+  | { type: 'CORRELATION_RESULT'; payload: CorrelationResult }
   // Overlay injection (socials content script)
   | { type: 'INJECT_OVERLAY'; payload: { matches: CorrelationMatch[] } }
   // Dashboard → Background: get historical snapshots for charting
@@ -243,6 +259,8 @@ export interface ExtensionSettings {
     tiktok: boolean;
     bbc: boolean;
     cnn: boolean;
+    yahoo: boolean;
+    googleFinance: boolean;
   };
   /** Minimum virality score to highlight a signal (0–100). */
   highlightThreshold: number;
@@ -264,6 +282,8 @@ export const DEFAULT_SETTINGS: ExtensionSettings = {
     tiktok: false,
     bbc: true,
     cnn: true,
+    yahoo: true,
+    googleFinance: true,
   },
   highlightThreshold: 60,
   overrideNewTab: true,

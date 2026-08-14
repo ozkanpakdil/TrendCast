@@ -4,24 +4,24 @@
  */
 
 import { useState, useCallback } from 'react';
-import type { CorrelationMatch, NewsCorrelationMatch } from '@/types';
+import type { CorrelationResult as CorrelationResultType } from '@/types';
 import { sendMessage } from '@/messaging';
 
-interface CorrelationResult {
-  matches: CorrelationMatch[];
-  newsMatches: NewsCorrelationMatch[];
-}
-
 export function useCorrelations() {
-  const [correlations, setCorrelations] = useState<CorrelationResult | null>(null);
+  const [correlations, setCorrelations] = useState<CorrelationResultType | null>(null);
   const [loading, setLoading] = useState(false);
 
   const runCorrelation = useCallback(async () => {
     setLoading(true);
     try {
       const result = await sendMessage('CORRELATE_ALL', {});
-      if (result && typeof result === 'object' && 'matches' in result) {
-        setCorrelations(result as CorrelationResult);
+      // The messaging layer wraps responses as { ok: true, data: ... }
+      const unwrapped =
+        result && typeof result === 'object' && 'ok' in result
+          ? (result as { ok: boolean; data: unknown }).data
+          : result;
+      if (unwrapped && typeof unwrapped === 'object' && 'matches' in unwrapped) {
+        setCorrelations(unwrapped as CorrelationResultType);
       }
     } catch (err) {
       console.error('[TrendCast] Correlation failed:', err);

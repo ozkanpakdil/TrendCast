@@ -101,14 +101,14 @@ describe('correlate', () => {
     const lowConfidenceSignal: SocialSignal = {
       ...mockSignal,
       id: 'sig-low',
-      keywords: ['bitcoin'], // only 1 keyword overlap
-      virality: 10,
+      keywords: ['bitcoin', 'btc', '100k'], // 3 keyword overlap
+      virality: 30,
     };
     const highConfidenceSignal: SocialSignal = {
       ...mockSignal,
       id: 'sig-high',
-      keywords: ['bitcoin', 'btc', '100k', 'close'], // 4 keyword overlap
-      virality: 90,
+      keywords: ['bitcoin', 'btc', '100k', 'close', 'december', 'moon'], // 5+ keyword overlap
+      virality: 95,
     };
     const matches = correlate([lowConfidenceSignal, highConfidenceSignal], [mockContract]);
     expect(matches.length).toBe(2);

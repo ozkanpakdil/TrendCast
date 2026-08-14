@@ -43,7 +43,7 @@ import type {
 } from '@/types';
 import { DEFAULT_SETTINGS } from '@/types';
 import { collectPolymarketMarkets, collectKalshiMarkets, collectRedditSignals, collectXTrends, collectNews } from '@/services/collectors';
-import { correlate, correlateNews } from '@/services/engine/correlation';
+import { correlate, correlateNews, correlateNewsSocial } from '@/services/engine/correlation';
 import { exportToCsv, exportToJson } from '@/utils/export';
 
 // ── Register all listeners synchronously at top level ────────────
@@ -120,11 +120,15 @@ function setupMessageHandlers(): void {
 
     const matches = correlate(signals, markets);
     const newsMatches = correlateNews(news, markets);
+    const newsSocialMatches = correlateNewsSocial(news, signals);
 
-    await browser.storage.local.set({ [CONFIG.storage.correlations]: { matches, newsMatches } });
-    console.log(`[TrendCast] Correlated ${matches.length} signal matches, ${newsMatches.length} news matches`);
+    const result = { matches, newsMatches, newsSocialMatches };
+    await browser.storage.local.set({ [CONFIG.storage.correlations]: result });
+    console.log(
+      `[TrendCast] Correlated ${matches.length} signal→market, ${newsMatches.length} news→market, ${newsSocialMatches.length} news→social`,
+    );
 
-    return { matches, newsMatches };
+    return result;
   });
 
   // Dashboard → Background: get historical snapshots for charting
@@ -247,10 +251,12 @@ async function runCollection(): Promise<CollectionSnapshot> {
     );
   }
 
-  // News (BBC + CNN)
-  const newsSources: Array<'bbc' | 'cnn'> = [];
+  // News (BBC, CNN, Yahoo Finance, Google News finance)
+  const newsSources: Array<'bbc' | 'cnn' | 'yahoo' | 'googleFinance'> = [];
   if (enabled.bbc) newsSources.push('bbc');
   if (enabled.cnn) newsSources.push('cnn');
+  if (enabled.yahoo) newsSources.push('yahoo');
+  if (enabled.googleFinance) newsSources.push('googleFinance');
   if (newsSources.length > 0) {
     tasks.push(
       collectNews(newsSources)

@@ -284,6 +284,7 @@ export function App() {
                 <CorrelationPanel
                   matches={correlations?.matches ?? []}
                   newsMatches={correlations?.newsMatches ?? []}
+                  newsSocialMatches={correlations?.newsSocialMatches ?? []}
                 />
               </section>
             )}

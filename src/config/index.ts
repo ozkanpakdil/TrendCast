@@ -64,6 +64,17 @@ export const CONFIG = {
       // CNN homepage as fallback for DOM scraping
       url: 'https://www.cnn.com',
     },
+    yahoo: {
+      // Yahoo Finance RSS — financial news (stocks, Fed, crypto, earnings).
+      rssUrl: 'https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent('https://finance.yahoo.com/news/rssindex'),
+      url: 'https://finance.yahoo.com',
+    },
+    googleFinance: {
+      // Google News filtered to finance/politics keywords — overlaps with
+      // prediction market topics (elections, Fed rates, Bitcoin, stocks).
+      rssUrl: 'https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent('https://news.google.com/rss/search?q=election+2026+OR+fed+rate+OR+bitcoin+OR+stock+market+when:1d&hl=en-US&gl=US&ceid=US:en'),
+      url: 'https://news.google.com',
+    },
   },
 
   // ── Background collection ─────────────────────────────────────

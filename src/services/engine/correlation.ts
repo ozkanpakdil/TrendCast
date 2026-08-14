@@ -21,6 +21,7 @@ import type {
   CorrelationMatch,
   MarketContract,
   NewsCorrelationMatch,
+  NewsSocialCorrelationMatch,
   NewsItem,
   SocialSignal,
 } from '@/types';
@@ -28,7 +29,15 @@ import { keywordSimilarity } from '@/utils/keywords';
 import { entitySimilarity, extractEntityKeywords } from '@/utils/entities';
 
 /** Minimum confidence score to include a match (0–1). */
-const MIN_CONFIDENCE = 0.15;
+const MIN_CONFIDENCE = 0.75;
+
+/**
+ * Lower threshold when the two texts share at least one named entity.
+ * Short-text signals like X trends ("Bitcoin", "Trump") share a meaningful
+ * entity with a contract but have low keyword overlap. This carve-out lets
+ * them through while still filtering keyword-only false positives.
+ */
+const MIN_CONFIDENCE_ENTITY_MATCH = 0.35;
 
 /** Boost factor for exact cashtag/hashtag matches. */
 const CASHTAG_BOOST = 0.3;
@@ -83,7 +92,12 @@ function correlatePair(signal: SocialSignal, contract: MarketContract): Correlat
 
   const confidence = Math.min(1, baseSim + boost + viralityWeight);
 
-  if (confidence < MIN_CONFIDENCE) return null;
+  // Use lower threshold when texts share at least one named entity (e.g., X trends)
+  const signalEntities = extractEntityKeywords(signal.text);
+  const contractEntities = extractEntityKeywords(contract.question);
+  const hasEntityMatch = signalEntities.some((e) => contractEntities.includes(e));
+  const threshold = hasEntityMatch ? MIN_CONFIDENCE_ENTITY_MATCH : MIN_CONFIDENCE;
+  if (confidence < threshold) return null;
 
   // Collect matched keywords from both entity and keyword overlap
   const matchedKeywords = signal.keywords.filter((k) => contract.keywords.includes(k));
@@ -138,18 +152,85 @@ function correlateNewsPair(
   // News doesn't have virality, so we use a slightly lower threshold boost.
   const confidence = Math.min(1, baseSim + 0.05);
 
-  if (confidence < MIN_CONFIDENCE) return null;
+  // Use lower threshold when texts share at least one named entity
+  const newsEntities = extractEntityKeywords(news.headline);
+  const contractEntities = extractEntityKeywords(contract.question);
+  const hasEntityMatch = newsEntities.some((e) => contractEntities.includes(e));
+  const threshold = hasEntityMatch ? MIN_CONFIDENCE_ENTITY_MATCH : MIN_CONFIDENCE;
+  if (confidence < threshold) return null;
 
   // Collect matched keywords from both entity and keyword overlap
   const matchedKeywords = news.keywords.filter((k) => contract.keywords.includes(k));
-  const entityKeywords = extractEntityKeywords(news.headline).filter((ek) =>
-    extractEntityKeywords(contract.question).includes(ek),
+  const entityKeywords = newsEntities.filter((ek) =>
+    contractEntities.includes(ek),
   );
   const allMatched = [...new Set([...matchedKeywords, ...entityKeywords])];
 
   return {
     contract,
     news,
+    confidence,
+    matchedKeywords: allMatched,
+    correlatedAt: Date.now(),
+  };
+}
+
+/**
+ * Correlate news headlines against social signals.
+ * Finds news stories that are driving social media discussion.
+ * Returns all matches above the confidence threshold, sorted by confidence.
+ */
+export function correlateNewsSocial(
+  news: NewsItem[],
+  signals: SocialSignal[],
+): NewsSocialCorrelationMatch[] {
+  const matches: NewsSocialCorrelationMatch[] = [];
+
+  for (const item of news) {
+    for (const signal of signals) {
+      const result = correlateNewsSocialPair(item, signal);
+      if (result) matches.push(result);
+    }
+  }
+
+  return matches.sort((a, b) => b.confidence - a.confidence);
+}
+
+/** Correlate a single news-social pair. */
+function correlateNewsSocialPair(
+  news: NewsItem,
+  signal: SocialSignal,
+): NewsSocialCorrelationMatch | null {
+  // Entity-based similarity (primary)
+  const entSim = entitySimilarity(news.headline, signal.text);
+
+  // Keyword-based similarity (secondary)
+  const kwSim = keywordSimilarity(news.keywords, signal.keywords);
+
+  const baseSim = entSim * ENTITY_WEIGHT + kwSim * KEYWORD_WEIGHT;
+  if (baseSim === 0) return null;
+
+  // Weight by signal virality — viral posts matching news are more significant
+  const viralityWeight = (signal.virality / 100) * 0.1;
+  const confidence = Math.min(1, baseSim + viralityWeight);
+
+  // Use lower threshold when texts share at least one named entity
+  const newsEntities = extractEntityKeywords(news.headline);
+  const signalEntities = extractEntityKeywords(signal.text);
+  const hasEntityMatch = newsEntities.some((e) => signalEntities.includes(e));
+  const threshold = hasEntityMatch ? MIN_CONFIDENCE_ENTITY_MATCH : MIN_CONFIDENCE;
+  if (confidence < threshold) return null;
+
+  // Collect matched keywords from both entity and keyword overlap
+  const matchedKeywords = news.keywords.filter((k) => signal.keywords.includes(k));
+  const entityKeywords = newsEntities.filter((ek) =>
+    signalEntities.includes(ek),
+  );
+  const allMatched = [...new Set([...matchedKeywords, ...entityKeywords])];
+
+  return {
+    news,
+    signal,
     confidence,
     matchedKeywords: allMatched,
     correlatedAt: Date.now(),

@@ -34,7 +34,8 @@ interface Rss2JsonResponse {
 }
 
 /**
- * Collect news headlines from BBC and CNN via rss2json.com.
+ * Collect news headlines from configured sources via rss2json.com.
+ * Supports BBC, CNN, Yahoo Finance, and Google News finance/politics.
  * Returns a combined array of NewsItems.
  */
 export async function collectNews(
@@ -58,7 +59,13 @@ export async function collectNews(
 
 /** Collect news from a single source via rss2json.com. */
 async function collectFromSource(source: NewsSource): Promise<NewsItem[]> {
-  const apiUrl = source === 'bbc' ? CONFIG.scrape.bbc.rssUrl : CONFIG.scrape.cnn.rssUrl;
+  const configMap: Record<NewsSource, { rssUrl: string }> = {
+    bbc: CONFIG.scrape.bbc,
+    cnn: CONFIG.scrape.cnn,
+    yahoo: CONFIG.scrape.yahoo,
+    googleFinance: CONFIG.scrape.googleFinance,
+  };
+  const apiUrl = configMap[source].rssUrl;
 
   const response = await fetch(apiUrl, {
     headers: { Accept: 'application/json' },
@@ -86,9 +93,11 @@ async function collectFromSource(source: NewsSource): Promise<NewsItem[]> {
         ?.replace(/<[^>]*>/g, '')
         .trim() || undefined;
 
-      // For CNN via Google News, the title includes " - CNN" suffix.
-      const headline = source === 'cnn' && title.endsWith(' - CNN')
-        ? title.slice(0, -6).trim()
+      // For Google News sources, the title often includes " - Source Name" suffix.
+      // Strip it for cleaner headlines (applies to CNN, googleFinance, and any
+      // Google News RSS result).
+      const headline = (source === 'cnn' || source === 'googleFinance') && title.includes(' - ')
+        ? title.replace(/\s+-\s+[^-]+$/, '').trim()
         : title;
 
       const fullText = description ? `${headline} ${description}` : headline;
