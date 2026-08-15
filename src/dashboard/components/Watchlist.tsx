@@ -75,6 +75,12 @@ export function WatchlistImpl({ markets }: WatchlistProps) {
     }
   }, []);
 
+  // Sort watchlist by addedAt (newest first) — memoized before conditional returns
+  const sorted = useMemo(
+    () => [...watchlist].sort((a, b) => b.addedAt - a.addedAt),
+    [watchlist],
+  );
+
   if (loading) {
     return (
       <p className="text-slate-500 text-sm text-center py-8">Loading watchlist…</p>
@@ -93,12 +99,6 @@ export function WatchlistImpl({ markets }: WatchlistProps) {
       </div>
     );
   }
-
-  // Sort watchlist by addedAt (newest first) — memoized
-  const sorted = useMemo(
-    () => [...watchlist].sort((a, b) => b.addedAt - a.addedAt),
-    [watchlist],
-  );
 
   return (
     <div className="space-y-2">

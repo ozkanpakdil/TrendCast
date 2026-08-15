@@ -19,6 +19,10 @@
     "format": "prettier --write \"src/**/*.{ts,tsx,css,md}\"",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:report": "playwright show-report",
     "typecheck": "tsc --noEmit",
     "zip": "cd dist && zip -r ../trendcast-v$(node -p \"require('../package.json').version\").zip ."
   },
@@ -30,6 +34,7 @@
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.0.0-beta.28",
+    "@playwright/test": "^1.62.1",
     "@types/chrome": "^0.0.270",
     "@types/firefox-webext-browser": "^120.0.4",
     "@types/node": "^26.2.0",
@@ -45,6 +50,7 @@
     "jsdom": "^30.0.1",
     "postcss": "^8.4.41",
     "prettier": "^3.3.3",
+    "sirv-cli": "^3.0.1",
     "tailwindcss": "^3.4.10",
     "typescript": "^5.5.4",
     "vite": "^5.4.2",
