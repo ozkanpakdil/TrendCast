@@ -29,10 +29,35 @@ export async function sendMessage<T extends MessageType>(
   // The polyfill's sendMessage has its own generic inference that conflicts
   // with our discriminated union. We cast the call to bypass the polyfill's
   // type inference — type safety is enforced at the call site via T.
-  return (browser.runtime.sendMessage as (msg: unknown) => Promise<unknown>)({
-    type,
-    payload,
-  });
+  const send = (msg: unknown) =>
+    (browser.runtime.sendMessage as (msg: unknown) => Promise<unknown>)(msg);
+
+  try {
+    return await send({ type, payload });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+
+    // Firefox-specific: "Promised response from onMessage listener went out of scope"
+    // happens when the async handler in the background takes too long and
+    // Firefox closes the message channel before sendResponse is called.
+    // Retry once — the background worker may have been idle and needed to
+    // spin up, or the first attempt raced with worker termination.
+    if (msg.includes('out of scope') || msg.includes('message channel closed')) {
+      console.warn(`[TrendCast] sendMessage('${type}'): "${msg}" — retrying once…`);
+      try {
+        return await send({ type, payload });
+      } catch (retryErr) {
+        console.error(
+          `[TrendCast] sendMessage('${type}'): retry also failed:`,
+          retryErr,
+        );
+        throw retryErr;
+      }
+    }
+
+    console.error(`[TrendCast] sendMessage('${type}'):`, err);
+    throw err;
+  }
 }
 
 /** Send a message to a specific tab's content script (from background). */
@@ -78,8 +103,21 @@ export function onMessage<T extends MessageType>(
     const typedMessage = message as { type: T; payload: unknown };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     Promise.resolve(handler(typedMessage.payload as any, sender))
-      .then((result) => sendResponse({ ok: true, data: result }))
-      .catch((err) => sendResponse({ ok: false, error: String(err) }));
+      .then((result) => {
+        try {
+          sendResponse({ ok: true, data: result });
+        } catch (e) {
+          console.error(`[TrendCast] onMessage('${type}'): sendResponse failed (success):`, e);
+        }
+      })
+      .catch((err) => {
+        console.error(`[TrendCast] onMessage('${type}'): handler threw:`, err);
+        try {
+          sendResponse({ ok: false, error: String(err) });
+        } catch (e) {
+          console.error(`[TrendCast] onMessage('${type}'): sendResponse failed (error):`, e);
+        }
+      });
 
     // Return true to signal async response (MV3 requirement).
     return true;

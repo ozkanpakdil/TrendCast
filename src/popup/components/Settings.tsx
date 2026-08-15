@@ -6,7 +6,8 @@
  */
 
 import React from 'react';
-import type { ExtensionSettings } from '@/types';
+import type { ExtensionSettings, CorrelationEngine } from '@/types';
+import { CONFIG } from '@/config';
 
 interface SettingsProps {
   settings: ExtensionSettings;
@@ -34,6 +35,92 @@ export function Settings({ settings, onUpdate }: SettingsProps) {
             How often the background worker collects data (default: 60 = hourly)
           </span>
         </label>
+      </Section>
+
+      {/* Correlation Engine */}
+      <Section title="Correlation Engine">
+        <p className="text-[10px] text-slate-500 mb-2">
+          Choose how TrendCast matches social signals and news to prediction markets.
+          ML models run locally in your browser — no API keys, no server calls.
+          Models download on first use (~10–120 MB depending on model) and are cached.
+        </p>
+
+        {/* Engine selector */}
+        <div className="space-y-1.5">
+          {(
+            [
+              ['heuristic', '🧮 Heuristic (NER + keywords)', 'Fast, no download'],
+              ['embedding', '🧠 Embedding (semantic similarity)', 'Best semantic matching'],
+              ['sentiment', '📊 Sentiment (transformer classifier)', 'Sentiment-aware matching'],
+            ] as [CorrelationEngine, string, string][]
+          ).map(([engine, label, desc]) => (
+            <label
+              key={engine}
+              className={`flex items-start gap-2 text-xs py-1.5 px-2 rounded cursor-pointer transition-colors ${
+                settings.correlationEngine === engine
+                  ? 'bg-brand-500/20 border border-brand-400'
+                  : 'bg-slate-800 hover:bg-slate-750 border border-transparent'
+              }`}
+            >
+              <input
+                type="radio"
+                name="correlationEngine"
+                checked={settings.correlationEngine === engine}
+                onChange={() => onUpdate({ correlationEngine: engine })}
+                className="accent-brand-500 mt-0.5"
+              />
+              <span>
+                <span className="text-slate-300 block">{label}</span>
+                <span className="text-[10px] text-slate-500">{desc}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+
+        {/* Embedding model selector */}
+        {settings.correlationEngine === 'embedding' && (
+          <div className="mt-2 pl-4 border-l-2 border-brand-400/30">
+            <span className="text-[10px] text-slate-500 block mb-1">Embedding model:</span>
+            <select
+              value={settings.embeddingModel}
+              onChange={(e) =>
+                onUpdate({ embeddingModel: e.target.value as ExtensionSettings['embeddingModel'] })
+              }
+              className="w-full px-2 py-1 text-xs bg-slate-800 border border-slate-700 rounded focus:outline-none focus:border-brand-400"
+            >
+              {CONFIG.ml.embeddingModels.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Sentiment model selector */}
+        {settings.correlationEngine === 'sentiment' && (
+          <div className="mt-2 pl-4 border-l-2 border-brand-400/30">
+            <span className="text-[10px] text-slate-500 block mb-1">Sentiment model:</span>
+            <select
+              value={settings.sentimentModel}
+              onChange={(e) =>
+                onUpdate({ sentimentModel: e.target.value as ExtensionSettings['sentimentModel'] })
+              }
+              className="w-full px-2 py-1 text-xs bg-slate-800 border border-slate-700 rounded focus:outline-none focus:border-brand-400"
+            >
+              {CONFIG.ml.sentimentModels.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        <p className="text-[10px] text-slate-500 mt-2">
+          ⚠️ ML models download on first use. The first correlation run with an ML
+          engine will be slower as the model loads. Subsequent runs use the cached model.
+        </p>
       </Section>
 
       {/* Data sources */}
@@ -126,7 +213,7 @@ export function Settings({ settings, onUpdate }: SettingsProps) {
         </label>
         <p className="text-[10px] text-slate-500 mt-1">
           When enabled, opening a new tab shows the TrendCast dashboard.
-          Disable to keep your browser's default new tab page.
+          Disable to keep your browser&apos;s default new tab page.
         </p>
       </Section>
     </div>

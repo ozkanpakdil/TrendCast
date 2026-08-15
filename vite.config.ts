@@ -54,6 +54,9 @@ export default defineConfig(({ mode }) => {
         port: 5174,
       },
     },
+    worker: {
+      format: 'es',
+    },
     test: {
       globals: true,
       environment: 'jsdom',

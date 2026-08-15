@@ -33,6 +33,7 @@ import { CONFIG } from '@/config';
 import type {
   CollectionSnapshot,
   CorrelationMatch,
+  CorrelationResult,
   ExtensionSettings,
   HistoryEntry,
   MarketContract,
@@ -47,6 +48,11 @@ import { correlate, correlateNews, correlateNewsSocial } from '@/services/engine
 import { exportToCsv, exportToJson } from '@/utils/export';
 import { pruneStorageIfNeeded, measureStorageUsage } from '@/utils/storage';
 
+// Vite worker import — bundles ml-worker.ts as a separate chunk.
+// The `?worker` suffix tells Vite to compile this as a Web Worker.
+// At runtime, MLWorker is a Worker constructor.
+import MLWorker from '@/workers/ml-worker?worker';
+
 // ── Register all listeners synchronously at top level ────────────
 setupAlarms();
 setupMessageHandlers();
@@ -59,6 +65,159 @@ const BUILD_VERSION = import.meta.env.BUILD_VERSION ?? 'dev';
 console.log(
   `[TrendCast] Background worker initialised — v${BUILD_VERSION} at ${new Date().toISOString()}`,
 );
+
+// ── ML Web Worker manager ─────────────────────────────────────────
+// The ML worker runs embedding/sentiment inference off the main thread
+// to prevent Firefox's "Stop the script" dialog and keep the extension
+// responsive. The worker is created on demand and terminated when idle.
+
+let mlWorker: Worker | null = null;
+let mlWorkerRequestId: string | null = null;
+let mlWorkerResolvers: {
+  resolve: (result: CorrelationResult) => void;
+  reject: (error: Error) => void;
+  onProgress?: (info: { phase: string; current: number; total: number; engine: string; model: string }) => void;
+} | null = null;
+let mlWorkerTimeout: ReturnType<typeof setTimeout> | null = null;
+
+const ML_WORKER_IDLE_TIMEOUT_MS = 60_000; // terminate worker after 60s idle
+
+/**
+ * Get or create the ML Web Worker.
+ * Uses Vite's `?worker` import which bundles the worker as a separate chunk
+ * and provides a Worker constructor at runtime.
+ */
+function getMLWorker(): Worker | null {
+  if (mlWorker) {
+    return mlWorker;
+  }
+
+  try {
+    console.log('[TrendCast] Creating ML Web Worker');
+    mlWorker = new MLWorker();
+
+    mlWorker.addEventListener('message', (e: MessageEvent) => {
+      const msg = e.data;
+
+      if (!mlWorkerResolvers) {
+        console.warn('[TrendCast] ML worker message but no resolver:', msg);
+        return;
+      }
+
+      if (msg.type === 'progress') {
+        mlWorkerResolvers.onProgress?.({
+          phase: msg.phase,
+          current: msg.current,
+          total: msg.total,
+          engine: msg.engine,
+          model: msg.model,
+        });
+      } else if (msg.type === 'result') {
+        console.log('[TrendCast] ML worker result received');
+        mlWorkerResolvers.resolve(msg.result as CorrelationResult);
+        resetWorkerIdleTimer();
+      } else if (msg.type === 'error') {
+        console.error('[TrendCast] ML worker error:', msg.error);
+        mlWorkerResolvers.reject(new Error(msg.error));
+        resetWorkerIdleTimer();
+      }
+    });
+
+    mlWorker.addEventListener('error', (e: ErrorEvent) => {
+      console.error('[TrendCast] ML worker error event:', e.message, e);
+      if (mlWorkerResolvers) {
+        mlWorkerResolvers.reject(new Error(`ML Worker error: ${e.message}`));
+      }
+      terminateMLWorker();
+    });
+
+    return mlWorker;
+  } catch (err) {
+    console.error('[TrendCast] Failed to create ML Web Worker:', err);
+    return null;
+  }
+}
+
+function terminateMLWorker(): void {
+  if (mlWorker) {
+    console.log('[TrendCast] Terminating ML Web Worker');
+    mlWorker.terminate();
+    mlWorker = null;
+  }
+  if (mlWorkerTimeout) {
+    clearTimeout(mlWorkerTimeout);
+    mlWorkerTimeout = null;
+  }
+  mlWorkerResolvers = null;
+  mlWorkerRequestId = null;
+}
+
+function resetWorkerIdleTimer(): void {
+  if (mlWorkerTimeout) clearTimeout(mlWorkerTimeout);
+  mlWorkerTimeout = setTimeout(() => {
+    console.log('[TrendCast] ML worker idle — terminating');
+    terminateMLWorker();
+  }, ML_WORKER_IDLE_TIMEOUT_MS);
+}
+
+/**
+ * Run ML correlation in the Web Worker.
+ * Falls back to inline execution if the worker can't be created.
+ */
+async function runMLCorrelation(
+  markets: MarketContract[],
+  signals: SocialSignal[],
+  news: NewsItem[],
+  engine: 'embedding' | 'sentiment',
+  model: string,
+  requestId: string,
+  onProgress?: (info: { phase: string; current: number; total: number; engine: string; model: string }) => void,
+): Promise<CorrelationResult> {
+  const worker = getMLWorker();
+
+  if (!worker) {
+    console.warn('[TrendCast] ML Worker unavailable — falling back to inline execution');
+    // Fallback: import and run inline (will block main thread, but at least works)
+    const ml = await import('@/services/engine/ml');
+    if (engine === 'embedding') {
+      const matches = await ml.correlateEmbedding(signals, markets, model as never, onProgress as never);
+      const newsMatches = await ml.correlateNewsEmbedding(news, markets, model as never, onProgress as never);
+      const newsSocialMatches = await ml.correlateNewsSocialEmbedding(news, signals, model as never, onProgress as never);
+      return { matches, newsMatches, newsSocialMatches, engine };
+    } else {
+      const matches = await ml.correlateSentiment(signals, markets, model as never, onProgress as never);
+      const newsMatches = await ml.correlateNewsSentiment(news, markets, model as never, onProgress as never);
+      const newsSocialMatches = await ml.correlateNewsSocialSentiment(news, signals, model as never, onProgress as never);
+      return { matches, newsMatches, newsSocialMatches, engine };
+    }
+  }
+
+  return new Promise<CorrelationResult>((resolve, reject) => {
+    mlWorkerRequestId = requestId;
+    mlWorkerResolvers = { resolve, reject, onProgress };
+
+    worker.postMessage({
+      type: 'correlate',
+      requestId,
+      engine,
+      model,
+      markets,
+      signals,
+      news,
+    });
+  });
+}
+
+/**
+ * Cancel a running ML correlation.
+ */
+function cancelMLCorrelation(): void {
+  if (mlWorker && mlWorkerRequestId) {
+    console.log('[TrendCast] Cancelling ML correlation:', mlWorkerRequestId);
+    // Terminate the worker to immediately stop inference
+    terminateMLWorker();
+  }
+}
 
 // ── Alarm setup ──────────────────────────────────────────────────
 
@@ -114,22 +273,56 @@ function setupMessageHandlers(): void {
   });
 
   // Dashboard → Background: correlate all collected data
-  onMessage('CORRELATE_ALL', async () => {
+  onMessage('CORRELATE_ALL', async (payload) => {
+    console.log('[TrendCast] CORRELATE_ALL received:', {
+      engine: payload.engine,
+      model: payload.model,
+      requestId: payload.requestId,
+    });
+
     const markets = await getCollectedMarkets();
     const signals = await getCollectedSignals();
     const news = await getCollectedNews();
 
-    const matches = correlate(signals, markets);
-    const newsMatches = correlateNews(news, markets);
-    const newsSocialMatches = correlateNewsSocial(news, signals);
+    console.log('[TrendCast] CORRELATE_ALL data:', {
+      markets: markets.length,
+      signals: signals.length,
+      news: news.length,
+    });
 
-    const result = { matches, newsMatches, newsSocialMatches };
-    await browser.storage.local.set({ [CONFIG.storage.correlations]: result });
-    console.log(
-      `[TrendCast] Correlated ${matches.length} signal→market, ${newsMatches.length} news→market, ${newsSocialMatches.length} news→social`,
+    const settings = await getSettings();
+    const engine = payload.engine ?? settings.correlationEngine;
+    const model = payload.model ?? (
+      engine === 'embedding' ? settings.embeddingModel : settings.sentimentModel
     );
+    const requestId = payload.requestId ?? `corr-${Date.now()}`;
+
+    console.log(`[TrendCast] CORRELATE_ALL using engine="${engine}", model="${model}", requestId="${requestId}"`);
+
+    const result = await runCorrelationWithEngine(markets, signals, news, engine, model, requestId);
+
+    await browser.storage.local.set({ [CONFIG.storage.correlations]: result });
+
+    if (result.error) {
+      console.error(
+        `[TrendCast] CORRELATE_ALL FAILED — engine="${engine}", model="${model}":`,
+        result.error,
+      );
+    } else {
+      console.log(
+        `[TrendCast] CORRELATE_ALL OK — engine="${engine}", model="${model}":`,
+        `${result.matches.length} signal→market, ${result.newsMatches.length} news→market, ${result.newsSocialMatches.length} news→social`,
+      );
+    }
 
     return result;
+  });
+
+  // Dashboard → Background: cancel a running ML correlation
+  onMessage('CANCEL_CORRELATION', async () => {
+    console.log('[TrendCast] CANCEL_CORRELATION received');
+    cancelMLCorrelation();
+    return { cancelled: true };
   });
 
   // Dashboard → Background: get historical snapshots for charting
@@ -309,11 +502,105 @@ async function runCollection(): Promise<CollectionSnapshot> {
   // can display them instantly when the user opens the Correlations tab.
   // This runs after collection completes, leveraging the time before the
   // user navigates to the correlations tab.
-  runCorrelationPrecompute(markets, signals, news).catch((err) =>
+  runCorrelationPrecompute(markets, signals, news, settings).catch((err) =>
     console.error('[TrendCast] Pre-compute correlations failed:', err),
   );
 
   return snapshot;
+}
+
+/**
+ * Run correlation with the specified engine and model.
+ *
+ * If the ML engine fails (e.g., WASM backend unavailable, model download
+ * blocked), the result will contain an `error` message and `engine` set
+ * to 'heuristic' with empty result arrays — we do NOT silently fall back
+ * to heuristic. The UI is responsible for showing the error to the user
+ * and suggesting they switch engines.
+ */
+async function runCorrelationWithEngine(
+  markets: MarketContract[],
+  signals: SocialSignal[],
+  news: NewsItem[],
+  engine: 'heuristic' | 'embedding' | 'sentiment',
+  model: string,
+  requestId?: string,
+): Promise<CorrelationResult> {
+  console.log(
+    `[TrendCast] runCorrelationWithEngine: engine="${engine}", model="${model}",`,
+    `inputs: ${markets.length} markets, ${signals.length} signals, ${news.length} news`,
+  );
+
+  if (engine === 'embedding' || engine === 'sentiment') {
+    try {
+      // Progress callback — forwards progress to the dashboard via runtime message
+      const onProgress = (info: { phase: string; current: number; total: number; engine: string; model: string }) => {
+        console.log(`[TrendCast] Progress: ${info.phase} ${info.current}/${info.total} (${info.engine}/${info.model})`);
+        // Broadcast progress to any listening dashboard/popup tabs
+        browser.runtime.sendMessage({
+          type: 'CORRELATION_PROGRESS',
+          payload: {
+            requestId: requestId ?? 'unknown',
+            phase: info.phase,
+            current: info.current,
+            total: info.total,
+            engine: info.engine,
+            model: info.model,
+          },
+        }).catch(() => {
+          // No listener — that's fine, progress is optional
+        });
+      };
+
+      console.log(`[TrendCast] ${engine} engine: delegating to ML Web Worker…`);
+      const result = await runMLCorrelation(
+        markets, signals, news, engine, model, requestId ?? `corr-${Date.now()}`, onProgress,
+      );
+      console.log(`[TrendCast] ${engine}: signal→market = ${result.matches.length}`);
+      console.log(`[TrendCast] ${engine}: news→market = ${result.newsMatches.length}`);
+      console.log(`[TrendCast] ${engine}: news→social = ${result.newsSocialMatches.length}`);
+      return result;
+    } catch (err) {
+      const errorMsg = formatMLError(err, engine, model);
+      console.error(`[TrendCast] ${engine} engine FAILED — model="${model}":`, err);
+      console.error(`[TrendCast] ${engine} engine error message:`, errorMsg);
+      return { matches: [], newsMatches: [], newsSocialMatches: [], engine, error: errorMsg };
+    }
+  }
+
+  // Heuristic (default) — runs inline (fast, no ML)
+  console.log('[TrendCast] Heuristic engine: computing correlations…');
+  const matches = correlate(signals, markets);
+  console.log(`[TrendCast] Heuristic: signal→market = ${matches.length}`);
+  const newsMatches = correlateNews(news, markets);
+  console.log(`[TrendCast] Heuristic: news→market = ${newsMatches.length}`);
+  const newsSocialMatches = correlateNewsSocial(news, signals);
+  console.log(`[TrendCast] Heuristic: news→social = ${newsSocialMatches.length}`);
+  return { matches, newsMatches, newsSocialMatches, engine };
+}
+
+/**
+ * Format an ML engine error into a user-friendly message.
+ * Extracts the root cause from common ONNX Runtime / Transformers.js errors.
+ */
+function formatMLError(err: unknown, engine: string, model: string): string {
+  const raw = err instanceof Error ? err.message : String(err);
+
+  // Detect common failure patterns and give actionable advice
+  if (raw.includes('no available backend found') || raw.includes('wasm')) {
+    return `The ML runtime (ONNX WebAssembly) failed to load. This is usually caused by the browser blocking the WASM backend or a network issue downloading model files. Try switching to the 🧮 Heuristic engine, or try a different ${engine} model.`;
+  }
+
+  if (raw.includes('dynamically imported module') || raw.includes('Failed to fetch')) {
+    return `Failed to load the ML model "${model}". The browser may have blocked the download from the Hugging Face CDN. Check your network connection, try a different ${engine} model, or switch to the 🧮 Heuristic engine which requires no downloads.`;
+  }
+
+  if (raw.includes('network') || raw.includes('CORS') || raw.includes('403') || raw.includes('404')) {
+    return `Network error loading ML model "${model}". The Hugging Face CDN may be unreachable or blocked. Try again later, choose a different model, or switch to the 🧮 Heuristic engine.`;
+  }
+
+  // Generic fallback — include the raw error for debugging
+  return `The ${engine} engine ("${model}") failed: ${raw}. Try a different model or switch to the 🧮 Heuristic engine.`;
 }
 
 /**
@@ -325,16 +612,22 @@ async function runCorrelationPrecompute(
   markets: MarketContract[],
   signals: SocialSignal[],
   news: NewsItem[],
+  settings: ExtensionSettings,
 ): Promise<void> {
-  const matches = correlate(signals, markets);
-  const newsMatches = correlateNews(news, markets);
-  const newsSocialMatches = correlateNewsSocial(news, signals);
+  const engine = settings.correlationEngine;
+  const model = engine === 'embedding' ? settings.embeddingModel : settings.sentimentModel;
+  const result = await runCorrelationWithEngine(markets, signals, news, engine, model, `precompute-${Date.now()}`);
 
-  const result = { matches, newsMatches, newsSocialMatches };
   await browser.storage.local.set({ [CONFIG.storage.correlations]: result });
-  console.log(
-    `[TrendCast] Pre-computed ${matches.length} signal→market, ${newsMatches.length} news→market, ${newsSocialMatches.length} news→social`,
-  );
+  if (result.error) {
+    console.warn(
+      `[TrendCast] Pre-compute (${engine}) failed: ${result.error} — ${result.matches.length} results`,
+    );
+  } else {
+    console.log(
+      `[TrendCast] Pre-computed (${engine}) ${result.matches.length} signal→market, ${result.newsMatches.length} news→market, ${result.newsSocialMatches.length} news→social`,
+    );
+  }
 }
 
 // ── Storage helpers ───────────────────────────────────────────────

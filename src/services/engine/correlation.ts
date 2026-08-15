@@ -116,12 +116,20 @@ export function correlate(
   const matches: CorrelationMatch[] = [];
   const cache = new EntityCache();
 
+  console.log(
+    `[TrendCast] Heuristic correlate: ${signals.length} signals × ${contracts.length} contracts`,
+  );
+
   for (const signal of signals) {
     for (const contract of contracts) {
       const result = correlatePair(signal, contract, cache);
       if (result) matches.push(result);
     }
   }
+
+  console.log(
+    `[TrendCast] Heuristic correlate: produced ${matches.length} matches`,
+  );
 
   return matches.sort((a, b) => b.confidence - a.confidence);
 }
@@ -159,12 +167,24 @@ function correlatePair(
   const cEntities = cache.getKeywords(contract.question);
   const hasEntityMatch = sEntities.some((e) => cEntities.includes(e));
   const threshold = hasEntityMatch ? MIN_CONFIDENCE_ENTITY_MATCH : MIN_CONFIDENCE;
-  if (confidence < threshold) return null;
+  if (confidence < threshold) {
+    console.log(
+      `[TrendCast] Heuristic reject: conf=${confidence.toFixed(3)} < threshold=${threshold.toFixed(3)} ` +
+      `(entSim=${entSim.toFixed(3)}, kwSim=${kwSim.toFixed(3)}, entityMatch=${hasEntityMatch}) ` +
+      `signal="${signal.text.slice(0, 50)}…" contract="${contract.question.slice(0, 50)}…"`,
+    );
+    return null;
+  }
 
   // Collect matched keywords from both entity and keyword overlap
   const matchedKeywords = signal.keywords.filter((k) => contract.keywords.includes(k));
   const entityKeywords = sEntities.filter((ek) => cEntities.includes(ek));
   const allMatched = [...new Set([...matchedKeywords, ...entityKeywords])];
+
+  console.log(
+    `[TrendCast] Heuristic match: conf=${confidence.toFixed(3)} keywords=[${allMatched.join(', ')}] ` +
+    `signal="${signal.text.slice(0, 50)}…" contract="${contract.question.slice(0, 50)}…"`,
+  );
 
   return {
     contract,

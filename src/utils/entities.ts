@@ -167,6 +167,28 @@ const STOP_WORDS = new Set([
 // ── Entity Extraction ─────────────────────────────────────────────
 
 /**
+ * Escape a string for safe use inside a RegExp.
+ */
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Match a keyword in text using word boundaries.
+ *
+ * Short keywords (≤4 chars) are always matched with word boundaries to
+ * avoid false positives (e.g., "us" matching inside "just", "uk" inside
+ * "duke"). Longer keywords can safely use substring matching since they
+ * are unlikely to appear as substrings of unrelated words.
+ */
+function matchKeyword(text: string, keyword: string): boolean {
+  if (keyword.length <= 4) {
+    return new RegExp(`\\b${escapeRegex(keyword)}\\b`, 'i').test(text);
+  }
+  return text.includes(keyword);
+}
+
+/**
  * Extract entities from a text string.
  *
  * @param text - The text to extract entities from.
@@ -213,7 +235,7 @@ export function extractEntities(text: string): Entity[] {
   // Persons
   for (const [canonical, aliases] of KNOWN_PERSONS) {
     for (const alias of aliases) {
-      if (lowerText.includes(alias) && !seen.has(canonical)) {
+      if (matchKeyword(lowerText, alias) && !seen.has(canonical)) {
         seen.add(canonical);
         entities.push({
           text: alias,
@@ -229,20 +251,7 @@ export function extractEntities(text: string): Entity[] {
   // Organizations
   for (const [canonical, aliases] of KNOWN_ORGS) {
     for (const alias of aliases) {
-      // Use word boundary for short aliases to avoid false positives
-      if (alias.length <= 3) {
-        const regex = new RegExp(`\\b${alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
-        if (regex.test(text) && !seen.has(canonical)) {
-          seen.add(canonical);
-          entities.push({
-            text: alias,
-            normalized: canonical,
-            type: 'organization',
-            confidence: 0.8,
-          });
-          break;
-        }
-      } else if (lowerText.includes(alias) && !seen.has(canonical)) {
+      if (matchKeyword(lowerText, alias) && !seen.has(canonical)) {
         seen.add(canonical);
         entities.push({
           text: alias,
@@ -258,7 +267,7 @@ export function extractEntities(text: string): Entity[] {
   // Crypto
   for (const [canonical, aliases] of KNOWN_CRYPTO) {
     for (const alias of aliases) {
-      if (lowerText.includes(alias) && !seen.has(canonical)) {
+      if (matchKeyword(lowerText, alias) && !seen.has(canonical)) {
         seen.add(canonical);
         entities.push({
           text: alias,
@@ -273,7 +282,7 @@ export function extractEntities(text: string): Entity[] {
 
   // Events
   for (const event of KNOWN_EVENTS) {
-    if (lowerText.includes(event) && !seen.has(event)) {
+    if (matchKeyword(lowerText, event) && !seen.has(event)) {
       seen.add(event);
       entities.push({
         text: event,
@@ -286,7 +295,7 @@ export function extractEntities(text: string): Entity[] {
 
   // Locations
   for (const location of KNOWN_LOCATIONS) {
-    if (lowerText.includes(location) && !seen.has(location)) {
+    if (matchKeyword(lowerText, location) && !seen.has(location)) {
       seen.add(location);
       entities.push({
         text: location,

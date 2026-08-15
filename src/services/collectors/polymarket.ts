@@ -27,6 +27,15 @@ interface GammaMarket {
   outcomes: string; // JSON-encoded string array, e.g. "[\"Yes\",\"No\"]"
   outcomePrices: string; // JSON-encoded string array, e.g. "[\"0.65\",\"0.35\"]"
   clobTokenIds?: string[];
+  /** Nested event(s) this market belongs to. The event slug is what
+   *  polymarket.com/event/<slug> expects — the market slug 404s. */
+  events?: GammaEvent[];
+}
+
+interface GammaEvent {
+  id: string;
+  slug: string;
+  title: string;
 }
 
 /**
@@ -62,6 +71,12 @@ function normaliseGammaMarket(raw: GammaMarket): MarketContract | null {
       price: parseFloat(outcomePrices[i] ?? '0'),
     }));
 
+    // polymarket.com/event/<slug> expects the EVENT slug, not the market
+    // slug. For multi-market events (e.g. elections with per-party sub-
+    // markets) the market slug 404s. Prefer the nested event slug; fall
+    // back to the market slug for standalone markets.
+    const eventSlug = raw.events?.[0]?.slug ?? raw.slug;
+
     return {
       id: raw.id,
       platform: 'polymarket',
@@ -70,8 +85,8 @@ function normaliseGammaMarket(raw: GammaMarket): MarketContract | null {
       endDate: raw.endDate,
       volume24h: raw.volume ? parseFloat(raw.volume) : undefined,
       liquidity: raw.liquidity ? parseFloat(raw.liquidity) : undefined,
-      slug: raw.slug,
-      url: `https://polymarket.com/event/${raw.slug}`,
+      slug: eventSlug,
+      url: `https://polymarket.com/event/${eventSlug}`,
       keywords: extractKeywords(raw.question),
       lastUpdated: Date.now(),
     };

@@ -139,4 +139,57 @@ export const CONFIG = {
     cacheKey: 'trendcast:fetch-cache',
     // Default request timeout in ms.
     timeoutMs: 15_000,
-  },} as const;
+  },
+
+  // ── ML correlation models ─────────────────────────────────────
+  // Local ML models for the embedding and sentiment correlation engines.
+  // All run fully client-side via Transformers.js (ONNX Runtime Web).
+  // Models are downloaded from the Hugging Face Hub on first use and
+  // cached by the browser. No API keys, no server calls.
+  ml: {
+    // Embedding models — convert text to vectors for cosine similarity.
+    embeddingModels: [
+      {
+        id: 'Xenova/all-MiniLM-L6-v2' as const,
+        label: 'MiniLM L6 v2 (23 MB · fastest)',
+        dimensions: 384,
+        size: '~23 MB',
+      },
+      {
+        id: 'Xenova/bge-small-en-v1.5' as const,
+        label: 'BGE Small v1.5 (33 MB · higher accuracy)',
+        dimensions: 384,
+        size: '~33 MB',
+      },
+      {
+        id: 'Xenova/gte-small' as const,
+        label: 'GTE Small (30 MB · high accuracy)',
+        dimensions: 384,
+        size: '~30 MB',
+      },
+    ],
+    // Sentiment models — classify text sentiment with a transformer.
+    sentimentModels: [
+      {
+        id: 'Xenova/distilbert-base-uncased-finetuned-sst-2-english' as const,
+        label: 'DistilBERT SST-2 (67 MB · general news)',
+        size: '~67 MB',
+      },
+      {
+        id: 'Xenova/twitter-roberta-base-sentiment-latest' as const,
+        label: 'Twitter RoBERTa (120 MB · social media)',
+        size: '~120 MB',
+      },
+      {
+        id: 'Xenova/finbert' as const,
+        label: 'FinBERT (110 MB · financial news)',
+        size: '~110 MB',
+      },
+      {
+        id: 'Xenova/bert-base-multilingual-uncased-sentiment' as const,
+        label: 'Multilingual BERT (110 MB · multi-language)',
+        size: '~110 MB',
+      },
+    ],
+  },
+} as const;

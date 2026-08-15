@@ -33,9 +33,9 @@ import { Watchlist } from './components/Watchlist';
 import { useSnapshot } from './hooks/useSnapshot';
 import { useCorrelations } from './hooks/useCorrelations';
 import { DEFAULT_SETTINGS } from '@/types';
-import type { ExtensionSettings, ThemeMode } from '@/types';
-import { browser } from '@/messaging/browser';
+import type { ExtensionSettings, ThemeMode, CorrelationEngine } from '@/types';
 import { CONFIG } from '@/config';
+import { browser } from '@/messaging/browser';
 import { sendMessage } from '@/messaging';
 import { downloadExport } from '@/utils/export';
 
@@ -45,9 +45,27 @@ const BUILD_VERSION = import.meta.env.BUILD_VERSION ?? 'dev';
 
 type Tab = 'feed' | 'markets' | 'news' | 'correlations' | 'watchlist' | 'history' | 'community';
 
+/** Human-readable label for ML correlation phases. */
+function phaseLabel(phase: string): string {
+  const labels: Record<string, string> = {
+    'loading-model': 'Loading model…',
+    'embedding-contracts': 'Embedding contracts',
+    'embedding-signals': 'Embedding signals',
+    'embedding-news': 'Embedding news',
+    'comparing-signals': 'Comparing signals→markets',
+    'comparing-news': 'Comparing news→markets',
+    'comparing-news-social': 'Comparing news→social',
+    'classifying-signals': 'Classifying signal sentiment',
+    'classifying-news': 'Classifying news sentiment',
+    'classifying-news-social': 'Classifying news→social',
+    'done': 'Done',
+  };
+  return labels[phase] ?? phase;
+}
+
 export function App() {
   const { snapshot, loading, collecting, lastCollectionAt, triggerCollection } = useSnapshot();
-  const { correlations, loading: corrLoading, runCorrelation } = useCorrelations();
+  const { correlations, loading: corrLoading, error: corrError, progress: corrProgress, elapsedMs, runCorrelation, cancelCorrelation } = useCorrelations();
   const [activeTab, setActiveTab] = useState<Tab>('feed');
   const [settings, setSettings] = useState<ExtensionSettings>(DEFAULT_SETTINGS);
   const [theme, setTheme] = useState<ThemeMode>('dark');
@@ -91,8 +109,9 @@ export function App() {
     corrInitRef.current = true;
     // Fire and forget — the hook loads cached results from storage first,
     // and this ensures a fresh computation in the background.
-    runCorrelation();
-  }, [snapshot, runCorrelation]);
+    runCorrelation(settings.correlationEngine, settings.embeddingModel);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [snapshot]);
 
   const toggleTheme = useCallback(async () => {
     const newTheme: ThemeMode = theme === 'dark' ? 'light' : 'dark';
@@ -249,9 +268,6 @@ export function App() {
           <>
             {activeTab === 'feed' && (
               <section>
-                <h2 className={`text-sm font-bold uppercase tracking-wider mb-3 ${sectionTitle}`}>
-                  🔥 Trending Hypes — Virality Heatmap
-                </h2>
                 <HypeFeed
                   signals={snapshot?.signals ?? []}
                   highlightThreshold={settings.highlightThreshold}
@@ -261,9 +277,6 @@ export function App() {
 
             {activeTab === 'markets' && (
               <section>
-                <h2 className={`text-sm font-bold uppercase tracking-wider mb-3 ${sectionTitle}`}>
-                  📈 Prediction Market Odds — Volume Heatmap
-                </h2>
                 <MarketOdds markets={snapshot?.markets ?? []} />
               </section>
             )}
@@ -281,18 +294,197 @@ export function App() {
 
             {activeTab === 'correlations' && (
               <section>
-                <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
                   <h2 className={`text-sm font-bold uppercase tracking-wider ${sectionTitle}`}>
                     🔗 Correlated Signals & News
                   </h2>
-                  <button
-                    onClick={runCorrelation}
-                    disabled={corrLoading}
-                    className={`text-xs px-3 py-1.5 rounded ${btnSecondary} disabled:opacity-50 transition-colors`}
-                  >
-                    {corrLoading ? '⟳ Analyzing…' : '↻ Re-analyze'}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {/* Engine selector */}
+                    <select
+                      value={settings.correlationEngine}
+                      onChange={(e) => {
+                        const engine = e.target.value as CorrelationEngine;
+                        setSettings({ ...settings, correlationEngine: engine });
+                        browser.storage.local.set({
+                          [CONFIG.storage.settings]: { ...settings, correlationEngine: engine },
+                        });
+                      }}
+                      className={`text-xs px-2 py-1.5 rounded border ${
+                        isDark
+                          ? 'bg-slate-800 border-slate-700 text-slate-300'
+                          : 'bg-white border-light-border text-light-text'
+                      } focus:outline-none focus:border-brand-400`}
+                      title="Correlation engine"
+                    >
+                      <option value="heuristic">🧮 Heuristic</option>
+                      <option value="embedding">🧠 Embedding</option>
+                      <option value="sentiment">📊 Sentiment</option>
+                    </select>
+
+                    {/* Model selector (shown for ML engines) */}
+                    {settings.correlationEngine === 'embedding' && (
+                      <select
+                        value={settings.embeddingModel}
+                        onChange={(e) => {
+                          const model = e.target.value as ExtensionSettings['embeddingModel'];
+                          setSettings({ ...settings, embeddingModel: model });
+                          browser.storage.local.set({
+                            [CONFIG.storage.settings]: { ...settings, embeddingModel: model },
+                          });
+                        }}
+                        className={`text-xs px-2 py-1.5 rounded border ${
+                          isDark
+                            ? 'bg-slate-800 border-slate-700 text-slate-300'
+                            : 'bg-white border-light-border text-light-text'
+                        } focus:outline-none focus:border-brand-400`}
+                        title="Embedding model"
+                      >
+                        {CONFIG.ml.embeddingModels.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.label}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+
+                    {settings.correlationEngine === 'sentiment' && (
+                      <select
+                        value={settings.sentimentModel}
+                        onChange={(e) => {
+                          const model = e.target.value as ExtensionSettings['sentimentModel'];
+                          setSettings({ ...settings, sentimentModel: model });
+                          browser.storage.local.set({
+                            [CONFIG.storage.settings]: { ...settings, sentimentModel: model },
+                          });
+                        }}
+                        className={`text-xs px-2 py-1.5 rounded border ${
+                          isDark
+                            ? 'bg-slate-800 border-slate-700 text-slate-300'
+                            : 'bg-white border-light-border text-light-text'
+                        } focus:outline-none focus:border-brand-400`}
+                        title="Sentiment model"
+                      >
+                        {CONFIG.ml.sentimentModels.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.label}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+
+                    {/* Re-analyze / Cancel button */}
+                    {corrLoading ? (
+                      <button
+                        onClick={cancelCorrelation}
+                        className={`text-xs px-3 py-1.5 rounded ${
+                          isDark
+                            ? 'bg-red-900/80 text-red-200 hover:bg-red-800'
+                            : 'bg-red-100 text-red-700 hover:bg-red-200'
+                        } transition-colors whitespace-nowrap`}
+                        title="Cancel ML correlation"
+                      >
+                        ✕ Cancel
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          const model =
+                            settings.correlationEngine === 'embedding'
+                              ? settings.embeddingModel
+                              : settings.sentimentModel;
+                          runCorrelation(settings.correlationEngine, model);
+                        }}
+                        className={`text-xs px-3 py-1.5 rounded ${btnSecondary} transition-colors whitespace-nowrap`}
+                      >
+                        ↻ Re-analyze
+                      </button>
+                    )}
+                  </div>
                 </div>
+
+                {/* Progress bar + timer for ML engines */}
+                {corrLoading && corrProgress && (
+                  <div className={`mb-3 p-3 rounded-lg border text-xs ${
+                    isDark ? 'bg-slate-900/80 border-slate-700' : 'bg-slate-50 border-light-border'
+                  }`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className={`font-medium ${isDark ? 'text-slate-300' : 'text-light-text'}`}>
+                        {corrProgress.engine === 'embedding' ? '🧠 Embedding' : '📊 Sentiment'} · {corrProgress.model}
+                      </span>
+                      <span className={`tabular-nums ${isDark ? 'text-slate-400' : 'text-light-muted'}`}>
+                        ⏱ {Math.floor(elapsedMs / 1000)}s
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-light-muted'} whitespace-nowrap`}>
+                        {phaseLabel(corrProgress.phase)}
+                      </span>
+                      <div className={`flex-1 h-2 rounded-full overflow-hidden ${
+                        isDark ? 'bg-slate-800' : 'bg-slate-200'
+                      }`}>
+                        <div
+                          className="h-full bg-brand-500 rounded-full transition-all duration-300"
+                          style={{
+                            width: `${corrProgress.total > 0 ? Math.min(100, (corrProgress.current / corrProgress.total) * 100) : 0}%`,
+                          }}
+                        />
+                      </div>
+                      <span className={`text-[10px] tabular-nums ${isDark ? 'text-slate-400' : 'text-light-muted'} whitespace-nowrap`}>
+                        {corrProgress.current}/{corrProgress.total}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Loading indicator without progress (heuristic or waiting for worker) */}
+                {corrLoading && !corrProgress && (
+                  <div className={`mb-3 p-3 rounded-lg border text-xs ${
+                    isDark ? 'bg-slate-900/80 border-slate-700' : 'bg-slate-50 border-light-border'
+                  }`}>
+                    <div className="flex items-center gap-2">
+                      <span className="animate-spin inline-block w-3 h-3 border-2 border-brand-500 border-t-transparent rounded-full" />
+                      <span className={isDark ? 'text-slate-300' : 'text-light-text'}>
+                        {settings.correlationEngine === 'heuristic'
+                          ? 'Computing correlations…'
+                          : 'Loading ML model… this may take a while on first run.'}
+                      </span>
+                      {settings.correlationEngine !== 'heuristic' && (
+                        <span className={`ml-auto tabular-nums ${isDark ? 'text-slate-400' : 'text-light-muted'}`}>
+                          ⏱ {Math.floor(elapsedMs / 1000)}s
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {corrError && (
+                  <div
+                    className={`mb-3 p-3 rounded-lg border text-xs ${
+                      isDark
+                        ? 'bg-red-950/50 border-red-800 text-red-300'
+                        : 'bg-red-50 border-red-300 text-red-700'
+                    }`}
+                  >
+                    <div className="flex items-start gap-2">
+                      <span className="text-base shrink-0">⚠️</span>
+                      <div className="space-y-1.5">
+                        <p className="font-semibold">ML Engine Error</p>
+                        <p>{corrError}</p>
+                        <p className={`text-[10px] ${isDark ? 'text-red-400/70' : 'text-red-600/70'}`}>
+                          Choose a different engine or model from the dropdown above, or switch to
+                          🧮 Heuristic which requires no downloads.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {!corrError && settings.correlationEngine !== 'heuristic' && (
+                  <p className={`text-[10px] mb-3 ${isDark ? 'text-slate-500' : 'text-light-muted'}`}>
+                    ⚠️ ML engine selected — first run downloads the model ({settings.correlationEngine === 'embedding' ? '~23–33 MB' : '~10–120 MB'}) and may take longer. Model is cached for subsequent runs.
+                  </p>
+                )}
+
                 <CorrelationPanel
                   matches={correlations?.matches ?? []}
                   newsMatches={correlations?.newsMatches ?? []}

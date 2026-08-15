@@ -104,6 +104,38 @@ export interface NewsItem {
 
 // ── Correlation ──────────────────────────────────────────────────
 
+/**
+ * Correlation engine strategy.
+ *
+ * - `heuristic` — NER + keyword overlap (default, no external deps).
+ * - `embedding`  — sentence embeddings + cosine similarity (local ML).
+ * - `sentiment`  — transformer-based sentiment classification (local ML).
+ *
+ * The `embedding` and `sentiment` strategies use Transformers.js to run
+ * ML models fully client-side. No API keys, no network calls to LLM APIs.
+ * The user picks the model and strategy from the popup settings UI.
+ */
+export type CorrelationEngine = 'heuristic' | 'embedding' | 'sentiment';
+
+/**
+ * Available local ML models for the `embedding` strategy.
+ * All run in-browser via Transformers.js (ONNX Runtime Web).
+ */
+export type EmbeddingModel =
+  | 'Xenova/all-MiniLM-L6-v2'
+  | 'Xenova/bge-small-en-v1.5'
+  | 'Xenova/gte-small';
+
+/**
+ * Available local ML models for the `sentiment` strategy.
+ * All run in-browser via Transformers.js (ONNX Runtime Web).
+ */
+export type SentimentModel =
+  | 'Xenova/distilbert-base-uncased-finetuned-sst-2-english'
+  | 'Xenova/twitter-roberta-base-sentiment-latest'
+  | 'Xenova/finbert'
+  | 'Xenova/bert-base-multilingual-uncased-sentiment';
+
 /** A matched correlation between a social signal and a market contract. */
 export interface CorrelationMatch {
   contract: MarketContract;
@@ -139,6 +171,19 @@ export interface CorrelationResult {
   matches: CorrelationMatch[];
   newsMatches: NewsCorrelationMatch[];
   newsSocialMatches: NewsSocialCorrelationMatch[];
+  /**
+   * Engine that produced these results.
+   * If the requested engine failed, this will be the fallback engine used
+   * (or 'heuristic' if no results were produced) and `error` will be set.
+   */
+  engine?: CorrelationEngine;
+  /**
+   * Error message if the requested correlation engine failed.
+   * When set, the UI should show an error banner telling the user the
+   * ML engine didn't work and suggesting they try a different engine
+   * or switch to the heuristic engine.
+   */
+  error?: string;
 }
 
 // ── Collection ────────────────────────────────────────────────────
@@ -264,8 +309,13 @@ export type Message =
   | { type: 'START_SCRAPE'; payload: { source: string } }
   | { type: 'SCRAPE_RESULT'; payload: { source: string; data: unknown } }
   // Dashboard → Background: correlate all collected data
-  | { type: 'CORRELATE_ALL'; payload: Record<string, never> }
+  | { type: 'CORRELATE_ALL'; payload: { engine?: CorrelationEngine; model?: string; requestId?: string } }
   | { type: 'CORRELATION_RESULT'; payload: CorrelationResult }
+  // Background → Dashboard: progress update for ML correlation
+  | { type: 'CORRELATION_PROGRESS'; payload: { requestId: string; phase: string; current: number; total: number; engine: string; model: string } }
+  // Dashboard → Background: cancel a running ML correlation
+  | { type: 'CANCEL_CORRELATION'; payload: { requestId: string } }
+  | { type: 'CANCEL_RESULT'; payload: { cancelled: boolean } }
   // Overlay injection (socials content script)
   | { type: 'INJECT_OVERLAY'; payload: { matches: CorrelationMatch[] } }
   // Dashboard → Background: get historical snapshots for charting
@@ -310,6 +360,12 @@ export interface ExtensionSettings {
   theme: ThemeMode;
   /** How many historical snapshots to retain (max). */
   maxHistoryEntries: number;
+  /** Which correlation engine strategy to use. */
+  correlationEngine: CorrelationEngine;
+  /** Which embedding model to use (when engine = 'embedding'). */
+  embeddingModel: EmbeddingModel;
+  /** Which sentiment model to use (when engine = 'sentiment'). */
+  sentimentModel: SentimentModel;
 }
 
 export const DEFAULT_SETTINGS: ExtensionSettings = {
@@ -329,4 +385,7 @@ export const DEFAULT_SETTINGS: ExtensionSettings = {
   overrideNewTab: true,
   theme: 'dark',
   maxHistoryEntries: 168, // 7 days of hourly snapshots
+  correlationEngine: 'heuristic',
+  embeddingModel: 'Xenova/all-MiniLM-L6-v2',
+  sentimentModel: 'Xenova/distilbert-base-uncased-finetuned-sst-2-english',
 };

@@ -166,8 +166,7 @@ export function MarketOddsImpl({ markets }: MarketOddsProps) {
   const sorted = useMemo(
     () =>
       [...markets]
-        .sort((a, b) => (b.volume24h ?? 0) - (a.volume24h ?? 0))
-        .slice(0, 50),
+        .sort((a, b) => (b.volume24h ?? 0) - (a.volume24h ?? 0)),
     [markets],
   );
 

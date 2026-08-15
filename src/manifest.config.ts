@@ -168,10 +168,22 @@ export default defineManifest({
     'https://api.rss2json.com/*',
     'https://*.bbc.com/*',
     'https://*.cnn.com/*',
+    // ML model downloads — Hugging Face Hub (Transformers.js)
+    // Models are downloaded on first use and cached by the browser.
+    // No API keys, no user data sent — only public model weights are fetched.
+    'https://huggingface.co/*',
+    'https://*.huggingface.co/*',
+    'https://cdn-lfs.huggingface.co/*',
+    'https://cdn-lfs-us-1.huggingface.co/*',
+    'https://cdn-lfs-eu-1.huggingface.co/*',
   ],
 
   // ── Web Accessible Resources ───────────────────────────────────
   // Needed if content scripts need to load assets (e.g., overlay icons).
+  // ONNX Runtime Web WASM files (wasm/*.mjs, wasm/*.wasm) are bundled
+  // locally and accessed by the extension's own pages (background worker,
+  // dashboard) via browser.runtime.getURL() — extension pages can access
+  // their own resources without WAR, so they're not listed here.
   web_accessible_resources: [
     {
       resources: ['icons/*.png', 'assets/*.css'],
@@ -189,12 +201,14 @@ export default defineManifest({
   ],
 
   // ── CSP ────────────────────────────────────────────────────────
-  // MV3 default CSP is strict. We keep the default and do NOT relax it.
+  // MV3 default CSP is strict. We keep the default and do NOT relax it
+  // except for `wasm-unsafe-eval` which is required by ONNX Runtime Web
+  // (used by Transformers.js for in-browser ML model inference).
   // ⚠️ Pitfall: No `eval` or remote scripts allowed. All code must be
   //    bundled locally. This is fine for our React popup.
   content_security_policy: {
     extension_pages:
-      "script-src 'self'; object-src 'self'; style-src 'self' 'unsafe-inline'",
+      "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; style-src 'self' 'unsafe-inline'",
   },
 
   // ── Cross-browser metadata ─────────────────────────────────────
