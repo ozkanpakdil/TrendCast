@@ -168,7 +168,7 @@ async function runMLCorrelation(
   markets: MarketContract[],
   signals: SocialSignal[],
   news: NewsItem[],
-  engine: 'embedding' | 'sentiment',
+  engine: 'embedding' | 'sentiment' | 'zeroshot' | 'ner',
   model: string,
   requestId: string,
   onProgress?: (info: { phase: string; current: number; total: number; engine: string; model: string }) => void,
@@ -184,10 +184,21 @@ async function runMLCorrelation(
       const newsMatches = await ml.correlateNewsEmbedding(news, markets, model as never, onProgress as never);
       const newsSocialMatches = await ml.correlateNewsSocialEmbedding(news, signals, model as never, onProgress as never);
       return { matches, newsMatches, newsSocialMatches, engine };
-    } else {
+    } else if (engine === 'sentiment') {
       const matches = await ml.correlateSentiment(signals, markets, model as never, onProgress as never);
       const newsMatches = await ml.correlateNewsSentiment(news, markets, model as never, onProgress as never);
       const newsSocialMatches = await ml.correlateNewsSocialSentiment(news, signals, model as never, onProgress as never);
+      return { matches, newsMatches, newsSocialMatches, engine };
+    } else if (engine === 'zeroshot') {
+      const matches = await ml.correlateZeroShot(signals, markets, model as never, onProgress as never);
+      const newsMatches = await ml.correlateNewsZeroShot(news, markets, model as never, onProgress as never);
+      const newsSocialMatches = await ml.correlateNewsSocialZeroShot(news, signals, model as never, onProgress as never);
+      return { matches, newsMatches, newsSocialMatches, engine };
+    } else {
+      // ner
+      const matches = await ml.correlateNER(signals, markets, model as never, onProgress as never);
+      const newsMatches = await ml.correlateNewsNER(news, markets, model as never, onProgress as never);
+      const newsSocialMatches = await ml.correlateNewsSocialNER(news, signals, model as never, onProgress as never);
       return { matches, newsMatches, newsSocialMatches, engine };
     }
   }
@@ -293,7 +304,11 @@ function setupMessageHandlers(): void {
     const settings = await getSettings();
     const engine = payload.engine ?? settings.correlationEngine;
     const model = payload.model ?? (
-      engine === 'embedding' ? settings.embeddingModel : settings.sentimentModel
+      engine === 'embedding' ? settings.embeddingModel
+      : engine === 'sentiment' ? settings.sentimentModel
+      : engine === 'zeroshot' ? settings.zeroShotModel
+      : engine === 'ner' ? settings.nerModel
+      : settings.embeddingModel
     );
     const requestId = payload.requestId ?? `corr-${Date.now()}`;
 
@@ -522,7 +537,7 @@ async function runCorrelationWithEngine(
   markets: MarketContract[],
   signals: SocialSignal[],
   news: NewsItem[],
-  engine: 'heuristic' | 'embedding' | 'sentiment',
+  engine: 'heuristic' | 'embedding' | 'sentiment' | 'zeroshot' | 'ner',
   model: string,
   requestId?: string,
 ): Promise<CorrelationResult> {
@@ -531,11 +546,11 @@ async function runCorrelationWithEngine(
     `inputs: ${markets.length} markets, ${signals.length} signals, ${news.length} news`,
   );
 
-  if (engine === 'embedding' || engine === 'sentiment') {
+  if (engine === 'embedding' || engine === 'sentiment' || engine === 'zeroshot' || engine === 'ner') {
     try {
       // Progress callback — forwards progress to the dashboard via runtime message
       const onProgress = (info: { phase: string; current: number; total: number; engine: string; model: string }) => {
-        console.log(`[TrendCast] Progress: ${info.phase} ${info.current}/${info.total} (${info.engine}/${info.model})`);
+        console.debug(`[TrendCast] Progress: ${info.phase} ${info.current}/${info.total} (${info.engine}/${info.model})`);
         // Broadcast progress to any listening dashboard/popup tabs
         browser.runtime.sendMessage({
           type: 'CORRELATION_PROGRESS',
@@ -615,7 +630,11 @@ async function runCorrelationPrecompute(
   settings: ExtensionSettings,
 ): Promise<void> {
   const engine = settings.correlationEngine;
-  const model = engine === 'embedding' ? settings.embeddingModel : settings.sentimentModel;
+  const model = engine === 'embedding' ? settings.embeddingModel
+    : engine === 'sentiment' ? settings.sentimentModel
+    : engine === 'zeroshot' ? settings.zeroShotModel
+    : engine === 'ner' ? settings.nerModel
+    : settings.embeddingModel;
   const result = await runCorrelationWithEngine(markets, signals, news, engine, model, `precompute-${Date.now()}`);
 
   await browser.storage.local.set({ [CONFIG.storage.correlations]: result });

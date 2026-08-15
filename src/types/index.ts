@@ -115,7 +115,7 @@ export interface NewsItem {
  * ML models fully client-side. No API keys, no network calls to LLM APIs.
  * The user picks the model and strategy from the popup settings UI.
  */
-export type CorrelationEngine = 'heuristic' | 'embedding' | 'sentiment';
+export type CorrelationEngine = 'heuristic' | 'embedding' | 'sentiment' | 'zeroshot' | 'ner';
 
 /**
  * Available local ML models for the `embedding` strategy.
@@ -135,6 +135,26 @@ export type SentimentModel =
   | 'Xenova/twitter-roberta-base-sentiment-latest'
   | 'Xenova/finbert'
   | 'Xenova/bert-base-multilingual-uncased-sentiment';
+
+/**
+ * Available local ML models for the `zeroshot` strategy (NLI-based zero-shot classification).
+ * These models classify text against arbitrary labels (e.g., contract questions)
+ * without fine-tuning. Uses natural language inference (entailment scoring).
+ * All run in-browser via Transformers.js (ONNX Runtime Web).
+ */
+export type ZeroShotModel =
+  | 'Xenova/distilbert-base-uncased-mnli'
+  | 'Xenova/deberta-v3-base-zeroshot';
+
+/**
+ * Available local ML models for the `ner` strategy (ML-based named entity recognition).
+ * These transformer models replace the regex-based entity extraction in the
+ * heuristic engine with proper token classification (PER, ORG, LOC, MISC).
+ * All run in-browser via Transformers.js (ONNX Runtime Web).
+ */
+export type NERModel =
+  | 'Xenova/bert-base-NER-uncased'
+  | 'Xenova/bert-large-NER-uncased';
 
 /** A matched correlation between a social signal and a market contract. */
 export interface CorrelationMatch {
@@ -366,6 +386,10 @@ export interface ExtensionSettings {
   embeddingModel: EmbeddingModel;
   /** Which sentiment model to use (when engine = 'sentiment'). */
   sentimentModel: SentimentModel;
+  /** Which zero-shot classification model to use (when engine = 'zeroshot'). */
+  zeroShotModel: ZeroShotModel;
+  /** Which NER model to use (when engine = 'ner'). */
+  nerModel: NERModel;
   /**
    * Reddit subreddits to collect from (without the `r/` prefix).
    * Defaults to the finance preset. Users can customise from settings.
@@ -393,5 +417,7 @@ export const DEFAULT_SETTINGS: ExtensionSettings = {
   correlationEngine: 'heuristic',
   embeddingModel: 'Xenova/all-MiniLM-L6-v2',
   sentimentModel: 'Xenova/distilbert-base-uncased-finetuned-sst-2-english',
+  zeroShotModel: 'Xenova/distilbert-base-uncased-mnli',
+  nerModel: 'Xenova/bert-base-NER-uncased',
   redditSubreddits: ['investing', 'stocks', 'wallstreetbets', 'UKInvesting'],
 };

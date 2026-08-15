@@ -30,6 +30,7 @@ import { MarketOdds } from './components/MarketOdds';
 import { CorrelationPanel } from './components/CorrelationPanel';
 import { HistoryChart } from './components/HistoryChart';
 import { Watchlist } from './components/Watchlist';
+import { FAQContent } from './components/FAQContent';
 import { Settings } from '../popup/components/Settings';
 import { useSnapshot } from './hooks/useSnapshot';
 import { useCorrelations } from './hooks/useCorrelations';
@@ -44,7 +45,7 @@ import { downloadExport } from '@/utils/export';
 // Format: "0.1.0+2026-08-14T13:21:00Z" — version + build timestamp.
 const BUILD_VERSION = import.meta.env.BUILD_VERSION ?? 'dev';
 
-type Tab = 'feed' | 'markets' | 'news' | 'correlations' | 'watchlist' | 'history' | 'community' | 'settings';
+type Tab = 'feed' | 'markets' | 'news' | 'correlations' | 'watchlist' | 'history' | 'community' | 'faq' | 'settings';
 
 /** Human-readable label for ML correlation phases. */
 function phaseLabel(phase: string): string {
@@ -59,6 +60,15 @@ function phaseLabel(phase: string): string {
     'classifying-signals': 'Classifying signal sentiment',
     'classifying-news': 'Classifying news sentiment',
     'classifying-news-social': 'Classifying news→social',
+    'zero-shot-signals': 'Zero-shot classifying signals',
+    'zero-shot-news': 'Zero-shot classifying news',
+    'zero-shot-news-social': 'Zero-shot classifying news→social',
+    'ner-extracting-contracts': 'Extracting contract entities',
+    'ner-extracting-signals': 'Extracting signal entities',
+    'ner-extracting-news': 'Extracting news entities',
+    'ner-comparing-signals': 'Comparing signals→markets',
+    'ner-comparing-news': 'Comparing news→markets',
+    'ner-comparing-news-social': 'Comparing news→social',
     'done': 'Done',
   };
   return labels[phase] ?? phase;
@@ -111,7 +121,13 @@ export function App() {
     corrInitRef.current = true;
     // Fire and forget — the hook loads cached results from storage first,
     // and this ensures a fresh computation in the background.
-    runCorrelation(settings.correlationEngine, settings.embeddingModel);
+    const initModel =
+      settings.correlationEngine === 'embedding' ? settings.embeddingModel
+      : settings.correlationEngine === 'sentiment' ? settings.sentimentModel
+      : settings.correlationEngine === 'zeroshot' ? settings.zeroShotModel
+      : settings.correlationEngine === 'ner' ? settings.nerModel
+      : settings.embeddingModel;
+    runCorrelation(settings.correlationEngine, initModel);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [snapshot]);
 
@@ -255,6 +271,7 @@ export function App() {
             ['watchlist', '⭐ Watchlist'],
             ['history', '📊 History'],
             ['community', '💬 Community'],
+            ['faq', '❓ FAQ'],
             ['settings', '⚙️ Settings'],
           ] as [Tab, string][]).map(([tab, label]) => (
             <button
@@ -331,6 +348,8 @@ export function App() {
                       <option value="heuristic">🧮 Heuristic</option>
                       <option value="embedding">🧠 Embedding</option>
                       <option value="sentiment">📊 Sentiment</option>
+                      <option value="zeroshot">🎯 Zero-Shot(Slow)</option>
+                      <option value="ner">🏷️ ML NER(Slow)</option>
                     </select>
 
                     {/* Model selector (shown for ML engines) */}
@@ -384,6 +403,56 @@ export function App() {
                       </select>
                     )}
 
+                    {settings.correlationEngine === 'zeroshot' && (
+                      <select
+                        value={settings.zeroShotModel}
+                        onChange={(e) => {
+                          const model = e.target.value as ExtensionSettings['zeroShotModel'];
+                          setSettings({ ...settings, zeroShotModel: model });
+                          browser.storage.local.set({
+                            [CONFIG.storage.settings]: { ...settings, zeroShotModel: model },
+                          });
+                        }}
+                        className={`text-xs px-2 py-1.5 rounded border ${
+                          isDark
+                            ? 'bg-slate-800 border-slate-700 text-slate-300'
+                            : 'bg-white border-light-border text-light-text'
+                        } focus:outline-none focus:border-brand-400`}
+                        title="Zero-shot model"
+                      >
+                        {CONFIG.ml.zeroShotModels.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.label}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+
+                    {settings.correlationEngine === 'ner' && (
+                      <select
+                        value={settings.nerModel}
+                        onChange={(e) => {
+                          const model = e.target.value as ExtensionSettings['nerModel'];
+                          setSettings({ ...settings, nerModel: model });
+                          browser.storage.local.set({
+                            [CONFIG.storage.settings]: { ...settings, nerModel: model },
+                          });
+                        }}
+                        className={`text-xs px-2 py-1.5 rounded border ${
+                          isDark
+                            ? 'bg-slate-800 border-slate-700 text-slate-300'
+                            : 'bg-white border-light-border text-light-text'
+                        } focus:outline-none focus:border-brand-400`}
+                        title="NER model"
+                      >
+                        {CONFIG.ml.nerModels.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.label}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+
                     {/* Re-analyze / Cancel button */}
                     {corrLoading ? (
                       <button
@@ -403,7 +472,13 @@ export function App() {
                           const model =
                             settings.correlationEngine === 'embedding'
                               ? settings.embeddingModel
-                              : settings.sentimentModel;
+                              : settings.correlationEngine === 'sentiment'
+                              ? settings.sentimentModel
+                              : settings.correlationEngine === 'zeroshot'
+                              ? settings.zeroShotModel
+                              : settings.correlationEngine === 'ner'
+                              ? settings.nerModel
+                              : settings.embeddingModel;
                           runCorrelation(settings.correlationEngine, model);
                         }}
                         className={`text-xs px-3 py-1.5 rounded ${btnSecondary} transition-colors whitespace-nowrap`}
@@ -421,7 +496,7 @@ export function App() {
                   }`}>
                     <div className="flex items-center justify-between mb-2">
                       <span className={`font-medium ${isDark ? 'text-slate-300' : 'text-light-text'}`}>
-                        {corrProgress.engine === 'embedding' ? '🧠 Embedding' : '📊 Sentiment'} · {corrProgress.model}
+                        {corrProgress.engine === 'embedding' ? '🧠 Embedding' : corrProgress.engine === 'sentiment' ? '📊 Sentiment' : corrProgress.engine === 'zeroshot' ? '🎯 Zero-Shot' : '🏷️ NER'} · {corrProgress.model}
                       </span>
                       <span className={`tabular-nums ${isDark ? 'text-slate-400' : 'text-light-muted'}`}>
                         ⏱ {Math.floor(elapsedMs / 1000)}s
@@ -493,7 +568,7 @@ export function App() {
 
                 {!corrError && settings.correlationEngine !== 'heuristic' && (
                   <p className={`text-[10px] mb-3 ${isDark ? 'text-slate-500' : 'text-light-muted'}`}>
-                    ⚠️ ML engine selected — first run downloads the model ({settings.correlationEngine === 'embedding' ? '~23–33 MB' : '~10–120 MB'}) and may take longer. Model is cached for subsequent runs.
+                    ⚠️ ML engine selected — first run downloads the model ({settings.correlationEngine === 'embedding' ? '~23–33 MB' : settings.correlationEngine === 'sentiment' ? '~67–134 MB' : settings.correlationEngine === 'zeroshot' ? '~67–110 MB' : '~110–340 MB'}) and may take longer. Model is cached for subsequent runs.
                   </p>
                 )}
 
@@ -585,6 +660,12 @@ export function App() {
                   🔒 TrendCast is 100% client-side. These links open external sites in a new tab.
                   No data is ever sent to Telegram, GitHub, or any server.
                 </div>
+              </section>
+            )}
+
+            {activeTab === 'faq' && (
+              <section>
+                <FAQContent isDark={isDark} />
               </section>
             )}
 

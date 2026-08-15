@@ -34,6 +34,12 @@ import {
   correlateSentiment,
   correlateNewsSentiment,
   correlateNewsSocialSentiment,
+  correlateZeroShot,
+  correlateNewsZeroShot,
+  correlateNewsSocialZeroShot,
+  correlateNER,
+  correlateNewsNER,
+  correlateNewsSocialNER,
   type ProgressCallback,
   type CancelFlag,
 } from '@/services/engine/ml';
@@ -43,7 +49,7 @@ import {
 interface WorkerRequest {
   type: 'correlate';
   requestId: string;
-  engine: 'embedding' | 'sentiment';
+  engine: 'embedding' | 'sentiment' | 'zeroshot' | 'ner';
   model: string;
   markets: MarketContract[];
   signals: SocialSignal[];
@@ -166,6 +172,16 @@ async function handleCorrelate(msg: WorkerRequest): Promise<void> {
       matches = await correlateSentiment(signals, markets, model as never, onProgress, cancelFlag);
       newsMatches = await correlateNewsSentiment(news, markets, model as never, onProgress, cancelFlag);
       newsSocialMatches = await correlateNewsSocialSentiment(news, signals, model as never, onProgress, cancelFlag);
+    } else if (engine === 'zeroshot') {
+      console.log(`[TrendCast ML Worker] Starting zero-shot correlation: model="${model}"`);
+      matches = await correlateZeroShot(signals, markets, model as never, onProgress, cancelFlag);
+      newsMatches = await correlateNewsZeroShot(news, markets, model as never, onProgress, cancelFlag);
+      newsSocialMatches = await correlateNewsSocialZeroShot(news, signals, model as never, onProgress, cancelFlag);
+    } else if (engine === 'ner') {
+      console.log(`[TrendCast ML Worker] Starting NER correlation: model="${model}"`);
+      matches = await correlateNER(signals, markets, model as never, onProgress, cancelFlag);
+      newsMatches = await correlateNewsNER(news, markets, model as never, onProgress, cancelFlag);
+      newsSocialMatches = await correlateNewsSocialNER(news, signals, model as never, onProgress, cancelFlag);
     }
 
     const result: CorrelationResult = {

@@ -13,6 +13,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { Settings } from './components/Settings';
+import { FAQContent } from '../dashboard/components/FAQContent';
 import { useSettings } from './hooks/useSettings';
 import { useSnapshot } from './hooks/useSnapshot';
 import { browser } from '@/messaging/browser';
@@ -22,7 +23,7 @@ import { CONFIG } from '@/config';
 // Build-time version stamp injected by Vite's define.
 const BUILD_VERSION = import.meta.env.BUILD_VERSION ?? 'dev';
 
-type Tab = 'home' | 'settings';
+type Tab = 'home' | 'faq' | 'settings';
 
 export function App() {
   const [activeTab, setActiveTab] = useState<Tab>('home');
@@ -84,7 +85,7 @@ export function App() {
           <h1 className="text-base font-bold text-brand-400">TrendCast</h1>
         </div>
         <nav className="flex gap-1">
-          {(['home', 'settings'] as Tab[]).map((tab) => (
+          {(['home', 'faq', 'settings'] as Tab[]).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -94,7 +95,7 @@ export function App() {
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              {tab === 'home' ? '🏠 Home' : '⚙️ Settings'}
+              {tab === 'home' ? '🏠 Home' : tab === 'faq' ? '❓ FAQ' : '⚙️ Settings'}
             </button>
           ))}
         </nav>
@@ -190,6 +191,18 @@ export function App() {
               Data is collected hourly using your own browser sessions.
             </p>
           </div>
+        )}
+
+        {activeTab === 'faq' && (
+          <FAQContent compact isDark />
+        )}
+
+        {activeTab === 'faq' && (
+          <FAQContent compact isDark />
+        )}
+
+        {activeTab === 'faq' && (
+          <FAQContent compact isDark />
         )}
 
         {activeTab === 'settings' && (
