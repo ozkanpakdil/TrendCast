@@ -697,8 +697,8 @@ function mergeSignals(existing: SocialSignal[], incoming: SocialSignal[]): Socia
   for (const s of incoming) {
     map.set(s.id, s); // always overwrite signals (newer = more recent)
   }
-  // Keep only the latest 500 signals to prevent unbounded growth.
-  return Array.from(map.values()).slice(-500);
+  // Keep all signals — no cap.
+  return Array.from(map.values());
 }
 
 function mergeNews(existing: NewsItem[], incoming: NewsItem[]): NewsItem[] {
@@ -752,10 +752,9 @@ async function appendHistoryEntry(snapshot: CollectionSnapshot, maxEntries: numb
         volume24h: m.volume24h,
         url: m.url,
       })),
-    // All signals sorted by virality (for detail panel with links, capped at 50)
+    // All signals sorted by virality (for detail panel with links)
     topSignals: [...snapshot.signals]
       .sort((a, b) => b.virality - a.virality)
-      .slice(0, 50)
       .map((s) => ({
         id: s.id,
         platform: s.platform,

@@ -54,25 +54,9 @@ function formatEngagement(signal: SocialSignal): string {
 }
 
 function HypeFeedImpl({ signals, highlightThreshold }: HypeFeedProps) {
-  // Sort by virality descending, take top 50.
-  // Ensure platform diversity: cap each platform at 20 items so no
-  // single platform (e.g. Reddit with saturated virality=100) pushes
-  // out all other platforms (e.g. X trends with virality 40–95).
+  // Sort by virality descending. Keep all posts — no per-platform cap.
   const sorted = useMemo(
-    () => {
-      const byVirality = [...signals].sort((a, b) => b.virality - a.virality);
-      const perPlatform = new Map<string, number>();
-      const result: SocialSignal[] = [];
-      const maxPerPlatform = 20;
-      for (const s of byVirality) {
-        const count = perPlatform.get(s.platform) ?? 0;
-        if (count < maxPerPlatform) {
-          result.push(s);
-          perPlatform.set(s.platform, count + 1);
-        }
-      }
-      return result.slice(0, 50);
-    },
+    () => [...signals].sort((a, b) => b.virality - a.virality),
     [signals],
   );
 
@@ -87,7 +71,7 @@ function HypeFeedImpl({ signals, highlightThreshold }: HypeFeedProps) {
 
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
-      {sorted.filter((signal) => signal.url).map((signal) => {
+      {sorted.map((signal) => {
         const icon = platformIcons[signal.platform] ?? '?';
         const bg = heatColor(signal.sentiment);
         const fg = textColor(signal.sentiment);
