@@ -79,9 +79,9 @@ export function FAQContent({ compact = false, isDark }: FAQContentProps) {
         </ul>
         <h3 className={h3}>Cons</h3>
         <ul className={ul}>
-          <li>Lexical only — "Will Fed cut rates?" won't match "Powell hints at borrowing cost relief."</li>
+          <li>Lexical only — &ldquo;Will Fed cut rates?&rdquo; won&rsquo;t match &ldquo;Powell hints at borrowing cost relief.&rdquo;</li>
           <li>Knowledge base limited — only recognizes curated entities.</li>
-          <li>No semantic understanding — can't distinguish "Apple is rising" from "Apple is falling."</li>
+          <li>No semantic understanding — can&rsquo;t distinguish &ldquo;Apple is rising&rdquo; from &ldquo;Apple is falling.&rdquo;</li>
         </ul>
       </div>
 
@@ -110,7 +110,7 @@ Embedding: MATCH (cosine similarity = 0.78 — semantically very close)`}</CodeB
         <ul className={ul}>
           <li>Semantic matching — catches paraphrases, synonyms, related concepts.</li>
           <li>No knowledge base needed — works on any text.</li>
-          <li>Language-agnostic concepts — "Bitcoin" and "BTC" cluster together.</li>
+          <li>Language-agnostic concepts — &ldquo;Bitcoin&rdquo; and &ldquo;BTC&rdquo; cluster together.</li>
         </ul>
         <h3 className={h3}>Cons</h3>
         <ul className={ul}>
@@ -226,9 +226,9 @@ ML NER:     entities = [
         <h3 className={h3}>Pros</h3>
         <ul className={ul}>
           <li>Catches unknown entities — recognizes persons/orgs not in the knowledge base.</li>
-          <li>Type-aware — knows "Apple" is an ORG vs. a fruit based on context.</li>
+          <li>Type-aware — knows &ldquo;Apple&rdquo; is an ORG vs. a fruit based on context.</li>
           <li>Confidence scores — model-calibrated, more reliable than fixed heuristic values.</li>
-          <li>No maintenance — doesn't need manual knowledge base updates.</li>
+          <li>No maintenance — doesn&rsquo;t need manual knowledge base updates.</li>
         </ul>
         <h3 className={h3}>Cons</h3>
         <ul className={ul}>
@@ -331,7 +331,7 @@ ML NER:     entities = [
       <ul className={ul}>
         <li>First run is slower — model downloads, then cached.</li>
         <li>Smaller models are faster — all-MiniLM-L6-v2 (23 MB) vs. bert-large-NER (340 MB).</li>
-        <li>ML runs in a Web Worker — inference doesn't block the UI.</li>
+        <li>ML runs in a Web Worker — inference doesn&rsquo;t block the UI.</li>
         <li>Embeddings are cached — vectors reused for subsequent comparisons.</li>
         <li>Background worker pre-computes correlations after each hourly collection.</li>
       </ul>
@@ -339,8 +339,8 @@ ML NER:     entities = [
       {/* Why Zero-Shot and ML-NER Are Slow */}
       <h3 className={h3}>Why Zero-Shot and ML-NER Are Slower Than Other Engines</h3>
       <p className={p}>
-        If you've used the Embedding or Sentiment engines and then tried Zero-Shot or ML-NER, you'll
-        notice a significant speed difference. Here's why:
+        If you&rsquo;ve used the Embedding or Sentiment engines and then tried Zero-Shot or ML-NER, you&rsquo;ll
+        notice a significant speed difference. Here&rsquo;s why:
       </p>
 
       <div className={card}>
@@ -369,7 +369,7 @@ Step 2: Compare (no model needed!)
         <h3 className={h3}>🎯 Why Zero-Shot Is Slow</h3>
         <p className={p}>
           Zero-shot classification uses a <strong>Natural Language Inference (NLI)</strong> model.
-          Unlike embeddings, it can't pre-compute a vector and compare later. Instead, it must run
+          Unlike embeddings, it can&rsquo;t pre-compute a vector and compare later. Instead, it must run
           a full model forward pass for <strong>each (text, label) pair</strong>:
         </p>
         <CodeBlock isDark={isDark} compact={compact}>{`For each signal:
@@ -382,18 +382,18 @@ Total model calls = signals × candidate_contracts`}</CodeBlock>
         <p className={p}>
           Even with the keyword pre-filter (which limits candidates to contracts sharing keywords),
           each NLI forward pass on WASM takes <strong>~1–3 seconds</strong>. With 229 signals and
-          even just 3 candidate contracts each, that's <strong>~700 model calls</strong> — roughly
+          even just 3 candidate contracts each, that&rsquo;s <strong>~700 model calls</strong> — roughly
           10–35 minutes on WASM.
         </p>
         <p className={p}>
-          <strong>Why can't we batch all labels in one call?</strong> The NLI pipeline does support
+          <strong>Why can&rsquo;t we batch all labels in one call?</strong> The NLI pipeline does support
           multiple labels per call, but the model processes them sequentially internally. More
           labels = longer inference. We cap at 15 candidate labels per signal to keep each call
           bounded, but the fundamental cost is O(texts × labels).
         </p>
         <p className={p}>
           <strong>Why is WASM slower than native?</strong> The ONNX Runtime Web backend uses
-          WebAssembly, which is 5–20× slower than native CPU inference. There's no GPU acceleration
+          WebAssembly, which is 5–20× slower than native CPU inference. There&rsquo;s no GPU acceleration
           in the browser extension context (no CUDA, no Metal). A model that takes 50ms on a GPU
           can take 1–3 seconds on WASM.
         </p>
@@ -403,7 +403,7 @@ Total model calls = signals × candidate_contracts`}</CodeBlock>
         <h3 className={h3}>🏷️ Why ML-NER Is Slow</h3>
         <p className={p}>
           ML-NER runs a <strong>token classification model</strong> on every single text (contract,
-          signal, news headline). Unlike the heuristic engine's regex (which is instant), the
+          signal, news headline). Unlike the heuristic engine&rsquo;s regex (which is instant), the
           transformer processes each token through multiple attention layers:
         </p>
         <CodeBlock isDark={isDark} compact={compact}>{`For each text:
@@ -472,14 +472,14 @@ Total model calls = contracts + signals + news (same as embedding)`}</CodeBlock>
           <li><strong>Let it run in the background</strong> — the background worker pre-computes after each hourly collection. If you switch to Zero-Shot or ML-NER, the first collection will be slow, but subsequent dashboard loads will use cached results.</li>
           <li><strong>Use Heuristic for quick checks</strong> — get instant results, then switch to Zero-Shot or ML-NER for deeper analysis when you have time to wait.</li>
           <li><strong>Close other tabs</strong> — WASM inference is CPU-bound. Fewer competing tabs = more CPU for the model.</li>
-          <li><strong>Be patient on first run</strong> — the model downloads on first use. After that it's cached, so only the inference time remains.</li>
+          <li><strong>Be patient on first run</strong> — the model downloads on first use. After that it&rsquo;s cached, so only the inference time remains.</li>
         </ul>
       </div>
 
       {/* Troubleshooting */}
       <h2 className={h2}>🛠️ Troubleshooting</h2>
       <div className={card}>
-        <h3 className={h3}>"The ML runtime failed to load"</h3>
+        <h3 className={h3}>&ldquo;The ML runtime failed to load&rdquo;</h3>
         <ul className={ul}>
           <li>Switch to the Heuristic engine (no ML needed).</li>
           <li>Check your network connection (models download from Hugging Face CDN).</li>
@@ -487,7 +487,7 @@ Total model calls = contracts + signals + news (same as embedding)`}</CodeBlock>
         </ul>
       </div>
       <div className={card}>
-        <h3 className={h3}>"Failed to load the ML model"</h3>
+        <h3 className={h3}>&ldquo;Failed to load the ML model&rdquo;</h3>
         <ul className={ul}>
           <li>Check your network connection.</li>
           <li>Disable content blockers that might block huggingface.co.</li>
@@ -496,7 +496,7 @@ Total model calls = contracts + signals + news (same as embedding)`}</CodeBlock>
         </ul>
       </div>
       <div className={card}>
-        <h3 className={h3}>"Correlation is slow"</h3>
+        <h3 className={h3}>&ldquo;Correlation is slow&rdquo;</h3>
         <ul className={ul}>
           <li>Use a smaller model (e.g., all-MiniLM-L6-v2 instead of bert-large-NER).</li>
           <li>Reduce the number of collected items (disable unused data sources).</li>
@@ -504,16 +504,16 @@ Total model calls = contracts + signals + news (same as embedding)`}</CodeBlock>
         </ul>
       </div>
       <div className={card}>
-        <h3 className={h3}>"No matches found"</h3>
+        <h3 className={h3}>&ldquo;No matches found&rdquo;</h3>
         <ul className={ul}>
           <li>Try a different engine — Embedding or Zero-Shot may catch semantic matches.</li>
           <li>Check that data sources are enabled in settings.</li>
-          <li>Run a manual collection first (popup → "Collect Now").</li>
+          <li>Run a manual collection first (popup → &ldquo;Collect Now&rdquo;).</li>
           <li>Lower the highlight threshold in settings.</li>
         </ul>
       </div>
       <div className={card}>
-        <h3 className={h3}>"Sentiment results seem wrong"</h3>
+        <h3 className={h3}>&ldquo;Sentiment results seem wrong&rdquo;</h3>
         <p className={p}>Different sentiment models are tuned for different text types:</p>
         <ul className={ul}>
           <li><strong>General news</strong> → DistilBERT SST-2</li>

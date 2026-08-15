@@ -1012,7 +1012,7 @@ function CorrelationList({
               </span>
             </div>
             <p className="text-sm text-slate-200 line-clamp-1">{item.primary}</p>
-            <p className="text-xs text-slate-400 line-clamp-1 mt-1">"{item.secondary}"</p>
+            <p className="text-xs text-slate-400 line-clamp-1 mt-1">&ldquo;{item.secondary}&rdquo;</p>
             {item.keywords.length > 0 && (
               <div className="flex flex-wrap gap-1 mt-2">
                 {item.keywords.slice(0, 5).map((kw) => (

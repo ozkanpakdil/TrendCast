@@ -180,7 +180,7 @@ async function getTransformers(): Promise<TransformersLib> {
         if (wasmPathOverride) {
           wasmBaseUrl = wasmPathOverride;
         } else {
-          const ext = (globalThis as any).browser ?? (globalThis as any).chrome;
+          const ext = (globalThis as { browser?: { runtime?: { getURL?: (path: string) => string } }; chrome?: { runtime?: { getURL?: (path: string) => string } } }).browser ?? (globalThis as { chrome?: { runtime?: { getURL?: (path: string) => string } } }).chrome;
           if (ext?.runtime?.getURL) {
             wasmBaseUrl = ext.runtime.getURL('wasm/');
           } else {
