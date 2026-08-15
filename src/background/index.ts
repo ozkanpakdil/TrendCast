@@ -437,7 +437,7 @@ async function runCollection(): Promise<CollectionSnapshot> {
   // Social signals
   if (enabled.reddit) {
     tasks.push(
-      collectRedditSignals()
+      collectRedditSignals(settings.redditSubreddits)
         .then((signals) => storeSignals(signals))
         .catch((err) => console.error('[TrendCast] ❌ Reddit failed:', err)),
     );
@@ -670,10 +670,13 @@ async function getLatestSnapshot(): Promise<CollectionSnapshot | null> {
   return (result[CONFIG.storage.latestSnapshot] as CollectionSnapshot) ?? null;
 }
 
-/** Get extension settings (with defaults). */
+/** Get extension settings (merged with defaults for forward-compat). */
 async function getSettings(): Promise<ExtensionSettings> {
   const result = await browser.storage.local.get(CONFIG.storage.settings);
-  return (result[CONFIG.storage.settings] as ExtensionSettings) ?? DEFAULT_SETTINGS;
+  const stored = result[CONFIG.storage.settings] as Partial<ExtensionSettings> | undefined;
+  // Merge with defaults so newly-added fields (e.g. redditSubreddits)
+  // are always present even if the user has older saved settings.
+  return { ...DEFAULT_SETTINGS, ...stored };
 }
 
 // ── Merge helpers (deduplicate by ID, keep newest) ───────────────

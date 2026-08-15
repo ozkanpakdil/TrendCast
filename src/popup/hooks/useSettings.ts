@@ -14,7 +14,10 @@ export function useSettings() {
 
   const load = useCallback(async () => {
     const result = await browser.storage.local.get(CONFIG.storage.settings);
-    setSettings((result[CONFIG.storage.settings] as ExtensionSettings) ?? DEFAULT_SETTINGS);
+    const stored = result[CONFIG.storage.settings] as Partial<ExtensionSettings> | undefined;
+    // Merge with defaults so newly-added fields (e.g. redditSubreddits)
+    // are always present even if the user has older saved settings.
+    setSettings({ ...DEFAULT_SETTINGS, ...stored });
   }, []);
 
   const updateSettings = useCallback(async (partial: Partial<ExtensionSettings>) => {

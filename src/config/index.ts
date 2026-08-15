@@ -47,6 +47,42 @@ export const CONFIG = {
       // Reddit also exposes .json endpoints (no auth needed for public data)
       jsonUrl: 'https://www.reddit.com/r/popular/hot.json?limit=50',
     },
+
+    // ── Reddit subreddit presets ───────────────────────────────
+    // Pre-configured subreddit lists per category. Users can pick a
+    // category from settings or manually add/remove subreddits.
+    // The extension focuses on finance & stock market correlation,
+    // so `finance` is the default category.
+    redditCategories: {
+      finance: {
+        label: '💰 Finance & Stock Market',
+        subreddits: ['investing', 'stocks', 'wallstreetbets', 'UKInvesting'],
+      },
+      crypto: {
+        label: '🪙 Crypto',
+        subreddits: ['CryptoCurrency', 'Bitcoin', 'ethtrader', 'CryptoMarkets'],
+      },
+      economics: {
+        label: '📈 Economics & Macro',
+        subreddits: ['economics', 'EconomicsHub', 'AskEconomics', 'econmonitor'],
+      },
+      sports: {
+        label: '⚽ Sports',
+        subreddits: ['sports', 'nba', 'nfl', 'soccer'],
+      },
+      entertainment: {
+        label: '🎬 Entertainment',
+        subreddits: ['entertainment', 'movies', 'television', 'gaming'],
+      },
+      technology: {
+        label: '💻 Technology',
+        subreddits: ['technology', 'gadgets', 'artificial', 'MachineLearning'],
+      },
+      politics: {
+        label: '🏛️ Politics',
+        subreddits: ['politics', 'worldnews', 'geopolitics', 'PoliticalDiscussion'],
+      },
+    } as const,
     x: {
       // X explore/trending page — content script reads trending topics
       url: 'https://x.com/explore/tabs/trending',

@@ -39,24 +39,49 @@ interface RedditListingResponse {
 /**
  * Collect trending Reddit posts from the public .json endpoint.
  * No authentication required — the browser sends cookies automatically.
+ *
+ * @param subreddits List of subreddit names (without `r/` prefix) to
+ *                   collect from. Defaults to the finance preset from
+ *                   `CONFIG.scrape.redditCategories.finance.subreddits`.
+ * @param perSubreddit How many posts to fetch per subreddit (default 25).
+ *                     Total results ≈ subreddits × perSubreddit.
  */
-export async function collectRedditSignals(limit = 50): Promise<SocialSignal[]> {
-  const url = `${CONFIG.scrape.reddit.jsonUrl}&limit=${limit}`;
+export async function collectRedditSignals(
+  subreddits?: string[],
+  perSubreddit = 25,
+): Promise<SocialSignal[]> {
+  const subs = subreddits?.length
+    ? subreddits
+    : [...CONFIG.scrape.redditCategories.finance.subreddits];
 
-  const data = await conditionalFetchJson<RedditListingResponse>(url);
-  if (data === null) {
-    // 304 Not Modified — no new data.
-    console.log('[TrendCast] Reddit: unchanged (304), skipping');
+  console.log(`[TrendCast] Reddit: collecting from r/${subs.join(', r/')}`);
+
+  // Fetch each subreddit in parallel. Reddit .json endpoints are public.
+  const results = await Promise.allSettled(
+    subs.map(async (sub) => {
+      const cleanSub = sub.replace(/^r\//, '').trim();
+      if (!cleanSub) return [];
+      const url = `https://www.reddit.com/r/${encodeURIComponent(cleanSub)}/hot.json?limit=${perSubreddit}`;
+      const data = await conditionalFetchJson<RedditListingResponse>(url);
+      if (data === null) {
+        console.log(`[TrendCast] Reddit r/${cleanSub}: unchanged (304), skipping`);
+        return [];
+      }
+      return (data?.data?.children ?? [])
+        .map((child) => child.data)
+        .filter((post): post is RedditPost => post != null)
+        .map(normaliseRedditPost);
+    }),
+  );
+
+  const all = results.flatMap((r, i) => {
+    if (r.status === 'fulfilled') return r.value;
+    console.error(`[TrendCast] ❌ Reddit r/${subs[i]} failed:`, r.reason);
     return [];
-  }
+  });
 
-  const results = (data?.data?.children ?? [])
-    .map((child) => child.data)
-    .filter((post): post is RedditPost => post != null)
-    .map(normaliseRedditPost);
-
-  console.log(`[TrendCast] Reddit: ${results.length} items collected`);
-  return results;
+  console.log(`[TrendCast] Reddit: ${all.length} items collected from ${subs.length} subreddits`);
+  return all;
 }
 
 /** Convert a Reddit post into our normalised `SocialSignal`. */

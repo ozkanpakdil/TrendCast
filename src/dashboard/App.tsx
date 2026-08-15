@@ -30,6 +30,7 @@ import { MarketOdds } from './components/MarketOdds';
 import { CorrelationPanel } from './components/CorrelationPanel';
 import { HistoryChart } from './components/HistoryChart';
 import { Watchlist } from './components/Watchlist';
+import { Settings } from '../popup/components/Settings';
 import { useSnapshot } from './hooks/useSnapshot';
 import { useCorrelations } from './hooks/useCorrelations';
 import { DEFAULT_SETTINGS } from '@/types';
@@ -43,7 +44,7 @@ import { downloadExport } from '@/utils/export';
 // Format: "0.1.0+2026-08-14T13:21:00Z" — version + build timestamp.
 const BUILD_VERSION = import.meta.env.BUILD_VERSION ?? 'dev';
 
-type Tab = 'feed' | 'markets' | 'news' | 'correlations' | 'watchlist' | 'history' | 'community';
+type Tab = 'feed' | 'markets' | 'news' | 'correlations' | 'watchlist' | 'history' | 'community' | 'settings';
 
 /** Human-readable label for ML correlation phases. */
 function phaseLabel(phase: string): string {
@@ -74,11 +75,12 @@ export function App() {
   // Load settings + theme
   useEffect(() => {
     browser.storage.local.get(CONFIG.storage.settings).then((result) => {
-      const s = result[CONFIG.storage.settings] as ExtensionSettings | undefined;
-      if (s) {
-        setSettings(s);
-        setTheme(s.theme ?? 'dark');
-      }
+      const s = result[CONFIG.storage.settings] as Partial<ExtensionSettings> | undefined;
+      // Merge with defaults so newly-added fields (e.g. redditSubreddits)
+      // are always present even if the user has older saved settings.
+      const merged = { ...DEFAULT_SETTINGS, ...s };
+      setSettings(merged);
+      setTheme(merged.theme ?? 'dark');
     });
   }, []);
 
@@ -124,6 +126,15 @@ export function App() {
       console.error('[TrendCast] Failed to save theme:', err);
     }
   }, [theme, settings]);
+
+  // Update settings and persist to storage
+  const updateSettings = useCallback((partial: Partial<ExtensionSettings>) => {
+    setSettings((prev) => {
+      const next = { ...prev, ...partial };
+      browser.storage.local.set({ [CONFIG.storage.settings]: next });
+      return next;
+    });
+  }, []);
 
   const handleExport = useCallback(async (format: 'csv' | 'json') => {
     setExporting(true);
@@ -244,6 +255,7 @@ export function App() {
             ['watchlist', '⭐ Watchlist'],
             ['history', '📊 History'],
             ['community', '💬 Community'],
+            ['settings', '⚙️ Settings'],
           ] as [Tab, string][]).map(([tab, label]) => (
             <button
               key={tab}
@@ -572,6 +584,17 @@ export function App() {
                 <div className={`rounded-lg p-4 text-xs text-center ${isDark ? 'bg-slate-900/50 text-slate-500' : 'bg-light-surface/50 text-light-muted'}`}>
                   🔒 TrendCast is 100% client-side. These links open external sites in a new tab.
                   No data is ever sent to Telegram, GitHub, or any server.
+                </div>
+              </section>
+            )}
+
+            {activeTab === 'settings' && (
+              <section className="max-w-2xl mx-auto">
+                <h2 className={`text-sm font-bold uppercase tracking-wider mb-4 ${sectionTitle}`}>
+                  ⚙️ Settings
+                </h2>
+                <div className={`rounded-xl border p-6 ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-light-surface border-light-border'}`}>
+                  <Settings settings={settings} onUpdate={updateSettings} />
                 </div>
               </section>
             )}

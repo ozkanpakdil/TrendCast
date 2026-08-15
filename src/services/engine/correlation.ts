@@ -116,7 +116,7 @@ export function correlate(
   const matches: CorrelationMatch[] = [];
   const cache = new EntityCache();
 
-  console.log(
+  console.debug(
     `[TrendCast] Heuristic correlate: ${signals.length} signals × ${contracts.length} contracts`,
   );
 
@@ -127,7 +127,7 @@ export function correlate(
     }
   }
 
-  console.log(
+  console.debug(
     `[TrendCast] Heuristic correlate: produced ${matches.length} matches`,
   );
 
@@ -168,7 +168,7 @@ function correlatePair(
   const hasEntityMatch = sEntities.some((e) => cEntities.includes(e));
   const threshold = hasEntityMatch ? MIN_CONFIDENCE_ENTITY_MATCH : MIN_CONFIDENCE;
   if (confidence < threshold) {
-    console.log(
+    console.debug(
       `[TrendCast] Heuristic reject: conf=${confidence.toFixed(3)} < threshold=${threshold.toFixed(3)} ` +
       `(entSim=${entSim.toFixed(3)}, kwSim=${kwSim.toFixed(3)}, entityMatch=${hasEntityMatch}) ` +
       `signal="${signal.text.slice(0, 50)}…" contract="${contract.question.slice(0, 50)}…"`,
@@ -181,7 +181,7 @@ function correlatePair(
   const entityKeywords = sEntities.filter((ek) => cEntities.includes(ek));
   const allMatched = [...new Set([...matchedKeywords, ...entityKeywords])];
 
-  console.log(
+  console.debug(
     `[TrendCast] Heuristic match: conf=${confidence.toFixed(3)} keywords=[${allMatched.join(', ')}] ` +
     `signal="${signal.text.slice(0, 50)}…" contract="${contract.question.slice(0, 50)}…"`,
   );

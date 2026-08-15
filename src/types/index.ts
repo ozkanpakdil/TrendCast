@@ -366,6 +366,11 @@ export interface ExtensionSettings {
   embeddingModel: EmbeddingModel;
   /** Which sentiment model to use (when engine = 'sentiment'). */
   sentimentModel: SentimentModel;
+  /**
+   * Reddit subreddits to collect from (without the `r/` prefix).
+   * Defaults to the finance preset. Users can customise from settings.
+   */
+  redditSubreddits: string[];
 }
 
 export const DEFAULT_SETTINGS: ExtensionSettings = {
@@ -388,4 +393,5 @@ export const DEFAULT_SETTINGS: ExtensionSettings = {
   correlationEngine: 'heuristic',
   embeddingModel: 'Xenova/all-MiniLM-L6-v2',
   sentimentModel: 'Xenova/distilbert-base-uncased-finetuned-sst-2-english',
+  redditSubreddits: ['investing', 'stocks', 'wallstreetbets', 'UKInvesting'],
 };
