@@ -23,7 +23,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { injectBrowserMock } from './fixtures';
 
-const DASHBOARD_URL = 'http://localhost:4173/src/dashboard/index.html';
+const DASHBOARD_URL = 'http://127.0.0.1:4173/src/dashboard/index.html';
 
 async function openDashboard(page: Page, overrides: Record<string, unknown> = {}) {
   await injectBrowserMock(page, overrides);

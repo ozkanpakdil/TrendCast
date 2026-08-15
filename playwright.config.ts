@@ -41,8 +41,10 @@ export default defineConfig({
       name: 'chromium',
       use: {
         ...devices['Desktop Chrome'],
-        // Fall back to system Chrome if Playwright's bundled Chromium isn't installed
-        channel: 'chrome',
+        // In CI, use Playwright's bundled Chromium (installed via
+        // `npx playwright install chromium`). Locally, fall back to
+        // system Chrome if the bundled browser isn't available.
+        channel: process.env.CI ? undefined : 'chrome',
       },
     },
   ],
@@ -50,8 +52,8 @@ export default defineConfig({
   // We use a simple static server because Playwright's webServer health
   // check requires http:// (not file://).
   webServer: {
-    command: 'npm run build:debug && npx sirv-cli dist --port 4173 --silent',
-    url: 'http://localhost:4173/src/dashboard/index.html',
+    command: 'npm run build:debug && npx sirv-cli dist --host 127.0.0.1 --port 4173 --silent',
+    url: 'http://127.0.0.1:4173/src/dashboard/index.html',
     reuseExistingServer: true,
     timeout: 120_000,
     cwd: __dirname,

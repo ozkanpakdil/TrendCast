@@ -18,7 +18,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { injectBrowserMock } from './fixtures';
 
-const POPUP_URL = 'http://localhost:4173/src/popup/index.html';
+const POPUP_URL = 'http://127.0.0.1:4173/src/popup/index.html';
 
 async function openPopup(page: Page, overrides: Record<string, unknown> = {}) {
   await injectBrowserMock(page, overrides);

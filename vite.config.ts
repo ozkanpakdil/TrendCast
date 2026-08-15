@@ -60,6 +60,8 @@ export default defineConfig(({ mode }) => {
     test: {
       globals: true,
       environment: 'jsdom',
+      // Exclude Playwright E2E tests from Vitest
+      exclude: ['node_modules', 'dist', 'tests/e2e/**'],
     },
   };
 });
