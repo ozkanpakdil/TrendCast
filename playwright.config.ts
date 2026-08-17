@@ -13,12 +13,12 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
  * inject a mock WebExtension API before each page loads.
  *
  * Prerequisites:
- *   npm run build          # produces dist/ with bundled HTML/JS/CSS
+ *   bun run build          # produces dist/ with bundled HTML/JS/CSS
  *
  * Run:
- *   npx playwright test            # all tests
- *   npx playwright test --headed   # watch in a real browser
- *   npx playwright test --ui       # interactive UI mode
+ *   bunx playwright test            # all tests
+ *   bunx playwright test --headed   # watch in a real browser
+ *   bunx playwright test --ui       # interactive UI mode
  */
 export default defineConfig({
   testDir: './tests/e2e',
@@ -42,7 +42,7 @@ export default defineConfig({
       use: {
         ...devices['Desktop Chrome'],
         // In CI, use Playwright's bundled Chromium (installed via
-        // `npx playwright install chromium`). Locally, fall back to
+        // `bunx playwright install chromium`). Locally, fall back to
         // system Chrome if the bundled browser isn't available.
         channel: process.env.CI ? undefined : 'chrome',
       },
@@ -52,7 +52,7 @@ export default defineConfig({
   // We use a simple static server because Playwright's webServer health
   // check requires http:// (not file://).
   webServer: {
-    command: 'npm run build:debug && npx sirv-cli dist --host 127.0.0.1 --port 4173 --silent',
+    command: 'bun run build:debug && bunx sirv-cli dist --host 127.0.0.1 --port 4173 --silent',
     url: 'http://127.0.0.1:4173/src/dashboard/index.html',
     reuseExistingServer: true,
     timeout: 120_000,

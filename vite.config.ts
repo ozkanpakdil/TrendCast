@@ -44,7 +44,7 @@ export default defineConfig(({ mode }) => {
       // Build-time version stamp so users can verify they're running the latest build.
       // Format: "0.1.0+2026-08-14T13:21:00Z" — version + build timestamp.
       'import.meta.env.BUILD_VERSION': JSON.stringify(
-        `${process.env.npm_package_version ?? '0.0.0'}+${new Date().toISOString()}`,
+        `${process.env.npm_package_version ?? process.env.BUN_PACKAGE_VERSION ?? '0.0.0'}+${new Date().toISOString()}`,
       ),
     },
     server: {
