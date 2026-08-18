@@ -1,0 +1,303 @@
+/**
+ * Transformers.js lazy loader, WASM path configuration, and per-task
+ * pipeline caches.
+ *
+ * We import dynamically so the heavy ONNX runtime is only loaded when
+ * the user actually selects an ML engine. The heuristic engine (default)
+ * never touches this module, keeping the extension lightweight.
+ *
+ * NOTE: We intentionally do NOT import `browser` from '@/messaging/browser'
+ * (webextension-polyfill) here. That polyfill throws at import time when
+ * loaded in a Web Worker (no `chrome`/`browser` global). Instead, we access
+ * the extension API lazily via `globalThis` at the call site, wrapped in a
+ * try/catch. The worker sets `wasmPathOverride` before any pipeline runs,
+ * so `browser.runtime.getURL` is never called in worker context.
+ */
+
+import type {
+  EmbeddingModel,
+  LLMModel,
+  NERModel,
+  SentimentModel,
+  ZeroShotModel,
+} from '@/types';
+
+export type Pipeline = (...args: unknown[]) => Promise<unknown>;
+
+/**
+ * Raw model output from a feature-extraction pipeline.
+ *
+ * Different models return different tensor structures:
+ * - all-MiniLM-L6-v2: { data: number[] } when pooling/normalize are applied
+ * - bge-small-en-v1.5: { data: number[][] } (token-level embeddings) or
+ *   may throw if the built-in pooling option can't find `logits`
+ *
+ * We handle both cases: if the output is already pooled (1D), use it
+ * directly; if it's token-level (2D), mean-pool it ourselves.
+ */
+export type EmbeddingResult = {
+  data: number[] | number[][];
+  logits?: number[] | number[][];
+  last_hidden_state?: number[] | number[][];
+};
+
+export type SentimentResult = Array<{ label: string; score: number }>;
+
+export interface TransformersLib {
+  pipeline: (
+    task: string,
+    model: string,
+    options?: { quantized?: boolean; device?: string; dtype?: string },
+  ) => Promise<Pipeline>;
+  env: {
+    allowLocalModels: boolean;
+    useBrowserCache: boolean;
+    backends: {
+      onnx: {
+        wasm: {
+          wasmPaths: string;
+          numThreads?: number;
+        };
+      };
+    };
+  };
+}
+
+let transformersPromise: Promise<TransformersLib> | null = null;
+
+/**
+ * Override the WASM path from outside. Used when running in a Web Worker
+ * where `browser.runtime.getURL` is not available — the caller can compute
+ * the extension URL via `self.location` or pass it in explicitly.
+ */
+let wasmPathOverride: string | null = null;
+
+export function setWasmPath(path: string): void {
+  wasmPathOverride = path;
+}
+
+export async function getTransformers(): Promise<TransformersLib> {
+  if (!transformersPromise) {
+    console.log('[TrendCast] ML: importing @huggingface/transformers…');
+    transformersPromise = import('@huggingface/transformers').then((mod) => {
+      console.log('[TrendCast] ML: transformers.js loaded, configuring env…');
+      // Configure for browser extension use:
+      // - Don't try to load local .onnx files from disk (we have none).
+      // - Use the browser Cache API for model downloads.
+      mod.env.allowLocalModels = false;
+      mod.env.useBrowserCache = true;
+
+      // CRITICAL: Point ONNX Runtime Web to the WASM files bundled locally
+      // in the extension (public/wasm/). Without this, ORT defaults to
+      // loading from cdn.jsdelivr.net, which is blocked by the extension's
+      // CSP (script-src 'self'). The .mjs and .wasm files are copied to
+      // dist/wasm/ at build time and served from the extension's own origin.
+      //
+      // browser.runtime.getURL returns the full extension URL, e.g.:
+      //   chrome-extension://<id>/wasm/
+      //   moz-extension://<id>/wasm/
+      try {
+        // In a Web Worker, `wasmPathOverride` is set by the worker before
+        // any pipeline is created. In the background script, we fall back
+        // to `browser.runtime.getURL` via the global extension API.
+        //
+        // We use `globalThis` rather than importing webextension-polyfill
+        // because the polyfill throws at import time in worker contexts.
+        let wasmBaseUrl: string;
+        if (wasmPathOverride) {
+          wasmBaseUrl = wasmPathOverride;
+        } else {
+          const ext = (globalThis as { browser?: { runtime?: { getURL?: (path: string) => string } }; chrome?: { runtime?: { getURL?: (path: string) => string } } }).browser ?? (globalThis as { chrome?: { runtime?: { getURL?: (path: string) => string } } }).chrome;
+          if (ext?.runtime?.getURL) {
+            wasmBaseUrl = ext.runtime.getURL('wasm/');
+          } else {
+            throw new Error('No extension runtime available for WASM path');
+          }
+        }
+        if (mod.env.backends?.onnx?.wasm) {
+          mod.env.backends.onnx.wasm.wasmPaths = wasmBaseUrl;
+          // Use multiple threads for faster WASM inference — ORT supports
+          // multi-threaded SIMD when cross-origin isolation is enabled.
+          // Default is 1, which is very slow for LLMs. Try to use all cores.
+          const numThreads = Math.max(1, (navigator?.hardwareConcurrency ?? 4) - 1);
+          mod.env.backends.onnx.wasm.numThreads = numThreads;
+          console.log('[TrendCast] ML: WASM path set to', wasmBaseUrl, '| threads:', numThreads);
+        } else {
+          console.warn('[TrendCast] ML: onnx.wasm backend not found in env');
+        }
+
+        // Detect WebGPU availability — if present, LLMs can run 10-50× faster
+        try {
+          const gpu = (navigator as unknown as { gpu?: unknown }).gpu;
+          if (gpu) {
+            console.log('[TrendCast] ML: ✅ WebGPU detected — LLMs will use GPU acceleration');
+          } else {
+            console.log('[TrendCast] ML: ❌ WebGPU not available — LLMs will use WASM CPU (slow)');
+          }
+        } catch {
+          console.log('[TrendCast] ML: ❌ WebGPU not available — LLMs will use WASM CPU (slow)');
+        }
+      } catch (e) {
+        // In non-extension contexts (tests), browser.runtime may not exist.
+        // ORT will fall back to its default CDN path, which is fine for tests.
+        console.warn('[TrendCast] ML: could not set WASM path (non-extension context?):', e);
+      }
+
+      console.log('[TrendCast] ML: transformers.js ready');
+      return mod as unknown as TransformersLib;
+    }).catch((err) => {
+      console.error('[TrendCast] ML: failed to import @huggingface/transformers:', err);
+      transformersPromise = null; // allow retry on next call
+      throw err;
+    });
+  }
+  return transformersPromise;
+}
+
+// ── Model cache ──────────────────────────────────────────────────
+
+const pipelineCache = new Map<string, Promise<Pipeline>>();
+
+export async function getEmbeddingPipeline(model: EmbeddingModel): Promise<Pipeline> {
+  let pipeline = pipelineCache.get(model);
+  if (!pipeline) {
+    console.log(`[TrendCast] ML: creating embedding pipeline for "${model}"…`);
+    const lib = await getTransformers();
+    pipeline = lib.pipeline('feature-extraction', model, { quantized: true }).then((p) => {
+      console.log(`[TrendCast] ML: embedding pipeline "${model}" ready`);
+      return p;
+    }).catch((err) => {
+      console.error(`[TrendCast] ML: embedding pipeline "${model}" failed:`, err);
+      pipelineCache.delete(model);
+      throw err;
+    });
+    pipelineCache.set(model, pipeline);
+  }
+  return pipeline;
+}
+
+export async function getSentimentPipeline(model: SentimentModel): Promise<Pipeline> {
+  let pipeline = pipelineCache.get(model);
+  if (!pipeline) {
+    console.log(`[TrendCast] ML: creating sentiment pipeline for "${model}"…`);
+    const lib = await getTransformers();
+    pipeline = lib.pipeline('text-classification', model, { quantized: true }).then((p) => {
+      console.log(`[TrendCast] ML: sentiment pipeline "${model}" ready`);
+      return p;
+    }).catch((err) => {
+      console.error(`[TrendCast] ML: sentiment pipeline "${model}" failed:`, err);
+      pipelineCache.delete(model);
+      throw err;
+    });
+    pipelineCache.set(model, pipeline);
+  }
+  return pipeline;
+}
+
+// ── Zero-shot classification pipeline ──────────────────────────────
+// Uses a NLI (natural language inference) model to classify text against
+// arbitrary labels (e.g., contract questions). The model scores how well
+// the text entails each label.
+
+export async function getZeroShotPipeline(model: ZeroShotModel): Promise<Pipeline> {
+  let pipeline = pipelineCache.get(model);
+  if (!pipeline) {
+    console.log(`[TrendCast] ML: creating zero-shot pipeline for "${model}"…`);
+    const lib = await getTransformers();
+    pipeline = lib.pipeline('zero-shot-classification', model, { quantized: true }).then((p) => {
+      console.log(`[TrendCast] ML: zero-shot pipeline "${model}" ready`);
+      return p;
+    }).catch((err) => {
+      console.error(`[TrendCast] ML: zero-shot pipeline "${model}" failed:`, err);
+      pipelineCache.delete(model);
+      throw err;
+    });
+    pipelineCache.set(model, pipeline);
+  }
+  return pipeline;
+}
+
+// ── NER (token classification) pipeline ─────────────────────────────
+// Uses a transformer NER model to extract named entities (PER, ORG, LOC, MISC)
+// from text. Replaces the regex-based entity extraction in the heuristic engine.
+
+export async function getNERPipeline(model: NERModel): Promise<Pipeline> {
+  let pipeline = pipelineCache.get(model);
+  if (!pipeline) {
+    console.log(`[TrendCast] ML: creating NER pipeline for "${model}"…`);
+    const lib = await getTransformers();
+    pipeline = lib.pipeline('token-classification', model, { quantized: true }).then((p) => {
+      console.log(`[TrendCast] ML: NER pipeline "${model}" ready`);
+      return p;
+    }).catch((err) => {
+      console.error(`[TrendCast] ML: NER pipeline "${model}" failed:`, err);
+      pipelineCache.delete(model);
+      throw err;
+    });
+    pipelineCache.set(model, pipeline);
+  }
+  return pipeline;
+}
+
+// ── LLM (text-generation) pipeline ────────────────────────────────
+// Uses a small instruction-tuned LLM to perform correlation assessment
+// by prompting the model with the signal/news text and contract question.
+// The LLM generates a structured response with a confidence score.
+//
+// ⚠️ LLM models are much larger than other ML models (270 MB – 1.5 GB).
+// On CPU (WASM) they are very slow. WebGPU is strongly recommended.
+
+export async function getLLMPipeline(model: LLMModel): Promise<Pipeline> {
+  let pipeline = pipelineCache.get(model);
+  if (!pipeline) {
+    console.log(`[TrendCast] ML: creating LLM text-generation pipeline for "${model}"…`);
+    const lib = await getTransformers();
+
+    // Detect WebGPU — if available, use GPU for 10-50× faster LLM inference.
+    // Falls back to WASM CPU if WebGPU is not available or fails.
+    let device: string | undefined;
+    let dtype: string | undefined;
+    try {
+      const gpu = (navigator as unknown as { gpu?: unknown }).gpu;
+      if (gpu) {
+        device = 'webgpu';
+        dtype = 'fp32'; // WebGPU works best with fp32 for small models
+        console.log(`[TrendCast] ML: 🚀 LLM pipeline will use WebGPU (device=webgpu, dtype=fp32)`);
+      } else {
+        console.log(`[TrendCast] ML: 🐢 LLM pipeline will use WASM CPU (no WebGPU)`);
+      }
+    } catch {
+      console.log(`[TrendCast] ML: 🐢 LLM pipeline will use WASM CPU (WebGPU check failed)`);
+    }
+
+    const pipelineOptions: { quantized: boolean; device?: string; dtype?: string } = {
+      quantized: true, // q4 quantization for smaller download + faster inference
+    };
+    if (device) pipelineOptions.device = device;
+    if (dtype) pipelineOptions.dtype = dtype;
+
+    pipeline = lib.pipeline('text-generation', model, pipelineOptions).then((p) => {
+      console.log(`[TrendCast] ML: LLM pipeline "${model}" ready on ${device ?? 'wasm-cpu'}`);
+      return p;
+    }).catch((err) => {
+      // If WebGPU failed, retry with WASM CPU
+      if (device) {
+        console.warn(`[TrendCast] ML: LLM WebGPU failed for "${model}":`, err);
+        console.log(`[TrendCast] ML: Retrying LLM pipeline with WASM CPU…`);
+        return lib.pipeline('text-generation', model, { quantized: true }).then((p) => {
+          console.log(`[TrendCast] ML: LLM pipeline "${model}" ready on wasm-cpu (fallback)`);
+          return p;
+        }).catch((err2) => {
+          console.error(`[TrendCast] ML: LLM pipeline "${model}" failed on all backends:`, err2);
+          pipelineCache.delete(model);
+          throw err2;
+        });
+      }
+      console.error(`[TrendCast] ML: LLM pipeline "${model}" failed:`, err);
+      pipelineCache.delete(model);
+      throw err;
+    });
+    pipelineCache.set(model, pipeline);
+  }
+  return pipeline;
+}
