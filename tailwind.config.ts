@@ -6,7 +6,7 @@ export default {
   theme: {
     extend: {
       colors: {
-        // HypeMarket brand palette
+        // TrendCast brand palette
         brand: {
           50: '#eef6ff',
           100: '#d9eaff',

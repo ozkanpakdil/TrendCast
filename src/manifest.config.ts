@@ -213,10 +213,27 @@ export default defineManifest({
 
   // ── Cross-browser metadata ─────────────────────────────────────
   // Firefox-specific: https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/manifest.json/browser_specific_settings
+  //
+  // ⚠️ Required by AMO since Nov 3, 2025: `data_collection_permissions`.
+  //    Firefox's built-in data-collection consent system. The extension
+  //    must declare what user data it collects/transmits outside the
+  //    add-on or local browser.
+  //
+  //    TrendCast is 100% client-side: it scrapes DOM via the user's own
+  //    browser sessions and stores everything locally in `browser.storage`.
+  //    No user data is ever transmitted to a backend server. The only
+  //    network requests are for public resources (Hugging Face model
+  //    weights, RSS feeds via rss2json.com) — no user data is sent.
+  //    Therefore we declare `"required": ["none"]`.
+  //
+  //    See: https://extensionworkshop.com/documentation/develop/firefox-builtin-data-consent/
   browser_specific_settings: {
     gecko: {
       id: 'trendcast@trendcast.dev',
       strict_min_version: '121.0',
+      data_collection_permissions: {
+        required: ['none'],
+      },
     },
   },
 });

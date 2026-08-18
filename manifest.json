@@ -1,11 +1,11 @@
 {
   "manifest_version": 3,
-  "name": "HypeMarket — Social Sentiment × Prediction Markets",
+  "name": "TrendCast Monitoring Markets",
   "description": "Track social sentiment across X, Reddit, TikTok, BBC, CNN and correlate it in real-time with Polymarket and Kalshi prediction market odds. 100% client-side — uses your own browser sessions, no API keys.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "action": {
     "default_popup": "src/popup/index.html",
-    "default_title": "HypeMarket — Sentiment × Markets",
+    "default_title": "TrendCast — Sentiment × Markets",
     "default_icon": {
       "16": "icons/icon-16.png",
       "32": "icons/icon-32.png",
@@ -90,8 +90,11 @@
   },
   "browser_specific_settings": {
     "gecko": {
-      "id": "hypemarket@trendcast.dev",
-      "strict_min_version": "121.0"
+      "id": "trendcast@trendcast.dev",
+      "strict_min_version": "121.0",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
     }
   }
 }

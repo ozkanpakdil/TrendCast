@@ -1,7 +1,7 @@
 {
   "name": "trendcast",
-  "displayName": "TrendCast — Social Sentiment × Prediction Markets",
-  "version": "0.1.0",
+  "displayName": "TrendCast Monitoring Markets",
+  "version": "0.1.1",
   "description": "Track social sentiment across X, Reddit, and TikTok and correlate it in real-time with Polymarket and Kalshi prediction market odds.",
   "license": "MIT",
   "type": "module",
@@ -25,7 +25,9 @@
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:report": "playwright show-report",
     "typecheck": "tsc --noEmit",
-    "zip": "cd dist && zip -r ../trendcast-v$(bun -p \"require('../package.json').version\").zip ."
+    "zip": "cd dist && zip -r ../trendcast-v$(bun -p \"require('../package.json').version\").zip .",
+    "zip:chrome": "cd dist && zip -r ../trendcast-chrome-v$(bun -p \"require('../package.json').version\").zip .",
+    "zip:firefox": "cd dist && zip -r ../trendcast-firefox-v$(bun -p \"require('../package.json').version\").xpi ."
   },
   "dependencies": {
     "@huggingface/transformers": "^3.7.5",
