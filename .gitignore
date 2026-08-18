@@ -26,3 +26,5 @@ npm-debug.log*
 # Secrets — NEVER commit API keys
 secrets.json
 ./test-results/
+*.log
+*.xpi
