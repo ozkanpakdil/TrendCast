@@ -54,6 +54,7 @@ export function Settings({ settings, onUpdate }: SettingsProps) {
               ['sentiment', '📊 Sentiment (transformer classifier)', 'Sentiment-aware matching'],
               ['zeroshot', '🎯 Zero-Shot (NLI classification)', 'Most flexible matching'],
               ['ner', '🏷️ ML NER (transformer entity extraction)', 'Best entity extraction'],
+              ['llm', '🤖 LLM (text generation)', 'LLM-based correlation'],
             ] as [CorrelationEngine, string, string][]
           ).map(([engine, label, desc]) => (
             <label
@@ -151,6 +152,26 @@ export function Settings({ settings, onUpdate }: SettingsProps) {
               className="w-full px-2 py-1 text-xs bg-slate-800 border border-slate-700 rounded focus:outline-none focus:border-brand-400"
             >
               {CONFIG.ml.nerModels.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* LLM model selector */}
+        {settings.correlationEngine === 'llm' && (
+          <div className="mt-2 pl-4 border-l-2 border-brand-400/30">
+            <span className="text-[10px] text-slate-500 block mb-1">LLM model:</span>
+            <select
+              value={settings.llmModel}
+              onChange={(e) =>
+                onUpdate({ llmModel: e.target.value as ExtensionSettings['llmModel'] })
+              }
+              className="w-full px-2 py-1 text-xs bg-slate-800 border border-slate-700 rounded focus:outline-none focus:border-brand-400"
+            >
+              {CONFIG.ml.llmModels.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.label}
                 </option>

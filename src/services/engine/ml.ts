@@ -25,6 +25,7 @@
 import type {
   CorrelationMatch,
   EmbeddingModel,
+  LLMModel,
   MarketContract,
   NERModel,
   NewsCorrelationMatch,
@@ -67,13 +68,16 @@ export type CorrelationPhase =
   | 'ner-comparing-signals'
   | 'ner-comparing-news'
   | 'ner-comparing-news-social'
+  | 'llm-generating-signals'
+  | 'llm-generating-news'
+  | 'llm-generating-news-social'
   | 'done';
 
 export interface ProgressInfo {
   phase: CorrelationPhase;
   current: number;
   total: number;
-  engine: 'embedding' | 'sentiment' | 'zeroshot' | 'ner';
+  engine: 'embedding' | 'sentiment' | 'zeroshot' | 'ner' | 'llm';
   model: string;
 }
 
@@ -121,7 +125,7 @@ interface TransformersLib {
   pipeline: (
     task: string,
     model: string,
-    options?: { quantized?: boolean },
+    options?: { quantized?: boolean; device?: string; dtype?: string },
   ) => Promise<Pipeline>;
   env: {
     allowLocalModels: boolean;
@@ -130,6 +134,7 @@ interface TransformersLib {
       onnx: {
         wasm: {
           wasmPaths: string;
+          numThreads?: number;
         };
       };
     };
@@ -189,9 +194,26 @@ async function getTransformers(): Promise<TransformersLib> {
         }
         if (mod.env.backends?.onnx?.wasm) {
           mod.env.backends.onnx.wasm.wasmPaths = wasmBaseUrl;
-          console.log('[TrendCast] ML: WASM path set to', wasmBaseUrl);
+          // Use multiple threads for faster WASM inference — ORT supports
+          // multi-threaded SIMD when cross-origin isolation is enabled.
+          // Default is 1, which is very slow for LLMs. Try to use all cores.
+          const numThreads = Math.max(1, (navigator?.hardwareConcurrency ?? 4) - 1);
+          mod.env.backends.onnx.wasm.numThreads = numThreads;
+          console.log('[TrendCast] ML: WASM path set to', wasmBaseUrl, '| threads:', numThreads);
         } else {
           console.warn('[TrendCast] ML: onnx.wasm backend not found in env');
+        }
+
+        // Detect WebGPU availability — if present, LLMs can run 10-50× faster
+        try {
+          const gpu = (navigator as unknown as { gpu?: unknown }).gpu;
+          if (gpu) {
+            console.log('[TrendCast] ML: ✅ WebGPU detected — LLMs will use GPU acceleration');
+          } else {
+            console.log('[TrendCast] ML: ❌ WebGPU not available — LLMs will use WASM CPU (slow)');
+          }
+        } catch {
+          console.log('[TrendCast] ML: ❌ WebGPU not available — LLMs will use WASM CPU (slow)');
         }
       } catch (e) {
         // In non-extension contexts (tests), browser.runtime may not exist.
@@ -287,6 +309,69 @@ async function getNERPipeline(model: NERModel): Promise<Pipeline> {
       return p;
     }).catch((err) => {
       console.error(`[TrendCast] ML: NER pipeline "${model}" failed:`, err);
+      pipelineCache.delete(model);
+      throw err;
+    });
+    pipelineCache.set(model, pipeline);
+  }
+  return pipeline;
+}
+
+// ── LLM (text-generation) pipeline ────────────────────────────────
+// Uses a small instruction-tuned LLM to perform correlation assessment
+// by prompting the model with the signal/news text and contract question.
+// The LLM generates a structured response with a confidence score.
+//
+// ⚠️ LLM models are much larger than other ML models (270 MB – 1.5 GB).
+// On CPU (WASM) they are very slow. WebGPU is strongly recommended.
+
+async function getLLMPipeline(model: LLMModel): Promise<Pipeline> {
+  let pipeline = pipelineCache.get(model);
+  if (!pipeline) {
+    console.log(`[TrendCast] ML: creating LLM text-generation pipeline for "${model}"…`);
+    const lib = await getTransformers();
+
+    // Detect WebGPU — if available, use GPU for 10-50× faster LLM inference.
+    // Falls back to WASM CPU if WebGPU is not available or fails.
+    let device: string | undefined;
+    let dtype: string | undefined;
+    try {
+      const gpu = (navigator as unknown as { gpu?: unknown }).gpu;
+      if (gpu) {
+        device = 'webgpu';
+        dtype = 'fp32'; // WebGPU works best with fp32 for small models
+        console.log(`[TrendCast] ML: 🚀 LLM pipeline will use WebGPU (device=webgpu, dtype=fp32)`);
+      } else {
+        console.log(`[TrendCast] ML: 🐢 LLM pipeline will use WASM CPU (no WebGPU)`);
+      }
+    } catch {
+      console.log(`[TrendCast] ML: 🐢 LLM pipeline will use WASM CPU (WebGPU check failed)`);
+    }
+
+    const pipelineOptions: { quantized: boolean; device?: string; dtype?: string } = {
+      quantized: true, // q4 quantization for smaller download + faster inference
+    };
+    if (device) pipelineOptions.device = device;
+    if (dtype) pipelineOptions.dtype = dtype;
+
+    pipeline = lib.pipeline('text-generation', model, pipelineOptions).then((p) => {
+      console.log(`[TrendCast] ML: LLM pipeline "${model}" ready on ${device ?? 'wasm-cpu'}`);
+      return p;
+    }).catch((err) => {
+      // If WebGPU failed, retry with WASM CPU
+      if (device) {
+        console.warn(`[TrendCast] ML: LLM WebGPU failed for "${model}":`, err);
+        console.log(`[TrendCast] ML: Retrying LLM pipeline with WASM CPU…`);
+        return lib.pipeline('text-generation', model, { quantized: true }).then((p) => {
+          console.log(`[TrendCast] ML: LLM pipeline "${model}" ready on wasm-cpu (fallback)`);
+          return p;
+        }).catch((err2) => {
+          console.error(`[TrendCast] ML: LLM pipeline "${model}" failed on all backends:`, err2);
+          pipelineCache.delete(model);
+          throw err2;
+        });
+      }
+      console.error(`[TrendCast] ML: LLM pipeline "${model}" failed:`, err);
       pipelineCache.delete(model);
       throw err;
     });
@@ -1346,12 +1431,320 @@ export async function correlateNewsSocialNER(
   return matches.sort((a, b) => b.confidence - a.confidence);
 }
 
+// ── LLM-Based Correlation Engine ─────────────────────────────────
+//
+// Uses a small instruction-tuned LLM (e.g., SmolLM2, Qwen2.5) to perform
+// correlation assessment. The LLM is prompted with the signal/news text
+// and the contract question, and asked to return a confidence score
+// (0–100) indicating how related the two are.
+//
+// This is the most flexible engine — the LLM can reason about nuance,
+// sarcasm, and context that embedding/keyword approaches miss. But it's
+// also the slowest, especially on CPU (WASM). WebGPU is strongly
+// recommended for acceptable performance.
+//
+// We use keyword overlap as a pre-filter (same as zero-shot) to avoid
+// running the LLM on all signal × contract pairs.
+
+/** Minimum LLM confidence score (0–1) for a match. */
+const LLM_THRESHOLD = 0.40;
+
+/**
+ * Maximum tokens for LLM generation.
+ * Per-signal mode: we ask for one score (0-100) per candidate question.
+ * With up to 5 candidates → 5 numbers → ~20 tokens. Keep it tight.
+ */
+const LLM_MAX_NEW_TOKENS = 20;
+
+/**
+ * Maximum candidate contracts per signal for LLM scoring.
+ * LLM forward passes are extremely expensive on WASM CPU (2-10s each),
+ * so we cap this much lower than zero-shot (15) to keep runtime reasonable.
+ */
+const LLM_MAX_CANDIDATES = 5;
+
+/**
+ * LLM text-generation result from the pipeline.
+ * The pipeline returns an array with generated_text.
+ */
+interface LLMResult {
+  generated_text: Array<{ role: string; content: string }> | string;
+}
+
+/**
+ * Ask the LLM to score ONE signal text against its candidate questions.
+ * Per-signal approach: each LLM call handles a single signal with up to
+ * LLM_MAX_CANDIDATES questions. The small input (~200 tokens) and tiny
+ * output (~5 numbers = ~20 tokens) keeps each forward pass fast (~1s on GPU).
+ *
+ * This is dramatically faster than mega-batching because LLM inference time
+ * scales with (input_tokens × output_tokens) — autoregressive generation
+ * is sequential, so 200 output tokens = 200 forward passes, each processing
+ * the full input + KV cache. Small input + small output = fast.
+ */
+async function llmScoreSignal(
+  text: string,
+  questions: string[],
+  model: LLMModel,
+): Promise<number[]> {
+  const pipeline = await getLLMPipeline(model);
+  if (questions.length === 0) return [];
+
+  const truncatedText = text.slice(0, 200);
+  const questionList = questions
+    .map((q, i) => `${i + 1}. ${q.slice(0, 120)}`)
+    .join('\n');
+
+  const messages = [
+    {
+      role: 'system',
+      content:
+        'You are a financial correlation analyst. Rate how related the Text is to each Question on 0-100. Output ONLY numbers, one per line.',
+    },
+    {
+      role: 'user',
+      content: `Text: "${truncatedText}"\n\nQuestions:\n${questionList}\n\nScores:`,
+    },
+  ];
+
+  try {
+    const t0 = performance.now();
+    const output = (await pipeline(messages, {
+      max_new_tokens: LLM_MAX_NEW_TOKENS,
+      do_sample: false,
+      temperature: 0.1,
+    })) as LLMResult[];
+    const elapsed = performance.now() - t0;
+
+    let generated = '';
+    if (Array.isArray(output) && output.length > 0) {
+      const gen = output[0].generated_text;
+      if (Array.isArray(gen)) {
+        const assistantMsg = gen.filter((m) => m.role === 'assistant').pop();
+        generated = assistantMsg?.content ?? '';
+      } else {
+        generated = String(gen);
+      }
+    }
+
+    // DeepSeek R1 reasoning models wrap their answer in think tags.
+    const thinkMatch = generated.match(/<\/think>\s*(.*)/s);
+    if (thinkMatch) {
+      generated = thinkMatch[1].trim();
+    }
+
+    const numbers = generated.match(/\d+/g);
+    if (numbers) {
+      const scores = numbers.slice(0, questions.length).map((n) => {
+        const score = parseInt(n, 10);
+        return Math.min(100, Math.max(0, score)) / 100;
+      });
+      console.log(
+        `[TrendCast] ML: LLM per-signal ✅ ${elapsed.toFixed(0)}ms | ${questions.length} candidates | scores=[${scores.map((s) => s.toFixed(2)).join(', ')}]`,
+      );
+      return scores;
+    } else {
+      console.warn(
+        `[TrendCast] ML: LLM per-signal ⚠️ ${elapsed.toFixed(0)}ms | no numbers parsed | raw="${generated.slice(0, 80)}"`,
+      );
+      return questions.map(() => 0);
+    }
+  } catch (err) {
+    console.warn('[TrendCast] ML: LLM per-signal scoring failed:', err);
+    return questions.map(() => 0);
+  }
+}
+
+/**
+ * Correlate social signals against market contracts using an LLM.
+ * Uses keyword overlap as a pre-filter, then scores each signal's candidates
+ * in a single LLM call (one signal → up to 5 questions → 5 scores per call).
+ */
+export async function correlateLLM(
+  signals: SocialSignal[],
+  contracts: MarketContract[],
+  model: LLMModel,
+  onProgress?: ProgressCallback,
+  cancelFlag?: CancelFlag,
+): Promise<CorrelationMatch[]> {
+  const matches: CorrelationMatch[] = [];
+  const llmStart = performance.now();
+
+  console.log(`[TrendCast] ML: LLM correlateLLM started — ${signals.length} signals, ${contracts.length} contracts, model="${model}"`);
+
+  let llmCalls = 0;
+  for (let i = 0; i < signals.length; i++) {
+    checkCancelled(cancelFlag);
+
+    const candidates = contracts
+      .filter((c) => c.keywords.some((k) => signals[i].keywords.includes(k)))
+      .slice(0, LLM_MAX_CANDIDATES);
+    if (candidates.length === 0) continue;
+
+    llmCalls++;
+    const questions = candidates.map((c) => c.question);
+    const scores = await llmScoreSignal(signals[i].text, questions, model);
+
+    for (let j = 0; j < candidates.length && j < scores.length; j++) {
+      const llmScore = scores[j];
+      if (llmScore < LLM_THRESHOLD) continue;
+
+      const viralityWeight = (signals[i].virality / 100) * 0.1;
+      const confidence = Math.min(1, llmScore + viralityWeight);
+
+      matches.push({
+        contract: candidates[j],
+        signal: signals[i],
+        confidence,
+        matchedKeywords: signals[i].keywords.filter((k) =>
+          candidates[j].keywords.includes(k),
+        ),
+        correlatedAt: Date.now(),
+      });
+    }
+
+    if (llmCalls % 10 === 0 || i === signals.length - 1) {
+      const totalElapsed = ((performance.now() - llmStart) / 1000).toFixed(1);
+      const avgPerCall = ((performance.now() - llmStart) / llmCalls / 1000).toFixed(1);
+      console.log(`[TrendCast] ML: LLM per-signal ${llmCalls} calls — signal ${i + 1}/${signals.length}, ${matches.length} matches | ${totalElapsed}s total, ${avgPerCall}s/call avg`);
+    }
+    onProgress?.({
+      phase: 'llm-generating-signals',
+      current: i + 1,
+      total: signals.length,
+      engine: 'llm',
+      model,
+    });
+  }
+
+  const totalElapsed = ((performance.now() - llmStart) / 1000).toFixed(1);
+  console.log(`[TrendCast] ML: LLM correlateLLM done — ${llmCalls} LLM calls (per-signal), ${matches.length} matches, ${totalElapsed}s total`);
+  return matches.sort((a, b) => b.confidence - a.confidence);
+}
+
+/**
+ * Correlate news headlines against market contracts using an LLM.
+ * Scores each news item's candidate contracts in a single LLM call.
+ */
+export async function correlateNewsLLM(
+  news: NewsItem[],
+  contracts: MarketContract[],
+  model: LLMModel,
+  onProgress?: ProgressCallback,
+  cancelFlag?: CancelFlag,
+): Promise<NewsCorrelationMatch[]> {
+  const matches: NewsCorrelationMatch[] = [];
+  const llmStart = performance.now();
+
+  console.log(`[TrendCast] ML: LLM correlateNewsLLM started — ${news.length} news, ${contracts.length} contracts, model="${model}"`);
+
+  let llmCalls = 0;
+  for (let i = 0; i < news.length; i++) {
+    checkCancelled(cancelFlag);
+
+    const candidates = contracts
+      .filter((c) => c.keywords.some((k) => news[i].keywords.includes(k)))
+      .slice(0, LLM_MAX_CANDIDATES);
+    if (candidates.length === 0) continue;
+
+    llmCalls++;
+    const questions = candidates.map((c) => c.question);
+    const scores = await llmScoreSignal(news[i].headline, questions, model);
+
+    for (let j = 0; j < candidates.length && j < scores.length; j++) {
+      const llmScore = scores[j];
+      if (llmScore < LLM_THRESHOLD) continue;
+
+      matches.push({
+        contract: candidates[j],
+        news: news[i],
+        confidence: Math.min(1, llmScore + 0.05),
+        matchedKeywords: news[i].keywords.filter((k) =>
+          candidates[j].keywords.includes(k),
+        ),
+        correlatedAt: Date.now(),
+      });
+    }
+
+    if (llmCalls % 10 === 0 || i === news.length - 1) {
+      const totalElapsed = ((performance.now() - llmStart) / 1000).toFixed(1);
+      const avgPerCall = ((performance.now() - llmStart) / llmCalls / 1000).toFixed(1);
+      console.log(`[TrendCast] ML: LLM news per-signal ${llmCalls} calls — news ${i + 1}/${news.length}, ${matches.length} matches | ${totalElapsed}s total, ${avgPerCall}s/call avg`);
+    }
+    onProgress?.({ phase: 'llm-generating-news', current: i + 1, total: news.length, engine: 'llm', model });
+  }
+
+  const totalElapsed = ((performance.now() - llmStart) / 1000).toFixed(1);
+  console.log(`[TrendCast] ML: LLM correlateNewsLLM done — ${llmCalls} LLM calls (per-signal), ${matches.length} matches, ${totalElapsed}s total`);
+  return matches.sort((a, b) => b.confidence - a.confidence);
+}
+
+/**
+ * Correlate news headlines against social signals using an LLM.
+ * Scores each signal's candidate news items in a single LLM call.
+ */
+export async function correlateNewsSocialLLM(
+  news: NewsItem[],
+  signals: SocialSignal[],
+  model: LLMModel,
+  onProgress?: ProgressCallback,
+  cancelFlag?: CancelFlag,
+): Promise<NewsSocialCorrelationMatch[]> {
+  const matches: NewsSocialCorrelationMatch[] = [];
+  const llmStart = performance.now();
+
+  console.log(`[TrendCast] ML: LLM correlateNewsSocialLLM started — ${signals.length} signals, ${news.length} news, model="${model}"`);
+
+  let llmCalls = 0;
+  for (let i = 0; i < signals.length; i++) {
+    checkCancelled(cancelFlag);
+
+    const candidateNews = news
+      .filter((n) => n.keywords.some((k) => signals[i].keywords.includes(k)))
+      .slice(0, LLM_MAX_CANDIDATES);
+    if (candidateNews.length === 0) continue;
+
+    llmCalls++;
+    const questions = candidateNews.map((n) => n.headline);
+    const scores = await llmScoreSignal(signals[i].text, questions, model);
+
+    for (let j = 0; j < candidateNews.length && j < scores.length; j++) {
+      const llmScore = scores[j];
+      if (llmScore < LLM_THRESHOLD) continue;
+
+      const viralityWeight = (signals[i].virality / 100) * 0.1;
+      const confidence = Math.min(1, llmScore + viralityWeight);
+
+      matches.push({
+        news: candidateNews[j],
+        signal: signals[i],
+        confidence,
+        matchedKeywords: candidateNews[j].keywords.filter((k) =>
+          signals[i].keywords.includes(k),
+        ),
+        correlatedAt: Date.now(),
+      });
+    }
+
+    if (llmCalls % 10 === 0 || i === signals.length - 1) {
+      const totalElapsed = ((performance.now() - llmStart) / 1000).toFixed(1);
+      const avgPerCall = ((performance.now() - llmStart) / llmCalls / 1000).toFixed(1);
+      console.log(`[TrendCast] ML: LLM news-social per-signal ${llmCalls} calls — signal ${i + 1}/${signals.length}, ${matches.length} matches | ${totalElapsed}s total, ${avgPerCall}s/call avg`);
+    }
+    onProgress?.({ phase: 'llm-generating-news-social', current: i + 1, total: signals.length, engine: 'llm', model });
+  }
+
+  const totalElapsed = ((performance.now() - llmStart) / 1000).toFixed(1);
+  console.log(`[TrendCast] ML: LLM correlateNewsSocialLLM done — ${llmCalls} LLM calls (per-signal), ${matches.length} matches, ${totalElapsed}s total`);
+  return matches.sort((a, b) => b.confidence - a.confidence);
+}
+
 /**
  * Preload an ML model so the first correlation run is fast.
  * Called when the user selects an ML engine in the settings UI.
  */
 export async function preloadModel(
-  engine: 'embedding' | 'sentiment' | 'zeroshot' | 'ner',
+  engine: 'embedding' | 'sentiment' | 'zeroshot' | 'ner' | 'llm',
   model: string,
 ): Promise<void> {
   if (engine === 'embedding') {
@@ -1362,6 +1755,8 @@ export async function preloadModel(
     await getZeroShotPipeline(model as ZeroShotModel);
   } else if (engine === 'ner') {
     await getNERPipeline(model as NERModel);
+  } else if (engine === 'llm') {
+    await getLLMPipeline(model as LLMModel);
   }
 }
 

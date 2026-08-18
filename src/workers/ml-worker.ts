@@ -40,6 +40,9 @@ import {
   correlateNER,
   correlateNewsNER,
   correlateNewsSocialNER,
+  correlateLLM,
+  correlateNewsLLM,
+  correlateNewsSocialLLM,
   type ProgressCallback,
   type CancelFlag,
 } from '@/services/engine/ml';
@@ -49,7 +52,7 @@ import {
 interface WorkerRequest {
   type: 'correlate';
   requestId: string;
-  engine: 'embedding' | 'sentiment' | 'zeroshot' | 'ner';
+  engine: 'embedding' | 'sentiment' | 'zeroshot' | 'ner' | 'llm';
   model: string;
   markets: MarketContract[];
   signals: SocialSignal[];
@@ -182,6 +185,11 @@ async function handleCorrelate(msg: WorkerRequest): Promise<void> {
       matches = await correlateNER(signals, markets, model as never, onProgress, cancelFlag);
       newsMatches = await correlateNewsNER(news, markets, model as never, onProgress, cancelFlag);
       newsSocialMatches = await correlateNewsSocialNER(news, signals, model as never, onProgress, cancelFlag);
+    } else if (engine === 'llm') {
+      console.log(`[TrendCast ML Worker] Starting LLM correlation: model="${model}"`);
+      matches = await correlateLLM(signals, markets, model as never, onProgress, cancelFlag);
+      newsMatches = await correlateNewsLLM(news, markets, model as never, onProgress, cancelFlag);
+      newsSocialMatches = await correlateNewsSocialLLM(news, signals, model as never, onProgress, cancelFlag);
     }
 
     const result: CorrelationResult = {

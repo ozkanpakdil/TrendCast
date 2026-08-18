@@ -28,6 +28,8 @@ import { HypeFeed } from './components/HypeFeed';
 import { NewsFeed } from './components/NewsFeed';
 import { MarketOdds } from './components/MarketOdds';
 import { CorrelationPanel } from './components/CorrelationPanel';
+import { CorrelationStatsBar } from './components/CorrelationStatsBar';
+import { CorrelationRunHistory } from './components/CorrelationRunHistory';
 import { HistoryChart } from './components/HistoryChart';
 import { Watchlist } from './components/Watchlist';
 import { FAQContent } from './components/FAQContent';
@@ -69,6 +71,9 @@ function phaseLabel(phase: string): string {
     'ner-comparing-signals': 'Comparing signals→markets',
     'ner-comparing-news': 'Comparing news→markets',
     'ner-comparing-news-social': 'Comparing news→social',
+    'llm-generating-signals': 'LLM scoring signals',
+    'llm-generating-news': 'LLM scoring news',
+    'llm-generating-news-social': 'LLM scoring news→social',
     'done': 'Done',
   };
   return labels[phase] ?? phase;
@@ -76,7 +81,7 @@ function phaseLabel(phase: string): string {
 
 export function App() {
   const { snapshot, loading, collecting, lastCollectionAt, triggerCollection } = useSnapshot();
-  const { correlations, loading: corrLoading, error: corrError, progress: corrProgress, elapsedMs, runCorrelation, cancelCorrelation } = useCorrelations();
+  const { correlations, loading: corrLoading, error: corrError, progress: corrProgress, elapsedMs, runCorrelation, cancelCorrelation, runStats, runHistory } = useCorrelations();
   const [activeTab, setActiveTab] = useState<Tab>('feed');
   const [settings, setSettings] = useState<ExtensionSettings>(DEFAULT_SETTINGS);
   const [theme, setTheme] = useState<ThemeMode>('dark');
@@ -126,6 +131,7 @@ export function App() {
       : settings.correlationEngine === 'sentiment' ? settings.sentimentModel
       : settings.correlationEngine === 'zeroshot' ? settings.zeroShotModel
       : settings.correlationEngine === 'ner' ? settings.nerModel
+      : settings.correlationEngine === 'llm' ? settings.llmModel
       : settings.embeddingModel;
     runCorrelation(settings.correlationEngine, initModel);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -350,6 +356,7 @@ export function App() {
                       <option value="sentiment">📊 Sentiment</option>
                       <option value="zeroshot">🎯 Zero-Shot(Slow)</option>
                       <option value="ner">🏷️ ML NER(Slow)</option>
+                      <option value="llm">🤖 LLM(Slowest)</option>
                     </select>
 
                     {/* Model selector (shown for ML engines) */}
@@ -453,6 +460,31 @@ export function App() {
                       </select>
                     )}
 
+                    {settings.correlationEngine === 'llm' && (
+                      <select
+                        value={settings.llmModel}
+                        onChange={(e) => {
+                          const model = e.target.value as ExtensionSettings['llmModel'];
+                          setSettings({ ...settings, llmModel: model });
+                          browser.storage.local.set({
+                            [CONFIG.storage.settings]: { ...settings, llmModel: model },
+                          });
+                        }}
+                        className={`text-xs px-2 py-1.5 rounded border ${
+                          isDark
+                            ? 'bg-slate-800 border-slate-700 text-slate-300'
+                            : 'bg-white border-light-border text-light-text'
+                        } focus:outline-none focus:border-brand-400`}
+                        title="LLM model"
+                      >
+                        {CONFIG.ml.llmModels.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.label}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+
                     {/* Re-analyze / Cancel button */}
                     {corrLoading ? (
                       <button
@@ -478,6 +510,8 @@ export function App() {
                               ? settings.zeroShotModel
                               : settings.correlationEngine === 'ner'
                               ? settings.nerModel
+                              : settings.correlationEngine === 'llm'
+                              ? settings.llmModel
                               : settings.embeddingModel;
                           runCorrelation(settings.correlationEngine, model);
                         }}
@@ -496,7 +530,7 @@ export function App() {
                   }`}>
                     <div className="flex items-center justify-between mb-2">
                       <span className={`font-medium ${isDark ? 'text-slate-300' : 'text-light-text'}`}>
-                        {corrProgress.engine === 'embedding' ? '🧠 Embedding' : corrProgress.engine === 'sentiment' ? '📊 Sentiment' : corrProgress.engine === 'zeroshot' ? '🎯 Zero-Shot' : '🏷️ NER'} · {corrProgress.model}
+                        {corrProgress.engine === 'embedding' ? '🧠 Embedding' : corrProgress.engine === 'sentiment' ? '📊 Sentiment' : corrProgress.engine === 'zeroshot' ? '🎯 Zero-Shot' : corrProgress.engine === 'ner' ? '🏷️ NER' : '🤖 LLM'} · {corrProgress.model}
                       </span>
                       <span className={`tabular-nums ${isDark ? 'text-slate-400' : 'text-light-muted'}`}>
                         ⏱ {Math.floor(elapsedMs / 1000)}s
@@ -568,9 +602,11 @@ export function App() {
 
                 {!corrError && settings.correlationEngine !== 'heuristic' && (
                   <p className={`text-[10px] mb-3 ${isDark ? 'text-slate-500' : 'text-light-muted'}`}>
-                    ⚠️ ML engine selected — first run downloads the model ({settings.correlationEngine === 'embedding' ? '~23–33 MB' : settings.correlationEngine === 'sentiment' ? '~67–134 MB' : settings.correlationEngine === 'zeroshot' ? '~67–110 MB' : '~110–340 MB'}) and may take longer. Model is cached for subsequent runs.
+                    ⚠️ ML engine selected — first run downloads the model ({settings.correlationEngine === 'embedding' ? '~23–33 MB' : settings.correlationEngine === 'sentiment' ? '~67–134 MB' : settings.correlationEngine === 'zeroshot' ? '~67–110 MB' : settings.correlationEngine === 'ner' ? '~110–340 MB' : '~270 MB–2.3 GB'}) and may take longer. Model is cached for subsequent runs.
                   </p>
                 )}
+
+                <CorrelationStatsBar stats={runStats} isDark={isDark} />
 
                 <CorrelationPanel
                   matches={correlations?.matches ?? []}
@@ -590,11 +626,24 @@ export function App() {
             )}
 
             {activeTab === 'history' && (
-              <section>
-                <h2 className={`text-sm font-bold uppercase tracking-wider mb-3 ${sectionTitle}`}>
-                  📊 Historical Trends
-                </h2>
-                <HistoryChart />
+              <section className="space-y-6">
+                <div>
+                  <h2 className={`text-sm font-bold uppercase tracking-wider mb-3 ${sectionTitle}`}>
+                    📊 Historical Trends
+                  </h2>
+                  <HistoryChart />
+                </div>
+
+                <div>
+                  <CorrelationRunHistory
+                    history={runHistory}
+                    isDark={isDark}
+                    onClear={() => {
+                      // Force re-read from storage by updating state
+                      // The hook already manages this state
+                    }}
+                  />
+                </div>
               </section>
             )}
 

@@ -141,6 +141,7 @@ export const CONFIG = {
     collectedSignals: 'trendcast:collected-signals',
     collectedNews: 'trendcast:collected-news',
     correlations: 'trendcast:correlations',
+    correlationRunHistory: 'trendcast:corr-run-history',
     lastCollectionAt: 'trendcast:last-collection',
     history: 'trendcast:history',
     watchlist: 'trendcast:watchlist',
@@ -253,6 +254,47 @@ export const CONFIG = {
         id: 'Xenova/bert-large-NER-uncased' as const,
         label: 'BERT Large NER (340 MB · highest accuracy)',
         size: '~340 MB',
+      },
+    ],
+    // Small LLM models — instruction-tuned text generation models that
+    // can perform correlation assessment by reasoning about the
+    // relationship between text and contract questions.
+    // ⚠️ These are much larger than other ML models and benefit from WebGPU.
+    llmModels: [
+      {
+        id: 'HuggingFaceTB/SmolLM2-135M-Instruct' as const,
+        label: 'SmolLM2 135M (270 MB · fastest LLM)',
+        size: '~270 MB',
+      },
+      {
+        id: 'HuggingFaceTB/SmolLM2-360M-Instruct' as const,
+        label: 'SmolLM2 360M (720 MB · better reasoning)',
+        size: '~720 MB',
+      },
+      {
+        id: 'onnx-community/Qwen2.5-0.5B-Instruct-ONNX' as const,
+        label: 'Qwen2.5 0.5B (500 MB · strong small LLM)',
+        size: '~500 MB',
+      },
+      {
+        id: 'onnx-community/Qwen2.5-1.5B-Instruct-ONNX' as const,
+        label: 'Qwen2.5 1.5B (1.5 GB · best quality, slow on CPU)',
+        size: '~1.5 GB',
+      },
+      {
+        id: 'onnx-community/Phi-3.5-mini-instruct-onnx-web' as const,
+        label: 'Phi-3.5 mini (2.3 GB · Microsoft, 128K context)',
+        size: '~2.3 GB',
+      },
+      {
+        id: 'onnx-community/DeepSeek-R1-Distill-Qwen-1.5B-ONNX' as const,
+        label: 'DeepSeek R1 Distill 1.5B (1.4 GB · reasoning model)',
+        size: '~1.4 GB',
+      },
+      {
+        id: 'onnx-community/glm-edge-1.5b-chat-ONNX' as const,
+        label: 'GLM-Edge 1.5B (1 GB · Zhipu AI, edge-optimized)',
+        size: '~1 GB',
       },
     ],
   },

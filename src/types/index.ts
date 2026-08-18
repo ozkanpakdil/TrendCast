@@ -115,7 +115,7 @@ export interface NewsItem {
  * ML models fully client-side. No API keys, no network calls to LLM APIs.
  * The user picks the model and strategy from the popup settings UI.
  */
-export type CorrelationEngine = 'heuristic' | 'embedding' | 'sentiment' | 'zeroshot' | 'ner';
+export type CorrelationEngine = 'heuristic' | 'embedding' | 'sentiment' | 'zeroshot' | 'ner' | 'llm';
 
 /**
  * Available local ML models for the `embedding` strategy.
@@ -155,6 +155,26 @@ export type ZeroShotModel =
 export type NERModel =
   | 'Xenova/bert-base-NER-uncased'
   | 'Xenova/bert-large-NER-uncased';
+
+/**
+ * Available local LLM models for the `llm` strategy (text-generation).
+ * These are small instruction-tuned LLMs that run in-browser via
+ * Transformers.js (ONNX Runtime Web). They generate a structured
+ * correlation assessment by prompting the LLM with the signal/news
+ * text and contract question, asking it to score the relationship.
+ *
+ * ⚠️ These models are larger than embedding/sentiment models and
+ * require WebGPU for acceptable performance. On CPU-only (WASM)
+ * they will work but be very slow.
+ */
+export type LLMModel =
+  | 'HuggingFaceTB/SmolLM2-135M-Instruct'
+  | 'HuggingFaceTB/SmolLM2-360M-Instruct'
+  | 'onnx-community/Qwen2.5-0.5B-Instruct-ONNX'
+  | 'onnx-community/Qwen2.5-1.5B-Instruct-ONNX'
+  | 'onnx-community/Phi-3.5-mini-instruct-onnx-web'
+  | 'onnx-community/DeepSeek-R1-Distill-Qwen-1.5B-ONNX'
+  | 'onnx-community/glm-edge-1.5b-chat-ONNX';
 
 /** A matched correlation between a social signal and a market contract. */
 export interface CorrelationMatch {
@@ -204,6 +224,39 @@ export interface CorrelationResult {
    * or switch to the heuristic engine.
    */
   error?: string;
+}
+
+/**
+ * Statistics from a single correlation run.
+ * Persisted to storage so the user can compare models over time.
+ */
+export interface CorrelationRunStats {
+  /** Epoch ms when the run completed. */
+  timestamp: number;
+  /** Engine that produced the results. */
+  engine: CorrelationEngine;
+  /** Model ID used (empty for heuristic). */
+  model: string;
+  /** Number of signal→market matches. */
+  matchCount: number;
+  /** Number of news→market matches. */
+  newsMatchCount: number;
+  /** Number of news→social matches. */
+  newsSocialMatchCount: number;
+  /** Average confidence across all matches (0–1). */
+  avgConfidence: number;
+  /** Highest confidence score (0–1). */
+  maxConfidence: number;
+  /** Standard deviation of confidence scores (0–1). */
+  confidenceSpread: number;
+  /** Wall-clock time to complete the run (ms). */
+  elapsedMs: number;
+  /** Number of signals evaluated. */
+  signalCount: number;
+  /** Number of market contracts evaluated. */
+  contractCount: number;
+  /** Number of news items evaluated. */
+  newsCount: number;
 }
 
 // ── Collection ────────────────────────────────────────────────────
@@ -390,6 +443,8 @@ export interface ExtensionSettings {
   zeroShotModel: ZeroShotModel;
   /** Which NER model to use (when engine = 'ner'). */
   nerModel: NERModel;
+  /** Which LLM model to use (when engine = 'llm'). */
+  llmModel: LLMModel;
   /**
    * Reddit subreddits to collect from (without the `r/` prefix).
    * Defaults to the finance preset. Users can customise from settings.
@@ -419,5 +474,6 @@ export const DEFAULT_SETTINGS: ExtensionSettings = {
   sentimentModel: 'Xenova/distilbert-base-uncased-finetuned-sst-2-english',
   zeroShotModel: 'Xenova/distilbert-base-uncased-mnli',
   nerModel: 'Xenova/bert-base-NER-uncased',
+  llmModel: 'HuggingFaceTB/SmolLM2-135M-Instruct',
   redditSubreddits: ['investing', 'stocks', 'wallstreetbets', 'UKInvesting'],
 };

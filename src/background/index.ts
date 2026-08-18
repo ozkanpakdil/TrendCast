@@ -80,7 +80,7 @@ let mlWorkerResolvers: {
 } | null = null;
 let mlWorkerTimeout: ReturnType<typeof setTimeout> | null = null;
 
-const ML_WORKER_IDLE_TIMEOUT_MS = 60_000; // terminate worker after 60s idle
+const ML_WORKER_IDLE_TIMEOUT_MS = 300_000; // 5 min — LLM inference is very slow on WASM CPU
 
 /**
  * Get or create the ML Web Worker.
@@ -105,6 +105,9 @@ function getMLWorker(): Worker | null {
       }
 
       if (msg.type === 'progress') {
+        // Reset idle timer on progress — LLM inference can take many minutes.
+        // Without this, the 60s idle timer kills the worker mid-computation.
+        resetWorkerIdleTimer();
         mlWorkerResolvers.onProgress?.({
           phase: msg.phase,
           current: msg.current,
@@ -168,7 +171,7 @@ async function runMLCorrelation(
   markets: MarketContract[],
   signals: SocialSignal[],
   news: NewsItem[],
-  engine: 'embedding' | 'sentiment' | 'zeroshot' | 'ner',
+  engine: 'embedding' | 'sentiment' | 'zeroshot' | 'ner' | 'llm',
   model: string,
   requestId: string,
   onProgress?: (info: { phase: string; current: number; total: number; engine: string; model: string }) => void,
@@ -194,11 +197,16 @@ async function runMLCorrelation(
       const newsMatches = await ml.correlateNewsZeroShot(news, markets, model as never, onProgress as never);
       const newsSocialMatches = await ml.correlateNewsSocialZeroShot(news, signals, model as never, onProgress as never);
       return { matches, newsMatches, newsSocialMatches, engine };
-    } else {
-      // ner
+    } else if (engine === 'ner') {
       const matches = await ml.correlateNER(signals, markets, model as never, onProgress as never);
       const newsMatches = await ml.correlateNewsNER(news, markets, model as never, onProgress as never);
       const newsSocialMatches = await ml.correlateNewsSocialNER(news, signals, model as never, onProgress as never);
+      return { matches, newsMatches, newsSocialMatches, engine };
+    } else {
+      // llm
+      const matches = await ml.correlateLLM(signals, markets, model as never, onProgress as never);
+      const newsMatches = await ml.correlateNewsLLM(news, markets, model as never, onProgress as never);
+      const newsSocialMatches = await ml.correlateNewsSocialLLM(news, signals, model as never, onProgress as never);
       return { matches, newsMatches, newsSocialMatches, engine };
     }
   }
@@ -284,21 +292,16 @@ function setupMessageHandlers(): void {
   });
 
   // Dashboard → Background: correlate all collected data
+  // ⚠️ This handler is fire-and-forget: it starts the correlation in the
+  // background and returns immediately with { started: true }. The result
+  // is delivered via storage + CORRELATION_RESULT message. This avoids
+  // Firefox's "Promised response went out of scope" timeout that kills
+  // long-running async handlers (especially LLM model downloads).
   onMessage('CORRELATE_ALL', async (payload) => {
     console.log('[TrendCast] CORRELATE_ALL received:', {
       engine: payload.engine,
       model: payload.model,
       requestId: payload.requestId,
-    });
-
-    const markets = await getCollectedMarkets();
-    const signals = await getCollectedSignals();
-    const news = await getCollectedNews();
-
-    console.log('[TrendCast] CORRELATE_ALL data:', {
-      markets: markets.length,
-      signals: signals.length,
-      news: news.length,
     });
 
     const settings = await getSettings();
@@ -308,29 +311,20 @@ function setupMessageHandlers(): void {
       : engine === 'sentiment' ? settings.sentimentModel
       : engine === 'zeroshot' ? settings.zeroShotModel
       : engine === 'ner' ? settings.nerModel
+      : engine === 'llm' ? settings.llmModel
       : settings.embeddingModel
     );
     const requestId = payload.requestId ?? `corr-${Date.now()}`;
 
     console.log(`[TrendCast] CORRELATE_ALL using engine="${engine}", model="${model}", requestId="${requestId}"`);
 
-    const result = await runCorrelationWithEngine(markets, signals, news, engine, model, requestId);
+    // Fire-and-forget: start the correlation without awaiting it.
+    // The result will be written to storage and broadcast via
+    // CORRELATION_RESULT message when done.
+    runCorrelationAsync(engine, model, requestId);
 
-    await browser.storage.local.set({ [CONFIG.storage.correlations]: result });
-
-    if (result.error) {
-      console.error(
-        `[TrendCast] CORRELATE_ALL FAILED — engine="${engine}", model="${model}":`,
-        result.error,
-      );
-    } else {
-      console.log(
-        `[TrendCast] CORRELATE_ALL OK — engine="${engine}", model="${model}":`,
-        `${result.matches.length} signal→market, ${result.newsMatches.length} news→market, ${result.newsSocialMatches.length} news→social`,
-      );
-    }
-
-    return result;
+    // Return immediately so Firefox doesn't kill the message channel
+    return { started: true, requestId };
   });
 
   // Dashboard → Background: cancel a running ML correlation
@@ -533,11 +527,74 @@ async function runCollection(): Promise<CollectionSnapshot> {
  * to heuristic. The UI is responsible for showing the error to the user
  * and suggesting they switch engines.
  */
+
+/**
+ * Fire-and-forget correlation runner.
+ * Starts the correlation in the background and delivers the result via
+ * storage + CORRELATION_RESULT message. This avoids Firefox's message
+ * channel timeout for long-running ML operations (especially LLMs).
+ */
+async function runCorrelationAsync(
+  engine: 'heuristic' | 'embedding' | 'sentiment' | 'zeroshot' | 'ner' | 'llm',
+  model: string,
+  requestId: string,
+): Promise<void> {
+  try {
+    const markets = await getCollectedMarkets();
+    const signals = await getCollectedSignals();
+    const news = await getCollectedNews();
+
+    console.log('[TrendCast] runCorrelationAsync data:', {
+      markets: markets.length,
+      signals: signals.length,
+      news: news.length,
+    });
+
+    const result = await runCorrelationWithEngine(markets, signals, news, engine, model, requestId);
+
+    await browser.storage.local.set({ [CONFIG.storage.correlations]: result });
+
+    // Broadcast the result to any listening dashboard/popup tabs
+    browser.runtime.sendMessage({
+      type: 'CORRELATION_RESULT',
+      payload: result,
+    }).catch(() => {
+      // No listener — that's fine, result is in storage
+    });
+
+    if (result.error) {
+      console.error(
+        `[TrendCast] CORRELATE_ALL FAILED — engine="${engine}", model="${model}":`,
+        result.error,
+      );
+    } else {
+      console.log(
+        `[TrendCast] CORRELATE_ALL OK — engine="${engine}", model="${model}":`,
+        `${result.matches.length} signal→market, ${result.newsMatches.length} news→market, ${result.newsSocialMatches.length} news→social`,
+      );
+    }
+  } catch (err) {
+    console.error(`[TrendCast] runCorrelationAsync FAILED:`, err);
+    const errorResult: CorrelationResult = {
+      matches: [],
+      newsMatches: [],
+      newsSocialMatches: [],
+      engine,
+      error: err instanceof Error ? err.message : String(err),
+    };
+    await browser.storage.local.set({ [CONFIG.storage.correlations]: errorResult });
+    browser.runtime.sendMessage({
+      type: 'CORRELATION_RESULT',
+      payload: errorResult,
+    }).catch(() => {});
+  }
+}
+
 async function runCorrelationWithEngine(
   markets: MarketContract[],
   signals: SocialSignal[],
   news: NewsItem[],
-  engine: 'heuristic' | 'embedding' | 'sentiment' | 'zeroshot' | 'ner',
+  engine: 'heuristic' | 'embedding' | 'sentiment' | 'zeroshot' | 'ner' | 'llm',
   model: string,
   requestId?: string,
 ): Promise<CorrelationResult> {
@@ -546,7 +603,7 @@ async function runCorrelationWithEngine(
     `inputs: ${markets.length} markets, ${signals.length} signals, ${news.length} news`,
   );
 
-  if (engine === 'embedding' || engine === 'sentiment' || engine === 'zeroshot' || engine === 'ner') {
+  if (engine === 'embedding' || engine === 'sentiment' || engine === 'zeroshot' || engine === 'ner' || engine === 'llm') {
     try {
       // Progress callback — forwards progress to the dashboard via runtime message
       const onProgress = (info: { phase: string; current: number; total: number; engine: string; model: string }) => {
@@ -634,6 +691,7 @@ async function runCorrelationPrecompute(
     : engine === 'sentiment' ? settings.sentimentModel
     : engine === 'zeroshot' ? settings.zeroShotModel
     : engine === 'ner' ? settings.nerModel
+    : engine === 'llm' ? settings.llmModel
     : settings.embeddingModel;
   const result = await runCorrelationWithEngine(markets, signals, news, engine, model, `precompute-${Date.now()}`);
 
