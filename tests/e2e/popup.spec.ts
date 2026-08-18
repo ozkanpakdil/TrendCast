@@ -224,12 +224,12 @@ test.describe('Popup — Settings Tab', () => {
     await expect(page.locator('main')).toContainText(/Correlation Engine/);
   });
 
-  test('shows 5 engine radio buttons', async ({ page }) => {
+  test('shows 6 engine radio buttons', async ({ page }) => {
     await openPopup(page);
     await page.locator('nav button', { hasText: 'Settings' }).click();
     await page.waitForTimeout(300);
     const radios = page.locator('main input[type="radio"][name="correlationEngine"]');
-    await expect(radios).toHaveCount(5);
+    await expect(radios).toHaveCount(6);
   });
 
   test('heuristic engine is selected by default', async ({ page }) => {
@@ -237,7 +237,7 @@ test.describe('Popup — Settings Tab', () => {
     await page.locator('nav button', { hasText: 'Settings' }).click();
     await page.waitForTimeout(300);
     const radios = page.locator('main input[type="radio"][name="correlationEngine"]');
-    await expect(radios).toHaveCount(5);
+    await expect(radios).toHaveCount(6);
     // The first radio is heuristic (first in the list)
     await expect(radios.first()).toBeChecked();
   });

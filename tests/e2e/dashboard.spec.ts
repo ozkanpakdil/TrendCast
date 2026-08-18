@@ -317,14 +317,14 @@ test.describe('Dashboard — Correlations Tab', () => {
     await expect(engineSelect).toHaveValue('heuristic');
   });
 
-  test('engine dropdown has all 5 engine options', async ({ page }) => {
+  test('engine dropdown has all 6 engine options', async ({ page }) => {
     await openDashboard(page);
     await page.locator('nav button', { hasText: 'Correlations' }).click();
     await page.waitForTimeout(500);
     // Target the engine selector by its title attribute
     const engineSelect = page.locator('main select[title="Correlation engine"]');
     const options = engineSelect.locator('option');
-    await expect(options).toHaveCount(5);
+    await expect(options).toHaveCount(6);
   });
 
   test('shows Re-analyze button', async ({ page }) => {
@@ -560,7 +560,7 @@ test.describe('Dashboard — Settings Tab', () => {
     await page.locator('nav button', { hasText: 'Settings' }).click();
     await page.waitForTimeout(300);
     const radios = page.locator('main input[type="radio"][name="correlationEngine"]');
-    await expect(radios).toHaveCount(5);
+    await expect(radios).toHaveCount(6);
   });
 
   test('heuristic engine is selected by default', async ({ page }) => {
@@ -569,7 +569,7 @@ test.describe('Dashboard — Settings Tab', () => {
     await page.waitForTimeout(300);
     // Radio buttons use name="correlationEngine"; checked state is on the heuristic one
     const radios = page.locator('main input[type="radio"][name="correlationEngine"]');
-    await expect(radios).toHaveCount(5);
+    await expect(radios).toHaveCount(6);
     // The first radio is heuristic (first in the list)
     await expect(radios.first()).toBeChecked();
   });
