@@ -239,6 +239,67 @@ ML NER:     entities = [
         </ul>
       </div>
 
+      {/* LLM */}
+      <div className={card}>
+        <h2 className={h2}>🤖 LLM Engine (Text Generation)</h2>
+        <h3 className={h3}>How It Works</h3>
+        <p className={p}>
+          Uses a <strong>small instruction-tuned LLM</strong> (e.g., SmolLM2, Qwen2.5, Phi-3.5) to
+          reason about the relationship between a signal/news headline and a contract question. The
+          LLM is prompted with the text and candidate questions and asked to return a relevance
+          score (0–100). Pairs above a threshold (0.40) are reported as matches.
+        </p>
+        <p className={p}>
+          Keyword overlap is used as a pre-filter (same as Zero-Shot) to avoid running the LLM on
+          every possible pair. Each LLM call handles one signal with up to 5 candidate questions,
+          keeping the input small (~200 tokens) and output tiny (~20 tokens) for faster inference.
+        </p>
+        <h3 className={h3}>Available Models</h3>
+        <ModelTable isDark={isDark} compact={compact} models={[
+          ['HuggingFaceTB/SmolLM2-135M-Instruct', '~270 MB', 'Fastest LLM. Good for quick checks.'],
+          ['HuggingFaceTB/SmolLM2-360M-Instruct', '~720 MB', 'Better reasoning than 135M.'],
+          ['onnx-community/Qwen2.5-0.5B-Instruct-ONNX', '~500 MB', 'Strong small LLM, good quality.'],
+          ['onnx-community/Qwen2.5-1.5B-Instruct-ONNX', '~1.5 GB', 'Best quality, slow on CPU.'],
+          ['onnx-community/Phi-3.5-mini-instruct-onnx-web', '~2.3 GB', 'Microsoft, 128K context.'],
+          ['onnx-community/DeepSeek-R1-Distill-Qwen-1.5B-ONNX', '~1.4 GB', 'Reasoning-focused model.'],
+          ['onnx-community/glm-edge-1.5b-chat-ONNX', '~1 GB', 'Zhipu AI, edge-optimized.'],
+        ]} />
+        <h3 className={h3}>Example</h3>
+        <CodeBlock isDark={isDark} compact={compact}>{`Contract:  "Will the Fed cut rates in September?"
+Signal:    "Powell signals borrowing costs may ease soon, markets rally"
+
+Heuristic: MATCH (shares "Fed"/"rates")
+Embedding: MATCH (cosine = 0.78)
+LLM:       MATCH with score = 85/100
+           The LLM reasons that "borrowing costs may ease"
+           implies a rate cut, strengthening the correlation.`}</CodeBlock>
+        <h3 className={h3}>WebGPU vs. CPU (WASM)</h3>
+        <p className={p}>
+          LLMs are much larger than other ML models (270 MB – 2.3 GB). On CPU (WASM) they are
+          {' '}<strong>very slow</strong> — each forward pass can take 2–10 seconds. If your browser
+          supports <strong>WebGPU</strong>, TrendCast automatically uses it for 10–50× faster
+          inference. If WebGPU is unavailable or fails, it falls back to WASM CPU automatically.
+        </p>
+        <p className={p}>
+          Multi-threaded WASM is also enabled when cross-origin isolation is available, using all
+          CPU cores to speed up inference.
+        </p>
+        <h3 className={h3}>Pros</h3>
+        <ul className={ul}>
+          <li>Best reasoning — understands nuance, sarcasm, and implied relationships.</li>
+          <li>Most flexible — no pre-defined labels or entity lists needed.</li>
+          <li>Context-aware — can distinguish &ldquo;Apple is rising&rdquo; from &ldquo;Apple is falling.&rdquo;</li>
+          <li>Still 100% local — no API keys, no data leaves your browser.</li>
+        </ul>
+        <h3 className={h3}>Cons</h3>
+        <ul className={ul}>
+          <li>Largest downloads — 270 MB to 2.3 GB per model.</li>
+          <li>Slowest on CPU — impractical without WebGPU for larger models.</li>
+          <li>Higher memory usage — may strain low-RAM devices.</li>
+          <li>Score calibration varies by model — threshold may need adjustment.</li>
+        </ul>
+      </div>
+
       {/* Comparison Table */}
       <h2 className={h2}>📋 Comparison Table</h2>
       <div className="overflow-x-auto mb-4">
@@ -251,18 +312,21 @@ ML NER:     entities = [
               <th className={`p-2 text-center border ${tableBorder}`}>Sentiment</th>
               <th className={`p-2 text-center border ${tableBorder}`}>Zero-Shot</th>
               <th className={`p-2 text-center border ${tableBorder}`}>ML-NER</th>
+              <th className={`p-2 text-center border ${tableBorder}`}>LLM</th>
             </tr>
           </thead>
           <tbody className={tableRow}>
             {[
-              ['Download size', '0 MB', '23–33 MB', '67–134 MB', '67–110 MB', '110–340 MB'],
-              ['Speed', '⚡ Fastest', '🟡 Medium', '🟡 Medium', '🔴 Slowest', '🟡 Medium'],
-              ['Semantic matching', '❌', '✅', '❌', '✅✅', '❌'],
-              ['Sentiment direction', '❌', '❌', '✅', '✅ (entailment)', '❌'],
-              ['Entity extraction', '✅ (regex)', '❌', '❌', '❌', '✅✅ (ML)'],
-              ['Novel entity support', '❌', '✅', '✅', '✅', '✅'],
-              ['No keyword overlap needed', '❌', '✅', '❌', '✅', '❌'],
-              ['Privacy (100% local)', '✅', '✅', '✅', '✅', '✅'],
+              ['Download size', '0 MB', '23–33 MB', '67–134 MB', '67–110 MB', '110–340 MB', '270 MB – 2.3 GB'],
+              ['Speed', '⚡ Fastest', '🟡 Medium', '🟡 Medium', '🔴 Slow', '🟡 Medium', '🔴 Slowest'],
+              ['Semantic matching', '❌', '✅', '❌', '✅✅', '❌', '✅✅✅'],
+              ['Sentiment direction', '❌', '❌', '✅', '✅ (entailment)', '❌', '✅ (reasoning)'],
+              ['Entity extraction', '✅ (regex)', '❌', '❌', '❌', '✅✅ (ML)', '❌'],
+              ['Novel entity support', '❌', '✅', '✅', '✅', '✅', '✅'],
+              ['No keyword overlap needed', '❌', '✅', '❌', '✅', '❌', '✅ (pre-filter used)'],
+              ['Reasoning / nuance', '❌', '❌', '❌', '❌', '❌', '✅✅✅'],
+              ['WebGPU recommended', '—', '—', '—', '—', '—', '✅✅✅'],
+              ['Privacy (100% local)', '✅', '✅', '✅', '✅', '✅', '✅'],
             ].map((row, i) => (
               <tr key={i} className={i % 2 === 0 ? '' : (isDark ? 'bg-slate-900/50' : 'bg-slate-50/50')}>
                 <td className={`p-2 border ${tableBorder} font-medium`}>{row[0]}</td>
@@ -292,11 +356,14 @@ ML NER:     entities = [
               ['Sentiment-aware analysis', 'Sentiment (FinBERT for finance)'],
               ['Most accurate matching', 'Zero-Shot (deberta-v3-base)'],
               ['Best entity extraction', 'ML-NER (bert-base-NER)'],
+              ['Best reasoning / nuance', 'LLM (Qwen2.5-1.5B with WebGPU)'],
               ['Low bandwidth / slow connection', 'Heuristic'],
               ['Financial news analysis', 'Sentiment (FinBERT)'],
               ['Social media analysis', 'Sentiment (Twitter RoBERTa)'],
-              ['Novel/niche topics', 'Zero-Shot or Embedding'],
+              ['Novel/niche topics', 'Zero-Shot, Embedding, or LLM'],
               ['Detecting sentiment divergence', 'Sentiment'],
+              ['Has WebGPU & wants best quality', 'LLM (Qwen2.5-1.5B or Phi-3.5)'],
+              ['CPU-only, wants LLM quality', 'LLM (SmolLM2-135M — smallest)'],
             ].map((row, i) => (
               <tr key={i} className={i % 2 === 0 ? '' : (isDark ? 'bg-slate-900/50' : 'bg-slate-50/50')}>
                 <td className={`p-2 border ${tableBorder} font-medium`}>{row[0]}</td>
@@ -316,6 +383,7 @@ ML NER:     entities = [
         <li>Use <strong>Sentiment</strong> when you want directional bias.</li>
         <li>Use <strong>Zero-Shot</strong> for the most challenging matching cases.</li>
         <li>Use <strong>ML-NER</strong> when entity extraction quality is critical.</li>
+        <li>Use <strong>LLM</strong> when you need reasoning, nuance, or sarcasm detection (WebGPU recommended).</li>
       </ol>
 
       {/* Performance & Privacy */}
@@ -326,6 +394,8 @@ ML NER:     entities = [
         <li>No text data is ever sent to any server.</li>
         <li>No API keys needed.</li>
         <li>ONNX Runtime Web executes models using WebAssembly (WASM).</li>
+        <li>LLM models can also use <strong>WebGPU</strong> for GPU acceleration when available.</li>
+        <li>Multi-threaded WASM is enabled when cross-origin isolation is present, using all CPU cores.</li>
       </ul>
       <h3 className={h3}>Performance Tips</h3>
       <ul className={ul}>
@@ -447,6 +517,8 @@ Total model calls = contracts + signals + news (same as embedding)`}</CodeBlock>
                 ['Sentiment', '~379', '~100–300ms', '~40–120s'],
                 ['Zero-Shot', '~700+', '~1–3s', '~10–35min'],
                 ['ML-NER', '~379', '~1–2s', '~6–13min'],
+                ['LLM (WebGPU)', '~229', '~0.5–2s', '~2–8min'],
+                ['LLM (CPU/WASM)', '~229', '~2–10s', '~8–40min'],
               ].map((row, i) => (
                 <tr key={i} className={i % 2 === 0 ? '' : (isDark ? 'bg-slate-900/50' : 'bg-slate-50/50')}>
                   <td className={`p-2 border ${tableBorder} font-medium`}>{row[0]}</td>
@@ -467,14 +539,29 @@ Total model calls = contracts + signals + news (same as embedding)`}</CodeBlock>
       <div className={card}>
         <h3 className={h3}>💡 How to Make Zero-Shot and ML-NER Faster</h3>
         <ul className={ul}>
-          <li><strong>Use the smaller model</strong> — DistilBERT MNLI (67 MB) is faster than DeBERTa-v3 (110 MB). BERT Base NER (110 MB) is faster than BERT Large NER (340 MB).</li>
+          <li><strong>Use the smaller model</strong> — DistilBERT MNLI (67 MB) is faster than DeBERTa-v3 (110 MB). BERT Base NER (110 MB) is faster than BERT Large NER (340 MB). For LLMs, SmolLM2-135M (270 MB) is fastest; Qwen2.5-1.5B (1.5 GB) is slowest.</li>
+          <li><strong>Use WebGPU for LLMs</strong> — if your browser supports WebGPU, LLMs run 10–50× faster than on CPU. Chrome/Edge 113+ and recent Firefox nightlies support it.</li>
           <li><strong>Reduce data volume</strong> — disable unused data sources in settings (e.g., turn off Reddit or X if you only care about news→market correlations). Fewer items = fewer model calls.</li>
-          <li><strong>Let it run in the background</strong> — the background worker pre-computes after each hourly collection. If you switch to Zero-Shot or ML-NER, the first collection will be slow, but subsequent dashboard loads will use cached results.</li>
-          <li><strong>Use Heuristic for quick checks</strong> — get instant results, then switch to Zero-Shot or ML-NER for deeper analysis when you have time to wait.</li>
+          <li><strong>Let it run in the background</strong> — the background worker pre-computes after each hourly collection. If you switch to Zero-Shot, ML-NER, or LLM, the first collection will be slow, but subsequent dashboard loads will use cached results.</li>
+          <li><strong>Use Heuristic for quick checks</strong> — get instant results, then switch to Zero-Shot, ML-NER, or LLM for deeper analysis when you have time to wait.</li>
           <li><strong>Close other tabs</strong> — WASM inference is CPU-bound. Fewer competing tabs = more CPU for the model.</li>
           <li><strong>Be patient on first run</strong> — the model downloads on first use. After that it&rsquo;s cached, so only the inference time remains.</li>
         </ul>
       </div>
+
+      {/* Correlation Run History */}
+      <h2 className={h2}>🧪 Correlation Run History & Model Comparison</h2>
+      <p className={p}>
+        Every time a correlation run completes, TrendCast saves statistics about that run — the
+        engine used, model, match counts, average and max confidence, and elapsed time. This
+        history lets you <strong>compare engines and models side by side</strong> over time.
+      </p>
+      <ul className={ul}>
+        <li>View past runs in the <strong>Model Comparison History</strong> table on the correlations tab.</li>
+        <li>Each row shows the engine, model, match counts, avg/max confidence, and duration.</li>
+        <li>Runs are sorted newest-first and can be cleared with the &ldquo;Clear&rdquo; button.</li>
+        <li>Use it to decide which engine/model gives the best trade-off of quality vs. speed for your data.</li>
+      </ul>
 
       {/* Troubleshooting */}
       <h2 className={h2}>🛠️ Troubleshooting</h2>
@@ -499,6 +586,8 @@ Total model calls = contracts + signals + news (same as embedding)`}</CodeBlock>
         <h3 className={h3}>&ldquo;Correlation is slow&rdquo;</h3>
         <ul className={ul}>
           <li>Use a smaller model (e.g., all-MiniLM-L6-v2 instead of bert-large-NER).</li>
+          <li>For LLMs, use SmolLM2-135M or Qwen2.5-0.5B — larger models are impractical on CPU.</li>
+          <li>Check if WebGPU is available — LLMs are 10–50× faster with GPU acceleration.</li>
           <li>Reduce the number of collected items (disable unused data sources).</li>
           <li>Use Heuristic for quick checks, then switch to ML for deeper analysis.</li>
         </ul>
@@ -506,10 +595,30 @@ Total model calls = contracts + signals + news (same as embedding)`}</CodeBlock>
       <div className={card}>
         <h3 className={h3}>&ldquo;No matches found&rdquo;</h3>
         <ul className={ul}>
-          <li>Try a different engine — Embedding or Zero-Shot may catch semantic matches.</li>
+          <li>Try a different engine — Embedding, Zero-Shot, or LLM may catch semantic matches.</li>
           <li>Check that data sources are enabled in settings.</li>
           <li>Run a manual collection first (popup → &ldquo;Collect Now&rdquo;).</li>
           <li>Lower the highlight threshold in settings.</li>
+        </ul>
+      </div>
+      <div className={card}>
+        <h3 className={h3}>&ldquo;LLM engine is too slow&rdquo;</h3>
+        <ul className={ul}>
+          <li>Switch to SmolLM2-135M (270 MB) — the smallest and fastest LLM.</li>
+          <li>Check WebGPU support — without it, LLMs run on CPU and are very slow.</li>
+          <li>Use a non-LLM engine (Embedding or Zero-Shot) for similar quality at lower cost.</li>
+          <li>Reduce data sources to lower the number of LLM forward passes.</li>
+          <li>Let the background worker pre-compute — first run is slow, later loads use cache.</li>
+        </ul>
+      </div>
+      <div className={card}>
+        <h3 className={h3}>&ldquo;LLM model failed to load&rdquo;</h3>
+        <ul className={ul}>
+          <li>LLM models are large (270 MB – 2.3 GB) — check your network and available disk/memory.</li>
+          <li>Try a smaller model (SmolLM2-135M or Qwen2.5-0.5B).</li>
+          <li>If WebGPU init failed, the engine retries on CPU automatically — but CPU may be too slow for large models.</li>
+          <li>Disable content blockers that might block huggingface.co.</li>
+          <li>Switch to a non-LLM engine if the model won&rsquo;t load.</li>
         </ul>
       </div>
       <div className={card}>
