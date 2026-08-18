@@ -2,6 +2,9 @@
 
 A cross-browser extension (Chrome MV3 & Firefox compatible) that tracks social sentiment and viral trends across **X (Twitter)**, **Reddit**, **TikTok**, **BBC**, and **CNN**, and correlates them in real-time with prediction market odds on **Polymarket** and **Kalshi**.
 
+📖 **Documentation**: [https://ozkanpakdil.github.io/TrendCast](https://ozkanpakdil.github.io/TrendCast)
+📸 **Screenshots**: [https://ozkanpakdil.github.io/TrendCast/screenshots/](https://ozkanpakdil.github.io/TrendCast/screenshots/)
+
 ## 🎯 What It Does
 
 **100% client-side. No API keys. No servers. No data sent anywhere.**
@@ -178,6 +181,42 @@ bun run typecheck      # TypeScript type checking
 bun run lint           # ESLint
 ```
 
+## 📸 Screenshots & Documentation
+
+The full documentation site is hosted on GitHub Pages at
+[https://ozkanpakdil.github.io/TrendCast](https://ozkanpakdil.github.io/TrendCast)
+and is **automatically rebuilt on every release**.
+
+### Generate screenshots locally
+
+```bash
+bunx playwright install --with-deps chromium   # one-time
+bun run screenshots                             # captures all UI tabs + popup + overlay
+bun run docs:manifest                           # updates docs/data/screenshots.json
+```
+
+Screenshots are saved to `docs/static/assets/screenshots/` and a screen-cast
+WebM is recorded for the dashboard tab tour.
+
+### Serve docs locally
+
+```bash
+bun run docs:serve    # Hugo dev server at http://localhost:1313/TrendCast/
+```
+
+### How it works in CI
+
+The `.github/workflows/docs.yml` workflow triggers on version tags (`v*`):
+
+1. Builds the extension in debug mode and serves it via `sirv-cli`.
+2. Runs the Playwright screenshot spec
+   (`tests/screenshots/screenshots.spec.ts`) with a dedicated config
+   (`playwright.screenshots.config.ts`).
+3. Renames the screen-cast to `trendcast-tour.webm`.
+4. Runs `scripts/generate-screenshot-manifest.ts` to produce
+   `docs/data/screenshots.json`.
+5. Builds the Hugo site and deploys to GitHub Pages.
+
 ## 🤖 CI/CD & Releases
 
 A GitHub Actions workflow (`.github/workflows/release.yml`) automatically builds and publishes releases.
@@ -322,7 +361,7 @@ The service worker is **ephemeral** — Chrome kills it after ~30s of inactivity
 | Channel | Use for | Link |
 |---------|---------|------|
 | **Telegram** | General chat, announcements, quick questions | [t.me/trendcast_community](https://t.me/trendcast_community) |
-| **GitHub Issues** | Bug reports, feature requests | [GitHub Issues](https://github.com/ozkan/trendcast/issues) |
+| **GitHub Issues** | Bug reports, feature requests | [GitHub Issues](https://github.com/ozkanpakdil/trendcast/issues) |
 
 The extension is 100% client-side — the Telegram link is just for community discussion. No data is ever sent to Telegram or any server.
 

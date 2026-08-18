@@ -1,0 +1,276 @@
+/* TrendCast docs — minimal custom styles layered on cayman theme */
+
+:root {
+  --brand: #599dff;
+  --brand-dark: #3b7dd9;
+  --bg: #0f172a;
+  --surface: #1e293b;
+  --text: #e2e8f0;
+  --muted: #94a3b8;
+  --border: #334155;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  margin: 0;
+}
+
+.wrapper {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+/* ── Header ─────────────────────────────────────── */
+.site-header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.site-header .wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+.site-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--brand);
+  text-decoration: none;
+}
+.site-title .logo {
+  font-size: 1.5rem;
+}
+.site-nav {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+.site-nav a {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: color 0.15s;
+}
+.site-nav a:hover {
+  color: var(--brand);
+}
+
+/* ── Main ───────────────────────────────────────── */
+.page-content {
+  padding: 48px 0;
+  min-height: calc(100vh - 200px);
+}
+.page-content h1,
+.page-content h2,
+.page-content h3 {
+  color: #f1f5f9;
+  margin-top: 1.5em;
+}
+.page-content h1 { font-size: 2rem; }
+.page-content h2 { font-size: 1.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.3em; }
+.page-content h3 { font-size: 1.2rem; }
+.page-content a {
+  color: var(--brand);
+}
+.page-content code {
+  background: var(--surface);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+.page-content pre {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  overflow-x: auto;
+}
+.page-content pre code {
+  background: none;
+  padding: 0;
+}
+.page-content table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1em 0;
+}
+.page-content th,
+.page-content td {
+  border: 1px solid var(--border);
+  padding: 8px 12px;
+  text-align: left;
+}
+.page-content th {
+  background: var(--surface);
+}
+
+/* ── Hero ───────────────────────────────────────── */
+.hero {
+  text-align: center;
+  padding: 60px 0 40px;
+}
+.hero h1 {
+  font-size: 2.5rem;
+  margin-bottom: 0.5em;
+}
+.hero .tagline {
+  font-size: 1.25rem;
+  color: var(--muted);
+  margin-bottom: 2em;
+}
+.hero .cta-group {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.cta {
+  display: inline-block;
+  padding: 12px 28px;
+  border-radius: 8px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: transform 0.1s, background 0.15s;
+}
+.cta:hover { transform: translateY(-1px); }
+.cta-primary {
+  background: var(--brand);
+  color: #fff;
+}
+.cta-primary:hover { background: var(--brand-dark); color: #fff; }
+.cta-secondary {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+.cta-secondary:hover { border-color: var(--brand); color: var(--brand); }
+
+/* ── Feature grid ───────────────────────────────── */
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 24px;
+  margin: 2em 0;
+}
+.feature-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px;
+  transition: border-color 0.15s;
+}
+.feature-card:hover { border-color: var(--brand); }
+.feature-card .icon { font-size: 2rem; margin-bottom: 12px; }
+.feature-card h3 { margin: 0 0 8px; font-size: 1.1rem; }
+.feature-card p { margin: 0; color: var(--muted); font-size: 0.9rem; line-height: 1.5; }
+
+/* ── Screenshot gallery ─────────────────────────── */
+.screenshot-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 24px;
+  margin: 2em 0;
+}
+.screenshot-item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  transition: border-color 0.15s, transform 0.1s;
+}
+.screenshot-item:hover {
+  border-color: var(--brand);
+  transform: translateY(-2px);
+}
+.screenshot-item img,
+.screenshot-item video {
+  width: 100%;
+  display: block;
+  border-bottom: 1px solid var(--border);
+}
+.screenshot-item .meta {
+  padding: 16px;
+}
+.screenshot-item .meta h4 {
+  margin: 0 0 6px;
+  font-size: 1rem;
+}
+.screenshot-item .meta p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+.screenshot-item .badge {
+  display: inline-block;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: var(--brand);
+  color: #fff;
+  padding: 2px 8px;
+  border-radius: 4px;
+  margin-bottom: 8px;
+}
+
+/* ── Use case sections ──────────────────────────── */
+.use-case {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 32px;
+  align-items: center;
+  margin: 3em 0;
+  padding: 24px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.use-case.reverse { direction: rtl; }
+.use-case.reverse > * { direction: ltr; }
+.use-case img {
+  width: 100%;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+.use-case h3 { margin-top: 0; }
+
+@media (max-width: 768px) {
+  .use-case {
+    grid-template-columns: 1fr;
+  }
+  .site-nav { gap: 12px; }
+}
+
+/* ── Footer ─────────────────────────────────────── */
+.site-footer {
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding: 24px 0;
+  margin-top: 40px;
+}
+.site-footer .wrapper {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.site-footer a { color: var(--brand); text-decoration: none; }
+.site-footer .text-muted { color: var(--muted); font-size: 0.85rem; }
+
+/* ── Callout ────────────────────────────────────── */
+.callout {
+  background: rgba(89, 157, 255, 0.1);
+  border: 1px solid var(--brand);
+  border-radius: 8px;
+  padding: 16px 20px;
+  margin: 1.5em 0;
+}
+.callout strong { color: var(--brand); }

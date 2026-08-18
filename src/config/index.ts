@@ -16,7 +16,7 @@ export const CONFIG = {
   // Swap the placeholder URL for your real group link after creating it.
   community: {
     telegram: 'https://t.me/trendcast_community',
-    githubIssues: 'https://github.com/ozkan/trendcast/issues',
+    githubIssues: 'https://github.com/ozkanpakdil/trendcast/issues',
   },
 
   // ── Scraping targets ───────────────────────────────────────────

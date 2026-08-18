@@ -1,0 +1,116 @@
+{{ define "main" }}
+<article class="page">
+  <header class="page-header">
+    <h1>Screenshots</h1>
+    <p class="page-description">Gallery of TrendCast UI screenshots — automatically generated from Playwright on every release.</p>
+  </header>
+  <div class="page-body">
+    <p>All screenshots on this page are <strong>automatically generated</strong> by a Playwright
+    spec on every version release. The GitHub Actions workflow builds the
+    extension, loads it in a headless browser, captures each tab and the popup,
+    then deploys the images here.</p>
+
+    {{ with hugo.Data.version }}
+    <div class="callout">
+      <strong>Version {{ .tag }}</strong> —
+      generated on {{ (time .generated_at).Format "2006-01-02 15:04 UTC" }}
+    </div>
+    {{ end }}
+
+    {{ $all := hugo.Data.screenshots.screenshots | default hugo.Data.screenshots }}
+
+    {{ $video := where $all "category" "video" }}
+    {{ $dashboard := where $all "category" "dashboard" }}
+    {{ $popup := where $all "category" "popup" }}
+    {{ $overlay := where $all "category" "overlay" }}
+
+    {{ if gt (len $video) 0 }}
+    <h2>🎬 Screen-cast</h2>
+
+    {{ range $video }}
+    <video controls width="100%" style="border-radius:8px;border:1px solid var(--border);margin:1em 0;">
+      <source src="{{ .path | relURL }}" type="video/webm">
+      Your browser does not support the video tag.
+    </video>
+    <p class="text-muted" style="color:var(--muted);font-size:0.85rem;">{{ .title }} — {{ .description }}</p>
+    {{ end }}
+    {{ end }}
+
+    {{ if gt (len $dashboard) 0 }}
+    <h2>🖥️ Dashboard</h2>
+
+    <div class="screenshot-gallery">
+      {{ range $dashboard }}
+      <div class="screenshot-item">
+        <img src="{{ .path | relURL }}" alt="{{ .title }}" loading="lazy">
+        <div class="meta">
+          <span class="badge">{{ .category }}</span>
+          <h4>{{ .title }}</h4>
+          <p>{{ .description }}</p>
+        </div>
+      </div>
+      {{ end }}
+    </div>
+    {{ end }}
+
+    {{ if gt (len $popup) 0 }}
+    <h2>🔧 Popup</h2>
+
+    <div class="screenshot-gallery">
+      {{ range $popup }}
+      <div class="screenshot-item">
+        <img src="{{ .path | relURL }}" alt="{{ .title }}" loading="lazy">
+        <div class="meta">
+          <span class="badge">{{ .category }}</span>
+          <h4>{{ .title }}</h4>
+          <p>{{ .description }}</p>
+        </div>
+      </div>
+      {{ end }}
+    </div>
+    {{ end }}
+
+    {{ if gt (len $overlay) 0 }}
+    <h2>📐 Odds Overlay</h2>
+
+    <div class="screenshot-gallery">
+      {{ range $overlay }}
+      <div class="screenshot-item">
+        <img src="{{ .path | relURL }}" alt="{{ .title }}" loading="lazy">
+        <div class="meta">
+          <span class="badge">{{ .category }}</span>
+          <h4>{{ .title }}</h4>
+          <p>{{ .description }}</p>
+        </div>
+      </div>
+      {{ end }}
+    </div>
+    {{ end }}
+
+    <hr>
+
+    <h3>How screenshots are generated</h3>
+
+    <ol>
+    <li><p>The <code>docs.yml</code> GitHub Actions workflow triggers on version tags (<code>v*</code>).</p></li>
+    <li><p>It installs Bun, builds the extension in debug mode, and serves it via
+       <code>sirv-cli</code> on <code>127.0.0.1:4173</code>.</p></li>
+    <li><p>A dedicated Playwright config (<code>playwright.screenshots.config.ts</code>) runs
+       <code>tests/screenshots/screenshots.spec.ts</code> which:
+       <ul>
+         <li>Loads the dashboard and popup with mock browser APIs and seeded data.</li>
+         <li>Navigates to each tab and captures a full-page PNG.</li>
+         <li>Records a WebM screen-cast of a full tab tour.</li>
+         <li>Builds a mock social page to capture the odds overlay.</li>
+       </ul></p></li>
+    <li><p>A manifest generator (<code>scripts/generate-screenshot-manifest.ts</code>) scans
+       the output directory and writes <code>data/screenshots.json</code>.</p></li>
+    <li><p>Hugo builds the site and deploys to GitHub Pages.</p></li>
+
+    </ol>
+
+    <p>See the <a href="{{ $.Site.Params.repo }}/blob/main/tests/screenshots/screenshots.spec.ts">screenshot spec source</a>
+    and the <a href="{{ $.Site.Params.repo }}/blob/main/.github/workflows/docs.yml">workflow definition</a>.</p>
+  </div>
+</article>
+{{ end }}

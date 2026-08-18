@@ -1,0 +1,131 @@
+name: Docs & Screenshots
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Version tag (e.g. v0.1.0) — used to label screenshots'
+        required: false
+        type: string
+  # Allow running on main to keep docs fresh between releases
+  workflow_run:
+    workflows: ['Build & Release']
+    types: [completed]
+    branches: ['main']
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+# Allow only one concurrent docs deployment
+concurrency:
+  group: 'docs'
+  cancel-in-progress: true
+
+jobs:
+  screenshots:
+    name: Generate screenshots & screen-cast
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Install Playwright browser
+        run: bunx playwright install --with-deps chromium
+
+      - name: Generate screenshots
+        run: bun run screenshots
+        env:
+          CI: 'true'
+
+      - name: Rename screen-cast video
+        run: |
+          # Playwright saves video as <random>.webm — rename to a stable name
+          cd docs/static/assets/screenshots
+          if ls *.webm 1>/dev/null 2>&1; then
+            mv *.webm trendcast-tour.webm 2>/dev/null || true
+          fi
+
+      - name: Generate screenshot manifest
+        run: bun run docs:manifest
+
+      - name: Upload screenshots artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: |
+            docs/static/assets/screenshots
+            docs/data/screenshots.json
+          retention-days: 5
+
+  docs:
+    name: Build & deploy GitHub Pages
+    needs: screenshots
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download screenshots artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: screenshots
+          path: docs-assets
+
+      - name: Merge screenshots into Hugo tree
+        run: |
+          mkdir -p docs/static/assets/screenshots docs/data
+          cp -r docs-assets/static/assets/screenshots/* docs/static/assets/screenshots/ 2>/dev/null || true
+          cp docs-assets/data/screenshots.json docs/data/screenshots.json 2>/dev/null || true
+
+      - name: Inject version into docs data
+        run: |
+          VERSION="${GITHUB_REF_NAME:-${{ inputs.tag }}}"
+          if [ -z "$VERSION" ]; then VERSION="dev"; fi
+          mkdir -p docs/data
+          cat > docs/data/version.json << EOF
+          {
+            "tag": "${VERSION}",
+            "generated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+          echo "✓ Version: $VERSION"
+
+      - name: Setup Hugo
+        uses: peaceiris/actions-hugo@v3
+        with:
+          hugo-version: 'latest'
+          extended: true
+
+      - name: Setup Pages
+        id: pages
+        uses: actions/configure-pages@v5
+
+      - name: Build Hugo site
+        run: |
+          cd docs
+          hugo --baseURL "${{ steps.pages.outputs.base_url }}/" --minify
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/public
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

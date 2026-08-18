@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ block "title" . }}{{ .Title }} · {{ .Site.Title }}{{ end }}</title>
+  <meta name="description" content="{{ with .Description }}{{ . }}{{ else }}{{ .Site.Params.description }}{{ end }}">
+  <link rel="stylesheet" href="{{ "css/style.css" | relURL }}">
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrapper">
+      <a class="site-title" href="{{ "" | relURL }}">
+        <span class="logo">📊</span> {{ .Site.Title }}
+      </a>
+      <nav class="site-nav">
+        {{ range .Site.Menus.main }}
+        <a href="{{ .URL | relURL }}"{{ if strings.HasPrefix .URL "http" }} target="_blank" rel="noopener"{{ end }}>{{ .Name }}</a>
+        {{ end }}
+      </nav>
+    </div>
+  </header>
+
+  <main class="page-content">
+    <div class="wrapper">
+      {{ block "main" . }}{{ .Content }}{{ end }}
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrapper">
+      <div class="footer-col">
+        <p>
+          <strong>{{ .Site.Title }}</strong> — {{ .Site.Params.tagline }}
+        </p>
+        <p class="text-muted">
+          {{ with hugo.Data.version }}
+            Version {{ .tag }} ·
+            Docs generated {{ (time .generated_at).Format "2006-01-02" }}
+          {{ end }}
+        </p>
+      </div>
+      <div class="footer-col">
+        <a href="{{ .Site.Params.repo }}">Source Code</a> ·
+        <a href="{{ .Site.Params.repo }}/issues">Report a Bug</a> ·
+        MIT License
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,75 @@
+# ── Hugo configuration for TrendCast documentation ───────────────
+# Site: https://ozkanpakdil.github.io/TrendCast
+
+baseURL = "https://ozkanpakdil.github.io/TrendCast/"
+locale = "en-us"
+title = "TrendCast"
+description = "Social Sentiment × Prediction Markets — a 100% client-side browser extension."
+tagline = "Social Sentiment × Prediction Markets"
+repo = "https://github.com/ozkanpakdil/TrendCast"
+
+# GitHub Pages subdirectory hosting
+publishDir = "public"
+
+# Don't build the old Jekyll/Ruby artifacts
+ignoreFiles = ["\\.gem$", "^Gemfile", "^_config\\.yml$", "^_layouts/", "^_pages/", "^_data/"]
+
+# Disable taxonomies — we don't use tags/categories
+[taxonomies]
+  tag = ""
+  category = ""
+
+# Enable Goldmark for rich Markdown (tables, HTML passthrough)
+[markup.goldmark]
+[markup.goldmark.renderer]
+unsafe = true  # allow raw HTML in Markdown (needed for feature grids, use-case layouts)
+[markup.highlight]
+style = "github-dark"
+lineNos = false
+
+# ── Data files loaded from data/ ──────────────────────────────────
+# Hugo reads TOML/YAML/JSON from data/ automatically.
+#   data/screenshots.json → .Site.Data.screenshots
+#   data/version.json     → .Site.Data.version
+
+# ── Params accessible in templates as .Params.* ───────────────────
+[params]
+  repo = "https://github.com/ozkanpakdil/TrendCast"
+  tagline = "Social Sentiment × Prediction Markets"
+  description = "TrendCast — a 100% client-side browser extension tracking social sentiment and prediction market odds."
+
+# ── Navigation menu ───────────────────────────────────────────────
+[[menus.main]]
+  name = "Home"
+  url = "/"
+  weight = 1
+
+[[menus.main]]
+  name = "Features"
+  url = "/features/"
+  weight = 2
+
+[[menus.main]]
+  name = "Use Cases"
+  url = "/use-cases/"
+  weight = 3
+
+[[menus.main]]
+  name = "Screenshots"
+  url = "/screenshots/"
+  weight = 4
+
+[[menus.main]]
+  name = "Install"
+  url = "/installation/"
+  weight = 5
+
+[[menus.main]]
+  name = "Privacy"
+  url = "/privacy/"
+  weight = 6
+
+[[menus.main]]
+  name = "GitHub ↗"
+  url = "https://github.com/ozkanpakdil/TrendCast"
+  weight = 7

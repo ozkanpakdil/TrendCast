@@ -65,7 +65,7 @@ English
 
 ### Support URL
 - Telegram community: https://t.me/trendcast_community
-- Bug reports: https://github.com/ozkan/trendcast/issues
+- Bug reports: https://github.com/ozkanpakdil/trendcast/issues
 
 ### Privacy Policy URL
 (Add the URL to PRIVACY.md hosted on GitHub Pages or your site)
