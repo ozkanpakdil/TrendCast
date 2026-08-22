@@ -432,6 +432,41 @@ function scrapeTikTok(): SocialSignal[] {
 3. **Market-driven news:** `collectedMarkets` + `correlations.newsMatches` → `buildMarketDrivenNews` → `marketNewsView` (storage) → dashboard.
 4. **TikTok:** TikTok DOM → content script → `REPORT_SOCIAL_DATA` → `mergeSignals` → `collectedSignals` → correlation.
 
+### Pattern 6: ML Quantization + WebGPU with WASM Fallback
+
+**What:** The ML engines already pass `{ quantized: true }` (q4/q8) to every pipeline and the LLM pipeline already detects WebGPU and falls back to WASM CPU. The hardening work is to make this **explicit, configurable, and resilient**: a dtype fallback chain (WebGPU fp32 → WASM q8 → WASM q4), a runtime device-capability probe surfaced to the UI, and a download-size budget that gates large models behind opt-in.
+
+**When to use:** Every ML pipeline creation. The key is that WebGPU is **never a hard requirement** — Firefox gates it behind `dom.webgpu.enabled`, so WASM CPU must always work.
+
+**Trade-offs:** Quantization shrinks downloads and speeds inference but slightly reduces accuracy. WebGPU is 10–50× faster for LLMs but unreliable in Firefox. The fallback chain must be tested so a WebGPU failure degrades to WASM, not to a broken engine.
+
+**Example (existing + hardening):**
+```typescript
+// src/services/engine/ml/transformers.ts (existing LLM pipeline — harden it)
+let device: string | undefined;
+let dtype: string | undefined;
+try {
+  const gpu = (navigator as unknown as { gpu?: unknown }).gpu;
+  if (gpu) { device = 'webgpu'; dtype = 'fp32'; }
+} catch { /* fall through to WASM */ }
+
+const pipelineOptions: { quantized: boolean; device?: string; dtype?: string } = {
+  quantized: true, // q4 quantization for smaller download + faster inference
+};
+if (device) pipelineOptions.device = device;
+if (dtype) pipelineOptions.dtype = dtype;
+
+try {
+  pipeline = await lib.pipeline('text-generation', model, pipelineOptions);
+} catch (err) {
+  // WebGPU failed → retry with WASM CPU (never leave the engine broken)
+  if (device) {
+    console.warn(`[TrendCast] ML: WebGPU failed for "${model}", falling back to WASM CPU`, err);
+    pipeline = await lib.pipeline('text-generation', model, { quantized: true });
+  } else throw err;
+}
+```
+
 ## Scaling Considerations
 
 | Scale | Architecture Adjustments |
@@ -501,6 +536,79 @@ function scrapeTikTok(): SocialSignal[] {
 | Correlation engine ↔ Keyword index | Direct function call | Shared `CorrelationContext` |
 | Alert engine ↔ Storage | `chrome.storage.local` read/write | Persist `alertState` for dedup |
 | Market-driven news ↔ Storage | `chrome.storage.local` read/write | Derived `marketNewsView` snapshot |
+
+## Integration Points (per feature)
+
+### Feature 1 — Correlation Alerts
+
+| Integration point | What changes |
+|-------------------|--------------|
+| Manifest | Add `notifications` permission (`src/manifest.config.ts`) |
+| Types | Add `AlertState`, `AlertScope` ('watchlist' \| 'all'), `ALERT_STATE_KEY`; extend `ExtensionSettings` with `alertsEnabled`, `alertThreshold`, `alertCooldownMs`, `alertScope` |
+| Config | Add `CONFIG.storage.alertState`, alert defaults |
+| Background | New `src/background/alerts.ts`; call `evaluateAlerts` after `runCorrelationAsync` and `runCorrelationPrecompute`; register `notifications.onClicked` to open dashboard |
+| Storage | New `alertState` key (dedup + cooldown state) |
+| Dashboard | New `useAlerts` hook + alert opt-in UI in Settings |
+| Messaging | Optional `ALERT_*` message variants if the UI needs live alert state |
+
+### Feature 2 — Market-driven news view
+
+| Feature point | Where |
+|---------------|-------|
+| Types | Add `MarketCategory`, `MarketDrivenNewsItem`; extend `Message` with `GET_MARKET_NEWS` / `MARKET_NEWS_RESULT` |
+| Config | Add category→keyword map (reuse `redditCategories`); add `CONFIG.storage.marketNewsView` |
+| Background | New `src/background/correlationNews.ts`; call `buildMarketDrivenNews` after correlation; write `marketNewsView` |
+| Storage | New derived `marketNewsView` key |
+| Dashboard | New `MarketDrivenNews.tsx` component + `useMarketNews` hook; add tab in `App.tsx` |
+
+### Feature 3 — TikTok collector
+
+| Feature point | Where |
+|---------------|-------|
+| Manifest | `tiktok.com` host permission already present; content script already declared (empty) |
+| Content | Implement `src/content/socials/index.ts` (scrape TikTok discover page) |
+| Collectors | New `src/services/collectors/tiktok.ts` (thin normalizer) + barrel export |
+| Types | `SocialPlatform` already includes `'tiktok'`; `enabledSources.tiktok` already exists |
+| Background | `REPORT_SOCIAL_DATA` handler already merges signals; add per-key cap |
+| Config | Add TikTok scrape URL/selectors to `CONFIG.scrape.tiktok` |
+
+### Feature 4 — Correlation speedup
+
+| Aspect | Where |
+|--------|-------|
+| Engine | New `src/services/engine/index.ts` (inverted index); refactor `correlation.ts` to use `CorrelationContext` |
+| ML | Zero-shot/LLM already pre-filter; switch `findCandidateContracts` to hash lookup via the shared index |
+| Background | `runCorrelationWithEngine` builds the index once and passes it through |
+
+### Feature 5 — Storage caps + incremental byte estimation
+
+| Aspect | Where |
+|--------|-------|
+| Utils | `src/utils/storage.ts`: replace full `JSON.stringify` in `estimateBytes` with incremental per-key byte tracking (or `getBytesInUse()`); add per-key cap enforcement |
+| Background | `mergeSignals`/`mergeNews` enforce `CONFIG.storageBudget.maxSignals`/`maxNews` (currently uncapped) |
+| Config | `maxSignals`/`maxNews` already exist in `CONFIG.storageBudget` — wire them into the merge helpers |
+
+### Feature 6 — ML quantization + WebGPU
+
+| Aspect | Where |
+|--------|-------|
+| Engine | `src/services/engine/ml/transformers.ts`: harden the device/dtype fallback chain; surface WebGPU availability to the UI |
+| Config | Add a download-size budget; gate large LLM models behind explicit opt-in |
+| Worker | `src/workers/ml-worker.ts` already sets WASM path; ensure WebGPU path works in worker context |
+| Dashboard | Surface device capability (WebGPU vs WASM) in Settings so the user knows why inference is slow |
+
+## Suggested Build Order
+
+The features have a dependency graph. Build in this order so each feature's prerequisites are in place:
+
+1. **Feature 5 (storage caps + incremental bytes)** — foundational; bounds the data that every downstream feature processes. No dependencies.
+2. **Feature 4 (inverted index)** — the highest-leverage optimization; makes correlation fast enough for alerts and the market-driven view. Depends on nothing new.
+3. **Feature 6 (ML quantization + WebGPU)** — independent hardening of the ML path; can proceed in parallel with 4.
+4. **Feature 1 (correlation alerts)** — depends on fast correlation (4) and bounded storage (5); adds the `notifications` permission.
+5. **Feature 2 (market-driven news view)** — depends on reliable correlation output (4) and category taxonomy; the flagship differentiator.
+6. **Feature 3 (TikTok collector)** — highest fragility; ship last as a best-effort differentiator after the core is stable.
+
+**Rationale:** Storage caps and the inverted index are prerequisites for everything else (they bound the data and make correlation fast). Alerts and the market-driven view both consume correlation output, so they come after the speedup. TikTok is the most fragile and least critical, so it ships last.
 
 ## Sources
 

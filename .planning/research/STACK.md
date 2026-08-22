@@ -17,10 +17,12 @@ This research covers **only the NEW capabilities** being added to the existing T
 | Technology | Version | Purpose | Why Recommended |
 |------------|---------|---------|-----------------|
 | `chrome.notifications` (via `webextension-polyfill`) | API (no pkg) | Correlation alerts/notifications | The ONLY notification API that works from an MV3 background service worker. Requires the `notifications` permission. Fully cross-browser via the existing `webextension-polyfill` (Firefox maps it to `browser.notifications`). Supports `basic`/`list`/`image`/`progress` templates, buttons, and `onClicked`/`onButtonClicked` events. |
-| `@huggingface/transformers` `device: 'webgpu'` | 3.7.x (existing) | Faster client-side ML inference | v3 supports `device: 'webgpu'` for GPU acceleration — a large speedup over WASM CPU for embedding/sentiment/zero-shot. **Must keep WASM fallback** because WebGPU is not reliable in Firefox (behind `dom.webgpu.enabled` flag). Do NOT upgrade to v4.x in this milestone (breaking major; see Version Compatibility). |
-| Hand-rolled `Map`-based inverted index | n/a (no pkg) | Correlation speedup (O(n×m) → candidate filtering) | The zero-shot engine already implements `findCandidateContracts` — generalize it. A keyword→contract `Map` is dependency-free, trivially testable, and exactly fits the "only compare candidates sharing keywords" pattern. No library needed. |
-| `chrome.storage.local` (keep) | n/a | Storage-as-state | Already the architecture. The ~7 MB soft budget is well under the ~10 MB quota. Do NOT migrate to IndexedDB for the current dataset size — it adds async complexity for no benefit at this scale. |
+| `@huggingface/transformers` `device: 'webgpu'` + `dtype` | 3.7.x (existing) | ML quantization + WebGPU/WASM fallback | v3 supports `device: 'webgpu'` and `dtype`. **The LLM engine already implements the correct pattern** (`src/services/engine/ml/llm.ts` lines 256–287: detect `navigator.gpu`, use `device:'webgpu'`/`dtype:'fp32'`, retry WASM on failure). The gap: embedding/sentiment/zero-shot/NER pipelines (`transformers.ts` lines 166–229) pass only `{ quantized: true }` and never request WebGPU. Extend the LLM's device-detection + fallback pattern to those pipelines. Do NOT upgrade to v4.x (breaking major; see Version Compatibility). |
+| Hand-rolled `Map`-based inverted keyword→contract index | n/a (no pkg) | Correlation speedup (O(n×m) → candidate filtering) | The heuristic engine (`src/services/engine/correlation.ts`) still runs O(n×m) nested loops. The zero-shot engine already proves the pattern: `findCandidateContracts` (`zeroshot.ts` lines 94–105) pre-filters contracts by keyword overlap before expensive work. Generalize it into a `Map<keyword, contractId[]>` built once per cycle. Dependency-free, trivially testable, exactly fits "only compare candidates sharing keywords." No library needed. |
+| `chrome.storage.local` (keep) + per-key caps | n/a | Storage caps + incremental byte estimation | Already the architecture. **The real cost is `estimateBytes` in `src/utils/storage.ts` — it re-serializes the ENTIRE dataset via `new Blob([JSON.stringify(value)]).size` on every budget check.** Fix: track per-key byte deltas incrementally (estimate only the changed value, not the whole store) and add per-key caps in `CONFIG.storageBudget` (signals/news currently accumulate ~460 news items/cycle with no per-key ceiling). Do NOT migrate to IndexedDB at this scale. |
 | `idb` | 8.0.3 | IndexedDB wrapper (only if needed) | Only adopt if a future feature (e.g. large export history, offline cache) exceeds chrome.storage.local's quota. `idb` is the minimal, promise-based wrapper. **Defer — not needed for this milestone.** |
+| TikTok DOM scraping (content script) | n/a (no pkg) | TikTok data collection | No official key-free TikTok API. The manifest **already** has `*://tiktok.com/*` in both `content_scripts` and `host_permissions`, and `CONFIG.scrape.tiktok.url` exists. The gap is purely a missing collector function (`src/services/collectors/tiktok.ts`) + barrel export in `src/services/collectors/index.ts`. Best-effort DOM scraping of the discover page, graceful degradation. |
+| Category taxonomy (reuse Reddit categories) | n/a (no pkg) | Market-driven news view | `CONFIG.scrape.redditCategories` already defines finance/crypto/economics/sports/entertainment/technology/politics. Reuse this exact taxonomy for news categorization + market grouping (MKT-02). No new dep — a pure type + mapping layer. |
 
 ### Supporting Libraries
 
@@ -43,16 +45,19 @@ This research covers **only the NEW capabilities** being added to the existing T
 ## Installation
 
 ```bash
-# Core (only if you adopt flexsearch for fuzzy search — otherwise NO new deps)
+# This milestone adds ZERO new runtime dependencies.
+# No bun add commands required.
+
+# If you later adopt flexsearch for fuzzy news matching:
 bun add flexsearch
 
-# Optional (only if you later migrate large datasets to IndexedDB)
+# If you later migrate large datasets to IndexedDB:
 bun add idb
-
-# Dev (no new dev deps required for this milestone)
 ```
 
-**Key point:** This milestone should add **zero or one** new runtime dependency. The inverted index, TikTok collector, and notification logic are all implementable with the existing stack + platform APIs. Adding dependencies to a hardening milestone is an anti-pattern.
+**The only "installation" change is a manifest edit:** add `'notifications'` to the `permissions` array in `src/manifest.config.ts`. This triggers a new permission prompt on update — expected and acceptable for the alerts feature.
+
+**Key point:** This milestone should add **zero** new runtime dependencies. The inverted index, TikTok collector, notification logic, storage caps, and category taxonomy are all implementable with the existing stack + platform APIs. Adding dependencies to a hardening milestone is an anti-pattern.
 
 ---
 
@@ -78,6 +83,7 @@ bun add idb
 | IndexedDB migration now | Premature; current data fits in `chrome.storage.local` quota. | Keep `chrome.storage.local` |
 | Any backend / API key / server | Hard project constraint — 100% client-side. | Public endpoints + DOM scraping + RSS |
 | `chrome.notifications` `image`/`progress` templates | `image` is deprecated (Chrome 59) and `progress` is niche; `basic` + `list` cover the correlation-alert use case. | `basic` and `list` templates |
+| A new ML model family for quantization | The existing `Xenova/*` models already ship q4/q8 quantized variants. No new model downloads needed. | Keep existing models; just pass `device`/`dtype` options. |
 
 ---
 
@@ -93,11 +99,15 @@ bun add idb
 
 **If WebGPU is available (Chrome, `navigator.gpu` present):**
 - Use `device: 'webgpu'` in the transformers.js pipeline
-- Because it's a large speedup over WASM for embedding/sentiment/zero-shot inference.
+- Because it's a large speedup over WASM for embedding/sentiment/zero-shot inference. **Mirror the existing LLM pattern** (`llm.ts` lines 258–287): detect `navigator.gpu`, set `device:'webgpu'`/`dtype:'fp32'`, and on pipeline failure retry with WASM.
 
 **If WebGPU is unavailable (Firefox, or flag off):**
 - Fall back to `device: 'wasm'` (current behavior)
 - Because WebGPU is flag-gated in Firefox and must never be a hard dependency.
+
+**If a storage key grows unbounded (signals/news):**
+- Add a per-key cap in `CONFIG.storageBudget` and prune to it
+- Because `mergeSignals`/`mergeNews` currently accumulate ~460 news items/cycle with no per-key ceiling; the global 7 MB budget alone doesn't bound any single key.
 
 ---
 
@@ -109,6 +119,7 @@ bun add idb
 | `@huggingface/transformers` 4.x | `onnxruntime-web` 1.27+ | v4 is a breaking change (renamed packages/APIs). **Do not mix** — pin to one major. |
 | `webextension-polyfill` 0.12.0 | `chrome.notifications` / `browser.notifications` | Polyfill maps `chrome.*` to `browser.*`; `notifications` API is fully covered. |
 | `chrome.notifications` | MV3 service worker | Works in the background worker; requires `notifications` permission in `manifest.config.ts`. |
+| `chrome.alarms` | MV3 service worker | Already declared + used (`CONFIG.collection.alarmName`). Reuse for the alert-sweep alarm. |
 
 ---
 
@@ -120,6 +131,7 @@ bun add idb
 - Chrome "Storage and cookies" — verified `chrome.storage.local` quota, `unlimitedStorage` permission, IndexedDB available in service workers. **HIGH**
 - MDN IndexedDB API — verified IndexedDB supports large structured data + indexes, available in workers. **HIGH**
 - npm registry (live) — verified current versions: `@huggingface/transformers` 4.2.0 (latest), `onnxruntime-web` 1.27.0, `webextension-polyfill` 0.12.0, `idb` 8.0.3, `flexsearch` 0.8.212. **HIGH**
+- Codebase verification — `src/services/engine/ml/llm.ts` (WebGPU+fallback pattern), `src/services/engine/ml/transformers.ts` (pipelines only pass `quantized:true`), `src/services/engine/ml/zeroshot.ts` (`findCandidateContracts`), `src/utils/storage.ts` (`estimateBytes` re-serializes whole store), `src/manifest.config.ts` (TikTok host perms + content script already present), `src/config/index.ts` (`redditCategories` taxonomy). **HIGH**
 - TikTok collection approach — no official key-free API; realistic client-side paths are DOM scraping (content script) and public RSS proxies. **MEDIUM** (needs phase-specific feasibility research)
 
 ---

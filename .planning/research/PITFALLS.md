@@ -1,304 +1,332 @@
-# Pitfalls Research
+# Pitfalls Research — Milestone v1.0: Speed, Alerts & New Data
 
-**Domain:** Client-side prediction-market correlation browser extension (MV3, Chrome + Firefox)
+**Domain:** Adding new features to an existing 100% client-side MV3 browser extension (Chrome + Firefox) that correlates social sentiment, news, and prediction-market odds.
 **Researched:** 2026-08-22
 **Confidence:** HIGH
+**Scope:** Pitfalls specific to ADDING these 7 features to the EXISTING system — not generic extension pitfalls. The base-system pitfalls (worker ephemerality, storage quota, O(n×m) loops, paywalled sources, ML size) are already documented in the prior research; this file focuses on what goes wrong when these NEW features are layered on top.
 
 ## Critical Pitfalls
 
-### Pitfall 1: MV3 Service Worker Ephemerality Kills Long-Running Collection
+### Pitfall 1: Correlation Alerts Fire on Every Match → Notification Fatigue + Storage Bloat
 
 **What goes wrong:**
-The background service worker is killed after ~30 seconds of inactivity (Chrome) and after ~5 minutes of active use. Any in-memory state — partially collected signals, in-progress correlation runs, ML model instances, pending fetch queues — is silently destroyed. The extension appears to "stop working" intermittently: data goes stale, correlations never complete, and the popup/dashboard shows old snapshots with no error.
+The alert feature correlates on every collection cycle and creates a `chrome.notifications` for every match above threshold. Users get a wall of notifications (fatigue → they disable notifications entirely), and the alert history array grows unboundedly in `chrome.storage.local`, eating the ~7 MB budget. Alerts also re-fire for the same correlation on every cycle because there's no dedup key.
 
 **Why it happens:**
-Manifest V3 replaced persistent background pages with event-driven service workers. Developers coming from MV2 (or from a server mindset) assume the background process stays alive. TrendCast's background-orchestrator pattern is especially vulnerable because it holds state in memory and relies on the worker being resident.
+The correlation engine (`correlate`, `correlateNews`, `correlateNewsSocial`) returns a fresh match list each run. Developers naively map every match → notification without asking "did the user already see this?" The existing `MIN_CONFIDENCE` threshold (0.75, or 0.35 with shared entity) is permissive enough that many matches qualify.
 
 **How to avoid:**
-- Treat the service worker as **stateless and restartable**. Persist every piece of state to `chrome.storage.local` immediately after mutation — never keep the source of truth in a module-level variable.
-- Use `chrome.alarms` (min period 30s) to wake the worker on a schedule rather than relying on it staying alive. Re-hydrate state from storage on every `startup`/`alarm` event.
-- Design collection as idempotent, resumable batches: on wake, check what's already in storage and only fetch what's missing.
-- Do NOT use `chrome.runtime.getPlatformInfo()` or other tricks to keep the worker alive — they're unreliable and get flagged in review.
+- **Dedup by a stable key** — hash `contract.id + signal.id + correlatedAt-window` (e.g. bucket by hour) and persist a "last alerted" set in storage. Never alert on the same correlation twice.
+- **Throttle** — a global max (e.g. 1 alert per N minutes) and a per-market cooldown. Respect the MV3 `chrome.alarms` 30-second floor; do not attempt sub-30s alerting.
+- **Watchlist-scope** — only alert on watchlist markets (the requirement says "watchlist-scoped"). This is the single best fatigue reducer.
+- **Cap the alert history** — store only the last N (e.g. 100) alert records; prune older ones. Alert history is a different retention class than collection data.
+- **Direction-aware** — only alert when the correlation is *new* or *direction changed* (e.g. sentiment flipped), not on every sustained match.
 
 **Warning signs:**
-- Data collection stops after the extension has been idle for a few minutes.
-- Correlations complete only when the user actively opens the popup/dashboard (which wakes the worker).
-- No error is logged — the worker just "disappears."
+- Multiple notifications appear in a single collection cycle.
+- The same correlation re-alerts on consecutive cycles.
+- Alert history grows monotonically in storage.
+- User disables notifications (permission flips to `denied`).
 
 **Phase to address:**
-Phase 1 (Core collection + storage-as-state). This is the foundational architecture decision; retrofitting it later is a rewrite.
+Phase: Correlation Alerts. Dedup + throttle + watchlist scope must be designed in from the first alert, not retrofitted.
 
 ---
 
-### Pitfall 2: Unbounded Data Accumulation vs. the 10 MB Storage Quota
+### Pitfall 2: Notification Permission Denied / `iconUrl` Missing → Silent Alert Failure
 
 **What goes wrong:**
-`chrome.storage.local` has a hard quota of **10 MB** (5 MB in Chrome 113 and earlier). TrendCast's `mergeSignals`/`mergeNews` accumulate ~460 news items per cycle with no cap. Combined with social signals, market odds snapshots, and correlation history, the store fills up. Writes then fail with `QUOTA_BYTES` errors, collection silently stops, and the extension becomes unusable. The `estimateBytes` function re-serializes the entire dataset on every budget check — an O(dataset) cost that itself becomes a bottleneck.
+`chrome.notifications.create()` throws if `iconUrl` is omitted, and silently does nothing if the `notifications` permission is denied or the user disabled notifications. The extension "looks done" (code runs, no error) but the user never sees an alert. On Firefox, notification behavior and permission handling differ from Chrome, so a Chrome-tested path can break on Firefox.
 
 **Why it happens:**
-Storage-as-state is convenient, so developers keep appending data without a retention policy. The quota is invisible until it's hit, and the failure mode (silent write rejection) is easy to miss.
+Developers port web-app notification logic (which uses the Notification API) into the MV3 background worker without reading the `chrome.notifications` contract. The `iconUrl` requirement and the `getPermissionLevel()` check are the two most common surprises.
 
 **How to avoid:**
-- Establish a **retention budget** up front: a hard byte cap (e.g. 7 MB soft / 9 MB hard) with a pruning policy that evicts oldest data first.
-- Track bytes with `chrome.storage.local.getBytesInUse()` (cheap, no re-serialization) instead of re-serializing the whole dataset in `estimateBytes`.
-- Cap the number of items per collection (e.g. max 200 news items, max 500 signals) and dedupe by URL/id before storing.
-- Consider `unlimitedStorage` permission only if the data genuinely needs to exceed 10 MB — but this is a red flag for review and should be a deliberate, documented decision, not a default.
-
-**Warning signs:**
-- `chrome.storage.local` writes start throwing `QUOTA_BYTES` errors.
-- Storage usage grows monotonically across collection cycles.
-- The dashboard shows old data because new writes are failing.
-
-**Phase to address:**
-Phase 1 (Core collection) — budget and pruning must be designed in from the start, not bolted on.
-
----
-
-### Pitfall 3: O(n×m) Correlation Loops That Freeze the UI
-
-**What goes wrong:**
-TrendCast's `correlation.ts` and `ml/ner.ts` use nested O(n×m) loops over signals × markets. With ~460 news items, hundreds of signals, and dozens of markets, each correlation pass is hundreds of thousands of string comparisons. On the main thread (or in a service worker that must respond to events), this blocks the UI for seconds and can trigger the worker to be killed as "unresponsive."
-
-**Why it happens:**
-The naive "for each signal, for each market, check if keywords match" approach is the first thing that comes to mind and works fine at small scale. It's only when data volume grows that the quadratic blowup becomes visible.
-
-**How to avoid:**
-- Build an **inverted index**: tokenize each market's keywords once, then for each signal, look up matching markets via a hash map keyed by token → O(n + m) instead of O(n×m).
-- Precompute and cache tokenized lexicons; don't re-tokenize on every pass.
-- Move heavy compute off the main thread: use a Web Worker (`workers/ml-worker.ts` already exists) or chunk the work across `setTimeout`/`scheduler.yield()` so the worker stays responsive.
-- Add a complexity guard: if the product of input sizes exceeds a threshold, degrade gracefully (sample or batch) rather than blocking.
-
-**Warning signs:**
-- Correlation runs take seconds and the popup/dashboard freezes during them.
-- CPU spikes to 100% on a single core during collection.
-- The service worker is repeatedly terminated for being unresponsive.
-
-**Phase to address:**
-Phase 2 (Correlation engine) — the algorithm choice is made here; retrofitting an inverted index later is a rewrite.
-
----
-
-### Pitfall 4: Paywalled / Low-Yield News Sources Silently Drop Out of Correlations
-
-**What goes wrong:**
-Seeking Alpha and Investing.com articles are paywalled and often not indexed by Google News RSS. The `site:seekingalpha.com` Google News query returns mostly stale or non-article pages (stock quote pages, privacy policy, 2011-era pages) rather than fresh analysis. When the RSS feed returns few/no fresh items, the correlation threshold filters them out, and the "Seeking Alpha / Investing" tab appears empty — with no error, because the fetch "succeeded."
-
-**Why it happens:**
-Developers assume a named source will always yield fresh, relevant items. In reality, RSS aggregation of paywalled sources is unreliable: Google News RSS is a personal, non-commercial feed with opaque indexing, and paywalled publishers are inconsistently represented. The failure is silent because the pipeline returns 200 with an empty or stale item list.
-
-**How to avoid:**
-- **Do not rely on a single aggregator** for paywalled sources. Add a direct source (Seeking Alpha's own RSS/API if available) or a second aggregator as a fallback.
-- Add **freshness validation**: if a source returns zero items newer than N hours, log it and surface a "source degraded" state in the UI rather than silently showing nothing.
-- **Decouple "fetched" from "correlated"**: a source can be healthy (fetching) but produce no correlations (threshold). Show both states distinctly.
-- Respect Google News RSS terms: it is for personal, non-commercial feed rendering only — do not build a commercial product on it.
-
-**Warning signs:**
-- A source tab is empty but the network log shows successful 200 responses.
-- The source's RSS returns mostly non-article pages (quote pages, static pages).
-- Correlations for that source are always zero regardless of market.
-
-**Phase to address:**
-Phase 1 (News collection) — source reliability and fallback strategy must be designed before the correlation phase depends on it.
-
----
-
-### Pitfall 5: Client-Side ML Model Size and WASM Inference Latency
-
-**What goes wrong:**
-Transformers.js models can be **up to 1.5 GB** (full-precision). On WASM CPU (the default for Firefox, and the fallback when WebGPU is unavailable), inference is slow — a large NER/embedding model can take seconds per batch. The model download competes with the 10 MB storage quota (models are cached in browser storage, not `chrome.storage.local`, but still consume disk and bandwidth), and slow inference blocks the collection cycle.
-
-**Why it happens:**
-Developers pick a "good" model without checking its size or the target device's capabilities. WebGPU is still experimental (~70% global support as of late 2024, and Firefox requires a feature flag), so WASM is the real baseline. A 1.5 GB fp32 model is impractical for a browser extension.
-
-**How to avoid:**
-- **Prefer quantized models**: use `dtype: "q8"` (default for WASM) or `"q4"` to shrink models 4–8×. Use `ModelRegistry.get_available_dtypes()` to pick the smallest available dtype with a fallback chain (`["q4", "q8", "fp16", "fp32"]`).
-- **Choose small models** for the task (e.g. `all-MiniLM-L6-v2`-class embeddings, tiny NER) rather than large general-purpose models.
-- **Detect device capability** at runtime: try `device: "webgpu"`, fall back to WASM with a quantized model. Never assume WebGPU.
-- **Cache the model** and load it lazily/off the critical path; run inference in the worker so the UI never blocks.
-- Set a **download size budget** and warn the user before a large download.
-
-**Warning signs:**
-- Model download exceeds tens of MB for a simple task.
-- Inference takes seconds per item on WASM.
-- The extension's first-run experience is dominated by a huge model download.
-
-**Phase to address:**
-Phase 3 (ML engines) — model selection and quantization are decided here; changing the model later invalidates cached embeddings.
-
----
-
-### Pitfall 6: TikTok Data Collection Without a Backend Is Fragile and Possibly Non-Compliant
-
-**What goes wrong:**
-Collecting TikTok data purely client-side means either (a) DOM-scraping the TikTok web app from a content script, or (b) calling TikTok's internal/private APIs directly. Both are fragile: TikTok's DOM and API change frequently, the site uses aggressive anti-bot measures, and scraping private endpoints may violate TikTok's ToS. The result is a collector that breaks silently on every TikTok update and may get the extension flagged.
-
-**Why it happens:**
-The project is explicitly "no backend," so the natural instinct is to scrape in the browser. But TikTok is one of the hardest targets to scrape reliably, and it's a moving target.
-
-**How to avoid:**
-- **Scope it as a best-effort, optional collector**, not a core feature. Never let TikTok failure block the rest of collection.
-- Prefer **public, documented surfaces** (TikTok's public web search results page) over private endpoints.
-- Wrap the collector in a **resilience boundary**: try/catch, timeout, and a "collector failed" state that doesn't crash the pipeline.
-- **Document the ToS risk** in the roadmap; consider whether TikTok is worth the fragility vs. a more stable source.
-- Add a **manual fallback**: let users paste a TikTok URL or text snippet if automated collection fails.
-
-**Warning signs:**
-- The TikTok collector returns empty results after a TikTok UI update.
-- The collector depends on specific DOM selectors or private API paths.
-- Anti-bot challenges (CAPTCHA, login walls) appear.
-
-**Phase to address:**
-Phase 4 (Additional sources / TikTok) — treat as an optional differentiator with a hard failure boundary, not a core phase.
-
----
-
-### Pitfall 7: MV3 Notification/Alarm Misconfiguration
-
-**What goes wrong:**
-Correlation alerts (a planned feature) fail to fire or fire at the wrong time because of MV3 constraints:
-- `chrome.alarms` can fire **at most once every 30 seconds** — you cannot schedule sub-30s alerts.
-- `chrome.notifications.create()` **requires an `iconUrl`**; omitting it throws.
-- The `notifications` permission must be declared, and `getPermissionLevel()` may return `"denied"` if the user disabled notifications.
-- Alarms continue to run while the device sleeps, so a "check every 5 minutes" alarm can pile up missed checks on wake.
-
-**Why it happens:**
-Developers port notification logic from a web app or MV2 without reading the MV3 alarm/notification constraints. The 30-second alarm floor and the `iconUrl` requirement are the two most common surprises.
-
-**How to avoid:**
-- Read the MV3 alarm/notification docs before implementing; respect the 30s minimum and the `iconUrl` requirement.
-- Check `chrome.notifications.getPermissionLevel()` before creating and handle `"denied"` gracefully (fall back to in-UI badges).
-- Use `chrome.alarms` with `periodInMinutes` for recurring checks; on wake, coalesce missed checks rather than running them all.
-- Consider `persistAcrossSessions` (Chrome 150+) if alarms must survive browser restarts.
+- Always pass a valid `iconUrl` (use an extension-packaged icon, not a remote URL — remote URLs are blocked in MV3).
+- Check `chrome.notifications.getPermissionLevel()` before creating; handle `"denied"` gracefully by falling back to an in-dashboard badge/indicator.
+- Declare the `notifications` permission in `manifest.config.ts` for both Chrome and Firefox builds.
+- Test the alert path on BOTH browsers — the polyfill (`@/messaging/browser`) normalizes the API, but permission behavior differs.
 
 **Warning signs:**
 - `chrome.notifications.create()` throws "iconUrl is required."
-- Alerts fire more often than every 30 seconds (impossible — they're being dropped).
-- Notifications silently don't appear because permission is denied.
+- Alerts never appear but no error is logged.
+- Permission level returns `"denied"` and the code doesn't branch.
 
 **Phase to address:**
-Phase 5 (Correlation alerts) — implement against the MV3 constraints from day one.
+Phase: Correlation Alerts. Handle permission + iconUrl from day one; add a fallback UI path.
+
+---
+
+### Pitfall 3: "Market-Driven News" Category Taxonomy Drifts → Inconsistent Classification
+
+**What goes wrong:**
+The market-driven news view needs a category taxonomy (finance, politics, technology, etc.). If categories are defined ad-hoc (a hardcoded keyword list in one file, a different list in another), the same headline gets classified differently across runs, and adding a new category requires touching multiple files. The taxonomy also silently overlaps — e.g. a "Fed rate" story is both finance and politics — producing double-counted or mislabeled news.
+
+**Why it happens:**
+Taxonomies are deceptively simple. Developers start with a few keyword buckets, then extend them organically without a single source of truth. The existing `redditCategories` in `CONFIG` shows the pattern — categories are already scattered across config and collectors.
+
+**How to avoid:**
+- **Define the taxonomy once** in a single module (e.g. `src/config/taxonomy.ts`) with a stable category ID, label, and keyword/entity rules. Reference it from both the classifier and the UI.
+- **Make categories mutually exclusive** with a deterministic precedence order (e.g. politics > finance > tech) so a headline maps to exactly one category.
+- **Persist the category on the NewsItem** at collection time, not at render time — so the dashboard and export agree.
+- **Version the taxonomy** — when you add a category, re-classify existing stored news or accept that old items keep the old category (document which).
+- Scope v1 to 3 categories (finance, politics, technology) as the requirement states; expand later.
+
+**Warning signs:**
+- The same headline shows under two categories.
+- Category labels in the dashboard don't match export labels.
+- Adding a category requires editing multiple files.
+
+**Phase to address:**
+Phase: Market-Driven News view. Single-source taxonomy + deterministic precedence from day one.
+
+---
+
+### Pitfall 4: TikTok Collector Breaks the Whole Pipeline → No Graceful Degradation
+
+**What goes wrong:**
+TikTok is the most fragile source (DOM changes, anti-bot, login walls, ToS risk). If the TikTok collector throws, times out, or hangs, and it's wired into the same `Promise.allSettled` collection path as the reliable sources, a TikTok failure can delay or fail the entire collection cycle — regressing the "must not regress collection latency" constraint. Worse, a hung TikTok fetch can keep the ephemeral service worker alive past its budget or block the alarm cycle.
+
+**Why it happens:**
+The existing `collectNews` uses `Promise.allSettled` (good — one failure doesn't reject the batch), but a *hanging* fetch (no timeout) still blocks the cycle until the worker is killed. TikTok's aggressive anti-bot makes hangs and empty results common.
+
+**How to avoid:**
+- **Hard timeout** on the TikTok fetch (e.g. 5s) — never let it block the cycle.
+- **Isolate it** — run TikTok collection as a separate, optional step that can be skipped entirely if it fails or if the user disables it in settings.
+- **Best-effort contract** — TikTok is a differentiator, not a table stake. A TikTok failure must never degrade BBC/CNN/Polymarket/Kalshi collection.
+- **Document the ToS/legal risk** in the roadmap and PRIVACY.md. Prefer public surfaces (TikTok discover page) over private endpoints; never bypass login walls.
+- **Manual fallback** — let users paste a TikTok URL/snippet if automated collection fails.
+
+**Warning signs:**
+- TikTok failure delays or fails the whole collection cycle.
+- The collector depends on specific DOM selectors or private API paths.
+- Anti-bot challenges (CAPTCHA, login wall) appear.
+- Collection latency regresses when TikTok is enabled.
+
+**Phase to address:**
+Phase: TikTok collector. Isolate + timeout + graceful degradation are non-negotiable.
+
+---
+
+### Pitfall 5: Inverted Index Returns Wrong Results (or Is Never Built) → Correlation Regresses
+
+**What goes wrong:**
+The correlation speedup (inverted keyword→contract index) is the highest-leverage change, but it's easy to get subtly wrong: (a) the index is built from a different tokenization than the matching step, so candidates are missed; (b) the index is rebuilt on every cycle instead of incrementally, so the "speedup" is eaten by index construction; (c) the index is only applied to the heuristic path while the ML paths (`correlateAllEmbedding`, etc.) still do O(n×m), so the user sees no end-to-end improvement; (d) the index changes match results (drops a valid match), regressing correlation quality.
+
+**Why it happens:**
+The existing `correlation.ts` uses `extractEntityKeywords` + `keywordSimilarity` with a shared `EntityCache`. An inverted index must use the SAME tokenization and the SAME similarity semantics, or it produces different (wrong) results. Developers often build a "fast" index that doesn't preserve the exact matching behavior.
+
+**How to avoid:**
+- **Single tokenization source** — the index and the matcher must call the same `extractKeywords`/`extractEntityKeywords` so candidate sets are identical.
+- **Incremental index** — rebuild only the delta (new signals/markets) or cache the index in storage keyed by a data version, not rebuild from scratch each cycle.
+- **Apply to ALL paths** — the inverted index should be a shared candidate-filtering layer used by heuristic AND ML engines, so the end-to-end latency improves, not just one path.
+- **Golden-test the equivalence** — before/after: run the same dataset through old O(n×m) and new index path; assert identical match sets. This is the regression guard.
+- **Complexity guard** — if candidate sets are tiny, the index overhead may exceed the naive loop; keep the naive path as a fallback for small inputs.
+
+**Warning signs:**
+- Correlation results change after the index is introduced (missing matches).
+- Index construction takes longer than the naive loop it replaces.
+- Only the heuristic path is faster; ML engines still block.
+
+**Phase to address:**
+Phase: Correlation speedup. Golden-test equivalence + incremental index + apply to all paths.
+
+---
+
+### Pitfall 6: Per-Key Storage Caps + Incremental Byte Estimation Break the Budget Model
+
+**What goes wrong:**
+The existing `storage.ts` uses `estimateBytes` (re-serializes the whole dataset via `JSON.stringify` + `Blob`) on every budget check — an O(dataset) cost. Adding per-key caps and "incremental byte estimation" can go wrong in two ways: (a) the incremental estimator drifts from the real `chrome.storage.local` serialization (UTF-16 vs UTF-8, key overhead), so the budget is wrong and QUOTA errors still happen; (b) per-key caps are enforced at write time but the pruning logic (`pruneStorageIfNeeded`) still re-measures the whole store, so the "incremental" win is lost.
+
+**Why it happens:**
+`estimateBytes` uses `new Blob([JSON.stringify(value)]).size` which is UTF-8 bytes, but `chrome.storage.local` serializes as UTF-16 (2 bytes/char) plus per-key overhead. The two diverge, so a budget tuned to `estimateBytes` can still overflow the real quota. And "incremental" estimation is often bolted on without replacing the full re-serialization in the pruning path.
+
+**How to avoid:**
+- **Use `chrome.storage.local.getBytesInUse()`** for the authoritative total — it's cheap and exact. Keep `estimateBytes` only as a per-item relative heuristic, not the budget authority.
+- **Per-key caps** — enforce a max item count AND a max byte estimate per key (signals, news, markets, history, alerts) at write time, so no single key can blow the budget.
+- **Incremental estimation** — track a running byte delta per key (add new item size, subtract pruned item size) instead of re-serializing the whole dataset. Reconcile against `getBytesInUse()` periodically.
+- **Account for UTF-16** — if you must estimate, use `value.length * 2` (UTF-16) not `Blob` UTF-8 size, or calibrate the budget against real `getBytesInUse()` readings.
+- **Test the budget** — run sustained collection and assert `getBytesInUse()` stays under the 7 MB soft budget.
+
+**Warning signs:**
+- `QUOTA_BYTES` errors still occur despite the "budget."
+- `estimateBytes` and `getBytesInUse()` disagree significantly.
+- Pruning still re-serializes the whole dataset every cycle.
+
+**Phase to address:**
+Phase: Storage caps + incremental estimation. Use `getBytesInUse()` as authority; reconcile estimates.
+
+---
+
+### Pitfall 7: ML Quantization / WebGPU Breaks the WASM Fallback (or Regresses Quality)
+
+**What goes wrong:**
+Adding q8/q4 quantization + WebGPU with WASM fallback to Transformers.js can fail in several ways: (a) the model is quantized but the WASM fallback path isn't tested, so WebGPU-only devices (or Firefox, where WebGPU is flag-gated) get a broken or slow path; (b) quantization changes embedding/sentiment results enough to shift correlation confidence, silently changing which correlations surface; (c) the `dtype`/`device` options are passed to `pipeline()` but the existing `ml-worker.ts` WASM path setup (`setWasmPath` + `deriveWasmPath`) isn't updated, so the quantized model can't load in the worker; (d) upgrading Transformers.js to v4.x (breaking) to get better WebGPU support.
+
+**Why it happens:**
+The existing `ml-worker.ts` carefully derives the WASM path from `self.location.href` and sets it before any pipeline. Adding WebGPU means the worker must also handle `device: 'webgpu'` and a fallback to WASM — a device-detection + fallback chain that's easy to get wrong. Quantization is a silent quality change that isn't caught without golden tests.
+
+**How to avoid:**
+- **Device detection + fallback chain** — try `device: 'webgpu'`, catch, fall back to WASM with a quantized model. Never assume WebGPU (Firefox requires a flag).
+- **Use `ModelRegistry.get_available_dtypes()`** to pick the smallest available dtype with a fallback chain `["q4", "q8", "fp16", "fp32"]`.
+- **Golden-test quantization** — run the same corpus through fp32 and q8/q4; assert correlation results don't shift beyond a tolerance. If they do, adjust thresholds.
+- **Update the worker WASM path** — ensure `setWasmPath`/`deriveWasmPath` still works when WebGPU is the primary device and WASM is the fallback.
+- **Do NOT upgrade to Transformers v4.x** — it's a breaking major; stay on 3.7.x.
+- **Cache the model** and load lazily; keep the download size budget in mind (q8/q4 shrinks models 4–8×).
+
+**Warning signs:**
+- WebGPU-only path fails on Firefox (flag-gated).
+- Quantized model produces different correlations than fp32.
+- Worker can't load the model after adding WebGPU (WASM path broken).
+- Model download size regresses (fp32 default).
+
+**Phase to address:**
+Phase: ML quantization/WebGPU. Fallback chain + golden tests + keep v3.7.x.
+
+---
+
+### Pitfall 8: Watchlist/Export Improvements Break Existing Data or Regress the Dashboard
+
+**What goes wrong:**
+Watchlist and export improvements touch the dashboard and the storage schema. Common mistakes: (a) adding a field to `WatchlistEntry` or `NewsItem` without a migration, so old stored data lacks the field and the UI crashes or shows undefined; (b) export (`exportToCsv`/`exportToJson`) is extended for new sources (TikTok, market-driven categories) but the existing export format isn't kept backward-compatible, breaking users' existing exports; (c) the watchlist change regresses the virtualized feed rendering (the `VirtualizedGrid`/`@tanstack/react-virtual` path) by adding non-virtualized rows.
+
+**Why it happens:**
+The dashboard is a mature React app with virtualized feeds. Adding watchlist sort/filter/correlation and export coverage is "easy" but touches the storage schema and the render path. Schema drift (new fields on stored objects) is the classic silent breakage.
+
+**How to avoid:**
+- **Schema migration** — when adding fields to stored types, add a version field and a migration step that backfills old records on read (or on install). Never assume stored data matches the new type.
+- **Backward-compatible export** — keep the existing CSV/JSON sections; ADD new sections (TikTok, categories) rather than changing existing column headers. Document the format.
+- **Keep export complete** — every new source (TikTok) and every new field (category) must appear in export, or the export is silently incomplete.
+- **Preserve virtualization** — new watchlist/export UI must use the same `VirtualizedGrid` helper; don't add unbounded DOM rows.
+- **Test against real stored data** — load a snapshot with old-format records and verify the dashboard renders.
+
+**Warning signs:**
+- Dashboard throws on `undefined` field after an upgrade.
+- Export CSV columns change and break existing consumers.
+- Watchlist with many entries freezes the dashboard (non-virtualized).
+- New sources missing from export.
+
+**Phase to address:**
+Phase: Dashboard watchlist/export. Schema migration + backward-compatible export + virtualization.
 
 ---
 
 ## Technical Debt Patterns
 
-Shortcuts that seem reasonable but create long-term problems.
+Shortcuts that seem reasonable but create long-term problems when adding these features.
 
 | Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
 |----------|-------------------|----------------|-----------------|
-| Keep all state in service-worker memory | Fast, simple reads | Lost on worker kill; forces full re-collection | Never — MV3 workers are ephemeral |
-| Append to storage without a retention budget | Simple writes | Hits 10 MB quota; silent write failures | Never — budget from day one |
-| O(n×m) correlation loops | First implementation is trivial | Freezes UI; worker killed as unresponsive | Only for tiny datasets; replace with inverted index |
-| Rely on a single RSS aggregator for paywalled sources | One fetch path | Source silently drops out; empty tabs | Never for paywalled sources — add fallbacks |
-| Use full-precision (fp32) ML models | No quantization complexity | 1.5 GB downloads; slow WASM inference | Never — use q8/q4 by default |
-| DOM-scrape TikTok from content script | No backend needed | Breaks on every TikTok update; ToS risk | Only as best-effort optional feature |
-| Re-serialize whole dataset in `estimateBytes` | Reuses existing serialization | O(dataset) cost on every write | Never — use `getBytesInUse()` |
-| `unlimitedStorage` permission as default | Avoids quota management | Privacy red flag; review rejection | Only with documented, justified need |
+| Alert on every correlation match | Simple, no dedup logic | Notification fatigue; users disable alerts; storage bloat | Never — dedup + throttle + watchlist scope from day one |
+| Hardcode category taxonomy in the view | Fast to ship | Drift; inconsistent classification; hard to extend | Never — single taxonomy module |
+| Wire TikTok into the shared collection batch | Reuses existing path | TikTok failure/hang blocks the whole cycle | Never — isolate + hard timeout |
+| Build inverted index from scratch each cycle | Simple | Index cost eats the speedup | Only for tiny datasets; use incremental index |
+| Use `estimateBytes` (JSON.stringify) as the budget authority | Reuses existing code | Drifts from real quota; QUOTA errors | Never — use `getBytesInUse()` |
+| Quantize the model without golden tests | Smaller download | Silent correlation quality shift | Never — verify equivalence |
+| Add fields to stored types without migration | Fast | Old data crashes dashboard | Never — migrate on read/write |
+| Upgrade Transformers to v4.x for WebGPU | Better WebGPU support | Breaking major; breaks existing ML path | Never — stay on 3.7.x |
 
 ## Integration Gotchas
 
-Common mistakes when connecting to external services.
+Common mistakes when connecting to external services / platform APIs for these features.
 
 | Integration | Common Mistake | Correct Approach |
 |-------------|----------------|------------------|
-| Google News RSS | Relying on it for paywalled sources; treating it as a commercial feed | Use it for personal, non-commercial use only; add direct source fallbacks; validate freshness |
-| Seeking Alpha / Investing.com | Assuming RSS always returns fresh articles | Expect paywall gaps; add direct RSS/API fallback; surface "feed degraded" state |
-| rss2json.com (CORS proxy) | Depending on a free third-party proxy as the only path | Free tiers are unreliable; add a fallback proxy or use `host_permissions` + direct fetch |
-| Hugging Face CDN (model download) | Assuming the CDN is always up | Cache models; handle download failure with retry and a fallback model |
-| `chrome.notifications` | Omitting `iconUrl`; not checking permission | Always pass `iconUrl`; check `getPermissionLevel()` first |
-| `chrome.alarms` | Scheduling sub-30s intervals | Respect the 30s minimum; use `periodInMinutes` |
-| TikTok | Calling private endpoints / scraping DOM | Use public endpoints; wrap in a failure boundary; document ToS risk |
-| Polymarket / Kalshi | Assuming stable public API shape | Pin API versions; handle schema drift with validation |
+| `chrome.notifications` | Omitting `iconUrl`; not checking permission | Always pass `iconUrl`; check `getPermissionLevel()`; fall back to badge |
+| `chrome.alarms` | Scheduling sub-30s alert checks | Respect the 30s floor; use `periodInMinutes`; coalesce missed checks on wake |
+| TikTok | Calling private endpoints / scraping DOM; no timeout | Use public surfaces; hard timeout; isolate; document ToS risk |
+| Transformers.js WebGPU | No WASM fallback; wrong `dtype`/`device` | Fallback chain; `get_available_dtypes()`; keep WASM path working |
+| `chrome.storage.local` | Using `estimateBytes` as authority | Use `getBytesInUse()`; calibrate estimates to UTF-16 |
+| Export | Changing existing CSV columns | Keep sections backward-compatible; append new sections |
 
 ## Performance Traps
 
-Patterns that work at small scale but fail as usage grows.
+Patterns that work at small scale but fail as usage grows — relevant to the new features.
 
 | Trap | Symptoms | Prevention | When It Breaks |
 |------|----------|------------|----------------|
-| O(n×m) correlation | UI freeze; worker killed | Inverted index; worker offload | ~hundreds of signals × hundreds of markets |
-| Full-dataset re-serialization in `estimateBytes` | Slow writes; high CPU | `getBytesInUse()` | Every write as dataset grows |
-| Uncapped signal/news accumulation | Storage quota hit | Retention budget; per-collection caps | ~460+ items/cycle sustained |
-| Large fp32 ML model | Slow first run; slow inference | Quantize (q8/q4); small models | Any WASM-only device |
-| Synchronous ML inference on main thread | UI freeze during collection | Run in worker; lazy load | First inference after model load |
-| Fetching all sources in parallel without rate limiting | Rate-limit errors; blocked IPs | `rate-limiter.ts`; stagger requests | Multiple sources × frequent cycles |
+| Alert history unbounded | Storage bloat; slow reads | Cap alert history (e.g. 100) | Sustained alerting over days |
+| Inverted index rebuilt each cycle | Index build > naive loop | Incremental index; cache by data version | Large contract sets |
+| Index only on heuristic path | ML path still O(n×m) | Shared candidate-filtering layer | ML engines enabled |
+| TikTok fetch without timeout | Collection stalls; worker killed | Hard timeout (5s) + isolation | Any TikTok anti-bot change |
+| Full re-serialization in pruning | Slow writes; high CPU | `getBytesInUse()` + incremental delta | Every cycle as dataset grows |
+| Quantized model without golden test | Silent quality shift | Golden-test equivalence | After quantization |
+| Non-virtualized watchlist rows | Dashboard freeze | Use `VirtualizedGrid` | Watchlist > ~100 entries |
 
 ## Security Mistakes
 
-Domain-specific security issues beyond general web security.
+Domain-specific security issues for these features.
 
 | Mistake | Risk | Prevention |
 |---------|------|------------|
-| Broad `host_permissions` (`<all_urls>`) | Over-privileged; review rejection; data exposure | Scope to specific origins actually needed |
-| `wasm-unsafe-eval` in CSP | Weakens extension security posture | Keep CSP strict; only enable what's required for WASM |
-| DOM-scraping private endpoints | ToS violation; account/extension flagged | Use public APIs; document risk |
-| Storing raw scraped content without sanitization | XSS in dashboard/popup | Sanitize all scraped HTML before rendering |
-| Third-party CORS proxy (rss2json) | Data routed through untrusted third party | Minimize; prefer direct fetch with `host_permissions` |
-| Not validating external feed/API schema | Malformed data crashes pipeline | Validate and sanitize all external input |
+| TikTok private-endpoint scraping | ToS violation; account/extension flagged | Use public surfaces; document risk; never bypass consent |
+| Remote `iconUrl` in notifications | Blocked in MV3; fails | Use packaged extension icon |
+| Storing scraped TikTok content unsanitized | XSS in dashboard | Sanitize all scraped HTML before rendering |
+| Exporting raw data with PII | Privacy leak | Respect PRIVACY.md; export only collected public data |
+| Broad `host_permissions` for TikTok | Over-privileged; review rejection | Scope to specific origins; prefer public endpoints |
 
 ## UX Pitfalls
 
-Common user experience mistakes in this domain.
-
 | Pitfall | User Impact | Better Approach |
 |---------|-------------|-----------------|
-| Empty source tab with no explanation | User thinks it's broken | Show "feed degraded / no fresh items" state |
-| Silent collection failure (worker died) | Stale data, no error | Surface last-collected timestamp and health indicator |
-| Huge first-run model download | User abandons before value | Show progress; offer smaller model option |
-| Notifications permission denied, silent | User misses alerts | Fall back to in-app badge; explain how to enable |
-| Correlation takes seconds | UI feels frozen | Show spinner/progress; run off main thread |
-| No retention/clear-data control | Storage fills; user can't reset | Provide "clear data" and storage usage display |
+| Alert fatigue (too many notifications) | User disables alerts | Dedup + throttle + watchlist scope |
+| Notifications denied, silent | User misses alerts | Fall back to in-app badge; explain how to enable |
+| Category mislabeled news | User distrusts the view | Single taxonomy; deterministic precedence |
+| TikTok empty with no explanation | User thinks it's broken | Show "best-effort / unavailable" state |
+| Export missing new sources | Incomplete data | Keep export complete for all sources |
+| Watchlist/export freeze | Dashboard feels broken | Virtualize; migrate schema |
 
 ## "Looks Done But Isn't" Checklist
 
-Things that appear complete but are missing critical pieces.
-
-- [ ] **News collection:** Often missing freshness validation — verify a source that returns zero fresh items surfaces a "degraded" state, not an empty tab.
-- [ ] **Correlation engine:** Often missing a complexity guard — verify it degrades gracefully (samples/skips) instead of freezing at scale.
-- [ ] **Storage budget:** Often missing pruning — verify `getBytesInUse()` is used and oldest data is evicted before the 10 MB quota.
-- [ ] **Service worker state:** Often missing persistence — verify all state survives a worker restart (test by killing the worker).
-- [ ] **ML engines:** Often missing quantization — verify the model uses q8/q4 and has a WASM fallback, not just fp32/WebGPU.
-- [ ] **TikTok collector:** Often missing a failure boundary — verify a TikTok failure doesn't block core collection.
-- [ ] **Notifications:** Often missing `iconUrl` and permission check — verify `create()` succeeds and `getPermissionLevel()` is handled.
-- [ ] **Rate limiting:** Often missing — verify collectors respect `rate-limiter.ts` and don't hammer sources.
+- [ ] **Correlation alerts:** Often missing dedup + throttle — verify the same correlation doesn't re-alert on consecutive cycles.
+- [ ] **Notifications:** Often missing `iconUrl` + permission check — verify `create()` succeeds and `getPermissionLevel()` is handled.
+- [ ] **Market-driven news:** Often missing a single taxonomy — verify categories are defined once and reused by classifier + export.
+- [ ] **TikTok collector:** Often missing a timeout + isolation — verify a TikTok failure/hang doesn't block the collection cycle.
+- [ ] **Inverted index:** Often missing equivalence — verify the index produces the same match set as the naive loop (golden test).
+- [ ] **Storage caps:** Often missing `getBytesInUse()` — verify the budget uses the authoritative API, not just `estimateBytes`.
+- [ ] **ML quantization:** Often missing WASM fallback — verify the WebGPU path falls back to WASM on Firefox/flag-gated devices.
+- [ ] **Watchlist/export:** Often missing schema migration — verify old stored records render without `undefined` crashes.
 
 ## Recovery Strategies
 
-When pitfalls occur despite prevention, how to recover.
-
 | Pitfall | Recovery Cost | Recovery Steps |
 |---------|---------------|----------------|
-| Worker state loss | LOW | Re-hydrate from storage; re-run idempotent collection |
-| Storage quota hit | MEDIUM | Prune oldest data; add retention budget; clear stale collections |
-| O(n×m) freeze | MEDIUM | Add inverted index; move to worker; add complexity guard |
-| Empty paywalled source | MEDIUM | Add fallback source; surface "degraded" state |
-| Model too large/slow | MEDIUM | Switch to q8/q4; smaller model; invalidate cached embeddings |
-| TikTok collector broken | LOW | Disable collector; fall back to manual URL input |
+| Alert fatigue | LOW | Add dedup/throttle; clear alert history |
 | Notification misconfig | LOW | Add `iconUrl`; check permission; fall back to badge |
+| Taxonomy drift | MEDIUM | Consolidate to single module; re-classify stored items |
+| TikTok breaking pipeline | LOW | Disable collector; add timeout; isolate |
+| Index result drift | MEDIUM | Revert to naive path; fix tokenization equivalence |
+| Storage QUOTA errors | MEDIUM | Prune; switch to `getBytesInUse()`; add per-key caps |
+| Quantization quality shift | MEDIUM | Re-tune thresholds; golden-test equivalence |
+| Schema migration crash | MEDIUM | Add migration; backfill on read |
 
 ## Pitfall-to-Phase Mapping
 
-How roadmap phases should address these pitfalls.
-
 | Pitfall | Prevention Phase | Verification |
 |---------|------------------|--------------|
-| MV3 worker ephemerality | Phase 1 (Core collection) | Kill worker mid-collection; verify state survives |
-| Storage quota / unbounded data | Phase 1 (Core collection) | Run sustained collection; verify `getBytesInUse()` stays under budget |
-| O(n×m) correlation | Phase 2 (Correlation engine) | Load 500+ signals; verify sub-second correlation |
-| Paywalled source drop-out | Phase 1 (News collection) | Verify Seeking Alpha/Investing have fallbacks + degraded state |
-| ML model size/speed | Phase 3 (ML engines) | Verify q8/q4 model + WASM fallback; measure inference time |
-| TikTok fragility | Phase 4 (Additional sources) | Verify failure boundary; TikTok failure doesn't block core |
-| Notification misconfig | Phase 5 (Correlation alerts) | Verify `iconUrl` + permission check; sub-30s alerts rejected |
+| Alert dedup/throttle/fatigue | Correlation Alerts | Run 2 cycles; verify no duplicate alerts |
+| Notification permission/iconUrl | Correlation Alerts | Verify `create()` + `getPermissionLevel()` on Chrome AND Firefox |
+| Taxonomy drift | Market-driven news | Verify single taxonomy; same category in dashboard + export |
+| TikTok pipeline break | TikTok collector | Disable TikTok; verify core collection unaffected; 5s timeout |
+| Inverted index drift | Correlation speedup | Golden-test index vs naive; assert identical match sets |
+| Storage caps / byte estimation | Storage caps | Verify `getBytesInUse()` under budget; per-key caps enforced |
+| ML quantization / WebGPU fallback | ML quantization | Verify WASM fallback on Firefox; golden-test quantized vs fp32 |
+| Watchlist/export schema drift | Dashboard | Load old snapshot; verify no `undefined` crash; export backward-compatible |
 
 ## Sources
 
-- Chrome extension API docs (storage, alarms, notifications) — developer.chrome.com — HIGH confidence
-- Transformers.js WebGPU guide — huggingface.co/docs/transformers.js — HIGH confidence
-- Transformers.js dtypes/quantization guide — huggingface.co/docs/transformers.js — HIGH confidence
-- Google News RSS live query for `site:seekingalpha.com` — news.google.com — HIGH confidence (observed: paywalled source returns stale/non-article pages)
-- Project context: `.planning/PROJECT.md`, `.planning/codebase/CONCERNS.md` — HIGH confidence (known issues)
-- Personal experience / known MV3 pitfalls — MEDIUM confidence
+- Project context: `.planning/PROJECT.md` (milestone v1.0 features, constraints) — HIGH confidence
+- Codebase: `src/services/engine/correlation.ts` (O(n×m) loops, `MIN_CONFIDENCE`, `EntityCache`) — HIGH
+- Codebase: `src/utils/storage.ts` (`estimateBytes` re-serialization, `pruneStorageIfNeeded`) — HIGH
+- Codebase: `src/workers/ml-worker.ts` (WASM path derivation, worker protocol) — HIGH
+- Codebase: `src/services/engine/ml/transformers.ts` (lazy loader, WASM config, dtype/device options) — HIGH
+- Codebase: `src/services/collectors/news.ts` (`Promise.allSettled`, rss2json CORS proxy) — HIGH
+- Codebase: `src/background/index.ts` (MV3 ephemeral worker notes, alarm setup) — HIGH
+- Codebase: `src/config/index.ts` (`redditCategories`, scrape targets incl. TikTok) — HIGH
+- Chrome extension API docs (alarms 30s floor, notifications `iconUrl`/permission, `getBytesInUse`) — developer.chrome.com — HIGH
+- Transformers.js WebGPU + dtypes/quantization guide — huggingface.co/docs/transformers.js — HIGH
+- Prior research: `.planning/research/SUMMARY.md`, `STACK.md`, `FEATURES.md`, `ARCHITECTURE.md` — HIGH
 
 ---
-*Pitfalls research for: prediction-market correlation browser extension*
+*Pitfalls research for: TrendCast Milestone v1.0 — Speed, Alerts & New Data*
 *Researched: 2026-08-22*
