@@ -30,6 +30,8 @@ function detectSource(): NewsSource | null {
   const host = window.location.hostname;
   if (host.includes('bbc.com') || host.includes('bbc.co.uk')) return 'bbc';
   if (host.includes('cnn.com')) return 'cnn';
+  if (host.includes('seekingalpha.com')) return 'seekingalpha';
+  if (host.includes('investing.com')) return 'investing';
   return null;
 }
 

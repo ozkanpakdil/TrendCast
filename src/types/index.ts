@@ -85,7 +85,7 @@ export interface SocialSignal {
  * News sources that don't require login.
  * BBC and CNN headlines are scraped from their public RSS/feed pages.
  */
-export type NewsSource = 'bbc' | 'cnn' | 'yahoo' | 'googleFinance';
+export type NewsSource = 'bbc' | 'cnn' | 'yahoo' | 'googleFinance' | 'seekingalpha' | 'investing';
 
 /** A normalised news headline. */
 export interface NewsItem {
@@ -424,6 +424,8 @@ export interface ExtensionSettings {
     cnn: boolean;
     yahoo: boolean;
     googleFinance: boolean;
+    seekingalpha: boolean;
+    investing: boolean;
   };
   /** Minimum virality score to highlight a signal (0–100). */
   highlightThreshold: number;
@@ -464,6 +466,8 @@ export const DEFAULT_SETTINGS: ExtensionSettings = {
     cnn: true,
     yahoo: true,
     googleFinance: true,
+    seekingalpha: true,
+    investing: true,
   },
   highlightThreshold: 60,
   overrideNewTab: true,

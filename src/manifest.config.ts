@@ -134,6 +134,10 @@ export default defineManifest({
         '*://bbc.com/*',
         '*://www.cnn.com/*',
         '*://cnn.com/*',
+        '*://seekingalpha.com/*',
+        '*://*.seekingalpha.com/*',
+        '*://www.investing.com/*',
+        '*://investing.com/*',
       ],
       js: ['src/content/news/index.ts'],
       run_at: 'document_idle',
@@ -168,6 +172,8 @@ export default defineManifest({
     'https://api.rss2json.com/*',
     'https://*.bbc.com/*',
     'https://*.cnn.com/*',
+    'https://*.seekingalpha.com/*',
+    'https://*.investing.com/*',
     // ML model downloads — Hugging Face Hub (Transformers.js)
     // Models are downloaded on first use and cached by the browser.
     // No API keys, no user data sent — only public model weights are fetched.
@@ -196,6 +202,8 @@ export default defineManifest({
         '*://kalshi.com/*',
         '*://bbc.com/*',
         '*://cnn.com/*',
+        '*://seekingalpha.com/*',
+        '*://investing.com/*',
       ],
     },
   ],

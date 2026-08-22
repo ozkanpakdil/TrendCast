@@ -65,6 +65,8 @@ async function collectFromSource(source: NewsSource): Promise<NewsItem[]> {
     cnn: CONFIG.scrape.cnn,
     yahoo: CONFIG.scrape.yahoo,
     googleFinance: CONFIG.scrape.googleFinance,
+    seekingalpha: CONFIG.scrape.seekingalpha,
+    investing: CONFIG.scrape.investing,
   };
   const apiUrl = configMap[source].rssUrl;
 
@@ -94,7 +96,8 @@ async function collectFromSource(source: NewsSource): Promise<NewsItem[]> {
       // For Google News sources, the title often includes " - Source Name" suffix.
       // Strip it for cleaner headlines (applies to CNN, googleFinance, and any
       // Google News RSS result).
-      const headline = (source === 'cnn' || source === 'googleFinance') && title.includes(' - ')
+      const isGoogleNewsSource = source === 'cnn' || source === 'googleFinance' || source === 'seekingalpha' || source === 'investing';
+      const headline = isGoogleNewsSource && title.includes(' - ')
         ? title.replace(/\s+-\s+[^-]+$/, '').trim()
         : title;
 

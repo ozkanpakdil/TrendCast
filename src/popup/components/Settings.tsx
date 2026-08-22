@@ -202,6 +202,8 @@ export function Settings({ settings, onUpdate }: SettingsProps) {
               ['tiktok', '🎵 TikTok'],
               ['bbc', '📰 BBC News'],
               ['cnn', '📰 CNN'],
+              ['seekingalpha', '📰 Seeking Alpha'],
+              ['investing', '📰 Investing.com'],
             ] as [keyof ExtensionSettings['enabledSources'], string][]
           ).map(([source, label]) => (
             <label

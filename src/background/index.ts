@@ -460,12 +460,14 @@ async function runCollection(): Promise<CollectionSnapshot> {
     );
   }
 
-  // News (BBC, CNN, Yahoo Finance, Google News finance)
-  const newsSources: Array<'bbc' | 'cnn' | 'yahoo' | 'googleFinance'> = [];
+  // News (BBC, CNN, Yahoo Finance, Google News finance, Seeking Alpha, Investing.com)
+  const newsSources: Array<'bbc' | 'cnn' | 'yahoo' | 'googleFinance' | 'seekingalpha' | 'investing'> = [];
   if (enabled.bbc) newsSources.push('bbc');
   if (enabled.cnn) newsSources.push('cnn');
   if (enabled.yahoo) newsSources.push('yahoo');
   if (enabled.googleFinance) newsSources.push('googleFinance');
+  if (enabled.seekingalpha) newsSources.push('seekingalpha');
+  if (enabled.investing) newsSources.push('investing');
   if (newsSources.length > 0) {
     tasks.push(
       collectNews(newsSources)

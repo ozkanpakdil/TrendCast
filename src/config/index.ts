@@ -119,6 +119,21 @@ export const CONFIG = {
       rssUrl: 'https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent('https://news.google.com/rss/search?q=election+2026+OR+fed+rate+OR+bitcoin+OR+stock+market+when:1d&hl=en-US&gl=US&ceid=US:en'),
       url: 'https://news.google.com',
     },
+    seekingalpha: {
+      // Seeking Alpha — deep financial analysis (stocks, earnings, ETFs).
+      // Seeking Alpha has no public RSS feed, so we use Google News RSS
+      // filtered to the site (same CORS-friendly rss2json proxy as CNN).
+      rssUrl: 'https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent('https://news.google.com/rss/search?q=site:seekingalpha.com+when:1d&hl=en-US&gl=US&ceid=US:en'),
+      // Seeking Alpha homepage as fallback for DOM scraping
+      url: 'https://seekingalpha.com',
+    },
+    investing: {
+      // Investing.com — global financial news (markets, forex, crypto, commodities).
+      // No public RSS; use Google News RSS filtered to the site.
+      rssUrl: 'https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent('https://news.google.com/rss/search?q=site:investing.com+when:1d&hl=en-US&gl=US&ceid=US:en'),
+      // Investing.com homepage as fallback for DOM scraping
+      url: 'https://www.investing.com',
+    },
   },
 
   // ── Background collection ─────────────────────────────────────
