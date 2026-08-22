@@ -41,7 +41,7 @@ Declared values (must be multiples of 4):
 | 2xl | 48px | Major section breaks |
 | 3xl | 64px | Page-level spacing |
 
-Exceptions: none. The `SourceHealthIndicator` is a compact read-only badge row; it uses the existing 4px scale (badge padding `px-1.5 py-0.5`, dot gap `gap-1.5`, row gap `gap-2`). No 44px touch-target exception needed — the indicator is informational, not a primary tap target.
+Exceptions: none. The `SourceHealthIndicator` is a compact read-only badge row; it uses the existing 4px scale (badge padding `px-2 py-1` = 8px/4px, dot gap `gap-2` = 8px, row gap `gap-2` = 8px). No 44px touch-target exception needed — the indicator is informational, not a primary tap target.
 
 ---
 
@@ -77,6 +77,8 @@ Exceptions: none. The `SourceHealthIndicator` is a compact read-only badge row; 
 | No-data | `#6b7280` (neutral) | `text-neutral` / `bg-neutral/15` | No `SourceHealthEntry` yet (never fetched) or fetched 0 with no failure |
 
 **Accent reserved for:** active/focused interactive controls, the primary "Run Correlation" button, and focus rings. **Never** used for health status badges — health uses the semantic `bull`/`amber`/`bear`/`neutral` set above. **Destructive** (`bear`) is reserved for the degraded health state only; there are no destructive user actions in this phase.
+
+**Focal point:** The primary **Run Correlation** button is the visual anchor of the screen — it is the only element that draws the eye first and the only accent-filled control. The `SourceHealthIndicator` is a **secondary read-only row** that must not compete: it renders in muted semantic badge colors (never accent), sits below the primary action, and reads as supporting telemetry rather than an interactive control.
 
 **Source:** `tailwind.config.ts` brand/semantic palette + existing `slate-*`/`light-*` surface convention in `src/dashboard/`. The `SourceHealthIndicator` must render identically in dark (default) and light themes via the existing `isDark` prop pattern used by `CorrelationStatsBar`.
 
@@ -115,7 +117,7 @@ Applicable state considerations resolved: 7 covered, 0 backstop, 0 unresolved
 |----------|------------|--------|---------------------|
 | empty | SourceHealthIndicator | ✅ covered | No `sourceHealth` entries → render the documented "No health data available" copy + "Run a collection…" body |
 | loading | SourceHealthIndicator | ✅ covered | While `useSnapshot().loading` is true, render placeholder skeleton badges (neutral `bg-slate-800`/`bg-light-border` pulse) instead of empty copy |
-| error | SourceHealthIndicator | ✅ covered | Snapshot read failure → render the documented "Source data unavailable — check your connection and run collection again." copy |
+| error | SourceHealthIndicator | ✅ covered | Snapshot read failure → render the documented "Health data unavailable — check your connection and run collection again." copy (see Copywriting Contract) |
 | populated | SourceHealthIndicator | ✅ covered | 6 sources render as a `flex flex-wrap gap-2` row of badges, each with a status dot + label + "fetched N · correlated M" detail |
 | partial | SourceHealthIndicator | ✅ covered | A source with no `SourceHealthEntry` renders as the neutral "No data" badge (never omitted, never mislabeled) |
 | overflow | SourceHealthIndicator | ✅ covered | Badges wrap via `flex-wrap`; 6 sources fit one row at `lg` breakpoint, wrap gracefully at narrower widths |
