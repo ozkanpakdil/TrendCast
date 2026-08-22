@@ -55,8 +55,11 @@ Plans:
   2. User can switch between dashboard tabs without noticeable delay
   3. User can click, filter, and hover on dashboard elements without the UI freezing during rendering
 
-**Plans**: TBD
+**Plans**: 1 plan
 **UI hint**: yes
+
+Plans:
+- [ ] 02-01-PLAN.md — virtualize HypeFeed + NewsFeed by row with @tanstack/react-virtual (bounded DOM, preserved visuals)
 
 ## Progress
 
