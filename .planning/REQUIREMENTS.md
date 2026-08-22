@@ -42,4 +42,8 @@
 
 ## Traceability
 
-<!-- Filled by roadmap: maps each v1 requirement to a phase -->
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| REL-01 | Phase 1 | Pending |
+| REL-02 | Phase 1 | Pending |
+| PERF-01 | Phase 2 | Pending |
