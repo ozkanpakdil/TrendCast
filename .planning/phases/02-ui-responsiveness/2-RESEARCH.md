@@ -324,9 +324,9 @@ export const VirtualizedGrid = memo(VirtualizedGridImpl);
 | A1 | `@tanstack/react-virtual` gzipped size is ~5KB | Standard Stack | Minor — even if larger, it's a single small dependency; bundle impact is negligible for an extension |
 | A2 | The `ResizeObserver`-based column-count approach matches the Tailwind breakpoints exactly | Recommended approach | If thresholds drift from Tailwind's `sm/md/lg/xl` breakpoints, the grid wraps differently than intended — mitigated by applying the same `grid-cols-*` classes to each row and testing at widths |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Scroll container height**
+1. **Scroll container height** — RESOLVED: Use a bounded-height scroll container (`max-h-[70vh] overflow-y-auto`) so the virtualizer has a viewport. This is the standard pattern and keeps the rest of the dashboard layout stable.
    - What we know: `useVirtualizer` needs a bounded-height scroll container.
    - What's unclear: The feeds currently render in a page flow with no fixed height. Whether to give the virtualized container a `max-height` (e.g., `max-h-[70vh] overflow-y-auto`) or let the page scroll.
    - Recommendation: Use a bounded-height scroll container (`max-h-[70vh] overflow-y-auto`) so the virtualizer has a viewport. This is the standard pattern and keeps the rest of the dashboard layout stable.
