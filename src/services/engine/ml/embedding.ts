@@ -41,7 +41,7 @@ import { cosineSimilarity, meanPool, normalize } from './math';
 // ── Batched embedder ─────────────────────────────────────────────
 // Runs the pipeline over chunks of texts in a single forward pass each.
 
-const BATCH_SIZE = 32;
+const BATCH_SIZE = 128;
 
 class BatchEmbedder {
   private pipeline: Pipeline | null = null;

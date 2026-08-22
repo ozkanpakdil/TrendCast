@@ -53,7 +53,7 @@ interface NEREntity {
 // ── Batched entity extractor ─────────────────────────────────────
 // Runs the pipeline over chunks of texts in a single forward pass each.
 
-const BATCH_SIZE = 32;
+const BATCH_SIZE = 128;
 
 class BatchEntityExtractor {
   private pipeline: Pipeline | null = null;
