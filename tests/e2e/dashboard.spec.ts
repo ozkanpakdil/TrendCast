@@ -250,16 +250,20 @@ test.describe('Dashboard — Feed Tab (Hype Feed)', () => {
       },
     });
     const cards = page.locator('main .card-hover');
-    const before = await cards.count();
+    // Signals are sorted by virality descending (200 - i), so signal-0 is the
+    // first card and signal-199 is the last. Before scrolling, the last card
+    // must NOT be in the DOM (virtualization bounds it to the visible window).
+    await expect(cards.first()).toContainText('Social signal 0');
+    await expect(page.locator('main .card-hover', { hasText: 'Social signal 199' })).toHaveCount(0);
     // Scroll the virtualized feed container to the bottom.
     await page.locator('main .max-h-\\[70vh\\]').evaluate((el) => {
       el.scrollTop = el.scrollHeight;
     });
     await page.waitForTimeout(300);
-    const after = await cards.count();
-    // Scrolling reveals more cards (the DOM is bounded, so the count grows
-    // toward the visible window as we move through the list).
-    expect(after).toBeGreaterThan(before);
+    // Scrolling reveals the last signal (the DOM window moves through the list).
+    await expect(page.locator('main .card-hover', { hasText: 'Social signal 199' })).toHaveCount(1);
+    // The DOM stays bounded even at the bottom of the list.
+    expect(await cards.count()).toBeLessThan(200);
   });
 });
 
@@ -365,6 +369,56 @@ test.describe('Dashboard — News Tab', () => {
     await expect(mainSection).toContainText(/fetched 10 · correlated/);
     await expect(mainSection).toContainText(/Investing\.com/);
     await expect(mainSection).toContainText(/fetched 0 · correlated/);
+  });
+
+  test('bounds DOM to visible rows with a large news dataset', async ({ page }) => {
+    await openDashboard(page, {
+      'trendcast:latest-snapshot': {
+        collectedAt: Date.now(),
+        markets: [],
+        signals: [],
+        news: Array.from({ length: 200 }, (_, i) => ({
+          id: `news-${i}`,
+          source: i % 2 === 0 ? 'bbc' : 'cnn',
+          headline: `News headline ${i} about Bitcoin and the market`,
+          summary: `Summary ${i} for the virtualized news feed`,
+          url: `https://example.com/news/${i}`,
+          publishedAt: new Date(Date.now() - i * 60_000).toISOString(),
+          keywords: ['btc', 'bitcoin'],
+        })),
+      },
+    });
+    await page.locator('nav button', { hasText: 'News' }).click();
+    await page.waitForTimeout(300);
+    // Only visible rows are mounted — well below the 200 seeded news items.
+    // At 1280x720 (6 cols x ~11-12 rows incl. overscan 3) that's ~60-72 cards.
+    const cards = page.locator('main .card-hover');
+    expect(await cards.count()).toBeLessThan(200);
+  });
+
+  test('news tab switch with a large dataset renders and stays interactive', async ({ page }) => {
+    await openDashboard(page, {
+      'trendcast:latest-snapshot': {
+        collectedAt: Date.now(),
+        markets: [],
+        signals: [],
+        news: Array.from({ length: 200 }, (_, i) => ({
+          id: `news-${i}`,
+          source: i % 2 === 0 ? 'bbc' : 'cnn',
+          headline: `News headline ${i} about Bitcoin and the market`,
+          summary: `Summary ${i} for the virtualized news feed`,
+          url: `https://example.com/news/${i}`,
+          publishedAt: new Date(Date.now() - i * 60_000).toISOString(),
+          keywords: ['btc', 'bitcoin'],
+        })),
+      },
+    });
+    // Switch to the News tab with a large dataset — must render without error.
+    await page.locator('nav button', { hasText: 'News' }).click();
+    await page.waitForTimeout(300);
+    // The feed is interactive: the first news card link is clickable (has an href).
+    const firstNewsLink = page.locator('main a.card-hover').first();
+    await expect(firstNewsLink).toHaveAttribute('href', /example\.com\/news\//);
   });
 });
 

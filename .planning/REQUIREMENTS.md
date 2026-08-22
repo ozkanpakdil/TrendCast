@@ -8,8 +8,8 @@
 
 ### Data Reliability
 
-- [ ] **REL-01**: User can see Seeking Alpha and Investing.com news in the correlation tab (root cause diagnosed and fixed — feed reliability, correlation threshold, or display truncation)
-- [ ] **REL-02**: User can see per-source health/staleness indicators so they know when a source is degraded or stale
+- [x] **REL-01**: User can see Seeking Alpha and Investing.com news in the correlation tab (root cause diagnosed and fixed — feed reliability, correlation threshold, or display truncation)
+- [x] **REL-02**: User can see per-source health/staleness indicators so they know when a source is degraded or stale
 
 ### Performance
 
@@ -44,6 +44,6 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| REL-01 | Phase 1 | Pending |
-| REL-02 | Phase 1 | Pending |
+| REL-01 | Phase 1 | Complete |
+| REL-02 | Phase 1 | Complete |
 | PERF-01 | Phase 2 | Pending |

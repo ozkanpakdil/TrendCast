@@ -22,13 +22,16 @@ Surface the strongest, most reliable signal of what prediction markets are movin
 - ✓ Cross-browser build (Chrome + Firefox) — existing
 - ✓ Storage-as-state architecture with `chrome.storage.local` — existing
 - ✓ Storage budget pruning + conditional fetch (ETag/304) — existing
+- ✓ UI responsiveness when rendering large datasets (virtualized HypeFeed + NewsFeed via @tanstack/react-virtual) — Phase 2
 
 ### Active
 
+- [ ] Correlation list should have all datas from all news sources, now I do not see seekingalpha and investing.com in the results.
+- [ ] Correlation list data should have collapsable titles and when user click on title it should collapse the list.
+- [ ] Correlation list should show numbers, how many data is in the list.
 - [ ] Fix Seeking Alpha / Investing.com news not appearing in the correlation tab (diagnose root cause: feed reliability, correlation threshold, or display truncation)
 - [ ] Improve correlation speed (O(n×m) nested loops → inverted index / candidate filtering)
 - [ ] Improve collection speed and storage growth (per-key caps, incremental byte estimation)
-- [ ] Improve UI responsiveness when rendering large datasets
 - [ ] Add TikTok collector (known gap — no collector exists)
 - [ ] Add more data sources (news outlets and/or market platforms)
 - [ ] Add correlation alerts/notifications when a strong correlation appears
@@ -77,6 +80,7 @@ TrendCast is a mature, working extension. The codebase map (`.planning/codebase/
 | Diagnose & fix Seeking Alpha/Investing root cause (not just force-display) | User chose "diagnose & fix root cause" | — Pending |
 | Prioritize performance across correlation, collection, and UI | User chose "all of the above" | — Pending |
 | Add new capabilities (TikTok, more sources, alerts, dashboard, market-driven news view) | User chose "new capabilities" | — Pending |
+| Virtualize dashboard feeds by row with @tanstack/react-virtual | Shared VirtualizedGrid helper; bounded DOM preserves visuals and interaction | ✓ Phase 2 — PERF-01 shipped |
 
 ---
-*Last updated: 2026-08-22 after initialization*
+*Last updated: 2026-08-22 after Phase 2*

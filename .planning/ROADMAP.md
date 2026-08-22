@@ -13,8 +13,8 @@ TrendCast is a mature, working 100% client-side MV3 browser extension that corre
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Data Reliability** - Fix Seeking Alpha/Investing news drop-out and add per-source health/staleness indicators
-- [ ] **Phase 2: UI Responsiveness** - Eliminate dashboard lag when rendering large datasets
+- [x] **Phase 1: Data Reliability** - Fix Seeking Alpha/Investing news drop-out and add per-source health/staleness indicators (completed 2026-08-22)
+- [x] **Phase 2: UI Responsiveness** - Eliminate dashboard lag when rendering large datasets
 
 ## Phase Details
 
@@ -36,12 +36,12 @@ Decimal phases appear between their surrounding integers in numeric order.
 Plans:
 **Wave 1**
 
-- [ ] 01-01-PLAN.md — sourceHealth telemetry tracer: record per-source fetch outcomes, persist in snapshot, render SourceHealthIndicator
+- [x] 01-01-PLAN.md — sourceHealth telemetry tracer: record per-source fetch outcomes, persist in snapshot, render SourceHealthIndicator
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 01-02-PLAN.md — diagnostic regression test for SA/Investing correlation thresholds (D-01/D-03)
-- [ ] 01-03-PLAN.md — SourceHealthIndicator 7 UI states + e2e assertion
+- [x] 01-02-PLAN.md — diagnostic regression test for SA/Investing correlation thresholds (D-01/D-03)
+- [x] 01-03-PLAN.md — SourceHealthIndicator 7 UI states + e2e assertion
 
 ### Phase 2: UI Responsiveness
 
@@ -59,7 +59,8 @@ Plans:
 **UI hint**: yes
 
 Plans:
-- [ ] 02-01-PLAN.md — virtualize HypeFeed + NewsFeed by row with @tanstack/react-virtual (bounded DOM, preserved visuals)
+
+- [x] 02-01-PLAN.md — virtualize HypeFeed + NewsFeed by row with @tanstack/react-virtual (bounded DOM, preserved visuals)
 
 ## Progress
 
@@ -68,5 +69,7 @@ Phases execute in numeric order: 1 → 2
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Data Reliability | 0/0 | Not started | - |
-| 2. UI Responsiveness | 0/0 | Not started | - |
+| 1. Data Reliability | 3/3 | Complete    | 2026-08-22 |
+| 2. UI Responsiveness | 1/1 | Complete | 2026-08-22 |
+
+**Milestone: 100% complete** — all 2 phases finished (2026-08-22)

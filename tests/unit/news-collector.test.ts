@@ -69,14 +69,33 @@ describe('collectNews health map', () => {
     expect(health.cnn?.consecutiveFailures).toBe(3);
   });
 
-  it('treats an empty (304/empty) fetch as a failure increment', async () => {
+  it('does NOT count a 304 (unchanged) fetch as a failure', async () => {
     mockedFetch.mockResolvedValue(null); // 304 Not Modified
 
-    const { news, health } = await collectNews(['yahoo']);
+    const previousHealth: SourceHealth = {
+      yahoo: { lastFetchedAt: Date.now(), itemCount: 3, consecutiveFailures: 0 },
+    };
+
+    const { news, health } = await collectNews(['yahoo'], previousHealth);
 
     expect(news).toHaveLength(0);
     expect(health.yahoo?.itemCount).toBe(0);
-    expect(health.yahoo?.consecutiveFailures).toBe(1);
+    // A healthy-but-unchanged source must NOT drift toward Degraded.
+    expect(health.yahoo?.consecutiveFailures).toBe(0);
+    expect(health.yahoo?.lastError).toBeUndefined();
+  });
+
+  it('preserves prior consecutiveFailures across a 304 (unchanged) cycle', async () => {
+    mockedFetch.mockResolvedValue(null); // 304 Not Modified
+
+    const previousHealth: SourceHealth = {
+      yahoo: { lastFetchedAt: Date.now(), itemCount: 0, consecutiveFailures: 2 },
+    };
+
+    const { health } = await collectNews(['yahoo'], previousHealth);
+
+    // A 304 is a healthy no-op — it neither resets nor increments failures.
+    expect(health.yahoo?.consecutiveFailures).toBe(2);
   });
 
   it('records lastFetchedAt for every source', async () => {
