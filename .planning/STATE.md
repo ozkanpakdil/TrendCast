@@ -1,19 +1,16 @@
 ---
 gsd_state_version: 1.0
-current_phase: 02
-current_phase_name: UI Responsiveness
+milestone: v1.0
+milestone_name: Speed, Alerts & New Data
 status: planning
-stopped_at: Phase 1 complete, ready to plan Phase 02
-last_updated: "2026-08-22T21:05:04.476Z"
+last_updated: "2026-08-22T22:00:00.000Z"
 last_activity: 2026-08-22
-last_activity_desc: Phase 1 complete, transitioned to Phase 02
-state_head: 2274b86162c4d7680ea2651e5faf8e1eab3def4f
 progress:
-  total_phases: 2
-  completed_phases: 1
-  total_plans: 4
-  completed_plans: 4
-  percent: 50
+  total_phases: 6
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -23,22 +20,22 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-22)
 
 **Core value:** Surface the strongest, most reliable signal of what prediction markets are moving and why — by correlating social hype, news, and market odds — fast enough that the user trusts it as a daily decision aid.
-**Current focus:** Milestone complete — all phases finished
+**Current focus:** Phase 3 — Correlation Speedup
 
 ## Current Position
 
-Phase: 02 — UI Responsiveness
-Plan: Not started
+Phase: 3 of 8 (Correlation Speedup)
+Plan: — (not yet planned)
 Status: Ready to plan
-Last activity: 2026-08-22 — Phase 1 complete, transitioned to Phase 02
+Last activity: 2026-08-22 — Milestone v1.0 roadmap created (6 phases, 11 requirements)
 
-Progress: [██████████] 100%
+Progress: [░░░░░░░░░░] 0%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 4
+- Total plans completed: 4 (prior milestone)
 - Average duration: 30 min
 - Total execution time: 1.5 hours
 
@@ -46,9 +43,8 @@ Progress: [██████████] 100%
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 1. Data Reliability | 0 | 0 | - |
+| 1. Data Reliability | 3 | - | - |
 | 2. UI Responsiveness | 1 | 30 min | 30 min |
-| 1 | 3 | - | - |
 
 **Recent Trend:**
 
@@ -64,9 +60,11 @@ Progress: [██████████] 100%
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
-- [Phase 1]: Diagnose & fix Seeking Alpha/Investing root cause (not just force-display) — confirmed by research as the non-negotiable foundation.
-- [Phase 1]: Decouple "fetched" from "correlated" so a source that fetched nothing is distinguishable from one with no correlated items.
-- [Phase 2]: UI responsiveness addressed via memoization/virtualization/reduced re-renders in the dashboard — no re-architecture.
+- [Phase 3]: Inverted keyword→contract index is the enabler — must precede alerts and the market-driven view; single tokenization source shared by index + matcher; golden-test equivalence vs the naive loop; keep naive fallback for tiny inputs.
+- [Phase 4]: Alerts designed with dedup/throttle/watchlist-scope from day one (avoid fatigue); packaged `iconUrl` + `getPermissionLevel()` fallback to in-dashboard badge; `chrome.alarms` + persisted `alertState` (ephemeral-worker-safe).
+- [Phase 5]: Market-driven news reuses the existing `redditCategories` taxonomy with deterministic precedence (politics > finance > tech); read-only derived projection, no new collection.
+- [Phase 7]: TikTok is best-effort with hard timeout + isolation — never degrades other sources; needs phase-specific feasibility research (MEDIUM confidence).
+- [Phase 8]: `getBytesInUse()` is the authoritative budget; WebGPU→WASM fallback chain; stay on @huggingface/transformers 3.7.x (no v4 upgrade).
 
 ### Pending Todos
 
@@ -78,7 +76,8 @@ None yet.
 
 [Issues that affect future work]
 
-- [Phase 1] Seeking Alpha/Investing root cause is a live diagnosis — must confirm against the actual feed (Google News RSS `site:` yield, correlation threshold, display truncation) before designing the fix. Research flag: needs research-phase.
+- [Phase 7] TikTok collector feasibility is MEDIUM confidence — no public API, hostile to scraping; needs phase-specific research on DOM selectors, anti-bot behavior, and ToS risk.
+- [Phase 8] WebGPU is flag-gated in Firefox; the WASM fallback chain must be verified on both browsers.
 
 ## Deferred Items
 
@@ -91,5 +90,5 @@ Items acknowledged and deferred at milestone close, most recent first:
 ## Session Continuity
 
 Last session: 2026-08-22T22:00:00.000Z
-Stopped at: Phase 1 complete, ready to plan Phase 02
+Stopped at: Milestone v1.0 roadmap created — ready to plan Phase 3 (Correlation Speedup)
 Resume file: None

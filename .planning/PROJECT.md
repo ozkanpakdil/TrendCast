@@ -8,6 +8,17 @@ A 100% client-side Manifest V3 browser extension (Chrome + Firefox) that collect
 
 Surface the strongest, most reliable signal of what prediction markets are moving and why — by correlating social hype, news, and market odds — fast enough that the user trusts it as a daily decision aid.
 
+## Current Milestone: v1.0 Speed, Alerts & New Data
+
+**Goal:** Make TrendCast faster and more useful as a daily decision aid — speed up correlation, add correlation alerts, surface market-driven news, expand data sources, and polish the dashboard.
+
+**Target features:**
+- Correlation speedup (inverted keyword→contract index) + storage caps + ML quantization/WebGPU
+- Correlation alerts via notifications (direction-aware, deduped, watchlist-scoped)
+- "Market-driven news" view with category taxonomy
+- New data sources (TikTok collector + more outlets/platforms)
+- Dashboard enhancements (watchlist improvements, export coverage)
+
 ## Requirements
 
 ### Validated
@@ -26,17 +37,13 @@ Surface the strongest, most reliable signal of what prediction markets are movin
 
 ### Active
 
-- [ ] Correlation list should have all datas from all news sources, now I do not see seekingalpha and investing.com in the results.
-- [ ] Correlation list data should have collapsable titles and when user click on title it should collapse the list.
-- [ ] Correlation list should show numbers, how many data is in the list.
-- [ ] Fix Seeking Alpha / Investing.com news not appearing in the correlation tab (diagnose root cause: feed reliability, correlation threshold, or display truncation)
 - [ ] Improve correlation speed (O(n×m) nested loops → inverted index / candidate filtering)
 - [ ] Improve collection speed and storage growth (per-key caps, incremental byte estimation)
+- [ ] Add correlation alerts/notifications when a strong correlation appears
+- [ ] Add "market-driven news" view — surface important prediction markets and the news/direction they imply across finance, politics, technology, and other categories
 - [ ] Add TikTok collector (known gap — no collector exists)
 - [ ] Add more data sources (news outlets and/or market platforms)
-- [ ] Add correlation alerts/notifications when a strong correlation appears
 - [ ] Add dashboard features (export, watchlist, history improvements)
-- [ ] Add "market-driven news" view — surface important prediction markets and the news/direction they imply across finance, politics, technology, and other categories
 
 ### Out of Scope
 
@@ -82,5 +89,22 @@ TrendCast is a mature, working extension. The codebase map (`.planning/codebase/
 | Add new capabilities (TikTok, more sources, alerts, dashboard, market-driven news view) | User chose "new capabilities" | — Pending |
 | Virtualize dashboard feeds by row with @tanstack/react-virtual | Shared VirtualizedGrid helper; bounded DOM preserves visuals and interaction | ✓ Phase 2 — PERF-01 shipped |
 
+## Evolution
+
+This document evolves at phase transitions and milestone boundaries.
+
+**After each phase transition** (via `/gsd-transition`):
+1. Requirements invalidated? → Move to Out of Scope with reason
+2. Requirements validated? → Move to Validated with phase reference
+3. New requirements emerged? → Add to Active
+4. Decisions to log? → Add to Key Decisions
+5. "What This Is" still accurate? → Update if drifted
+
+**After each milestone** (via `/gsd-complete-milestone`):
+1. Full review of all sections
+2. Core Value check — still the right priority?
+3. Audit Out of Scope — reasons still valid?
+4. Update Context with current state
+
 ---
-*Last updated: 2026-08-22 after Phase 2*
+*Last updated: 2026-08-22 after Milestone v1.0 start*
