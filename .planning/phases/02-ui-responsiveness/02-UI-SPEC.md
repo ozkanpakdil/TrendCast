@@ -100,15 +100,18 @@ Declared values (multiples of 4):
 
 ## UI Considerations
 
-Applicable state considerations resolved: **5 covered, 0 backstop, 0 unresolved**
+Applicable state considerations resolved: **8 covered, 0 backstop, 0 unresolved**
 
 | Category | Element(s) | Status | Resolution / Reason |
 |----------|------------|--------|---------------------|
 | empty | HypeFeed / NewsFeed list | ✅ covered | Empty arrays render the documented empty-state copy via early return before the virtualizer (existing behavior preserved) |
+| loading | Dashboard | ✅ covered | Handled by `App.tsx` `loading` gate (out of scope for this phase — no change) |
+| error | HypeFeed / NewsFeed list | ✅ covered | Feed error handling is out of scope — source-health errors live in `SourceHealthIndicator` (Phase 1). No new error surface introduced. |
+| populated | HypeFeed / NewsFeed list | ✅ covered | Happy path renders the virtualized grid; only visible rows are in the DOM (`overscan: 3` for smooth pre-scroll) |
+| partial | HypeFeed / NewsFeed list | ✅ covered | Variable-height cards handled by `measureElement` + `data-index`; partial rows render normally with `line-clamp` truncation |
 | overflow | HypeFeed / NewsFeed list | ✅ covered | Virtualization bounds DOM to visible rows only; scroll container `max-h-[70vh] overflow-y-auto` gives the virtualizer a bounded viewport |
 | zero-one-many | HypeFeed / NewsFeed list | ✅ covered | Single item renders as one row of 1 card; many items render only visible rows (virtualizer `count = rows.length`) |
 | long-text | Card headline / summary | ✅ covered | `line-clamp-2` on headlines, `line-clamp-1` on news summary — preserved unchanged; `measureElement` corrects variable row heights |
-| loading | Dashboard | ✅ covered | Handled by `App.tsx` `loading` gate (out of scope for this phase — no change) |
 
 **Interaction contract (success criteria mapping):**
 - **Scroll without jank:** Only visible rows in DOM; `overscan: 3` rows rendered beyond viewport for smooth pre-scroll.
@@ -130,11 +133,11 @@ Applicable state considerations resolved: **5 covered, 0 backstop, 0 unresolved*
 
 ## Checker Sign-Off
 
-- [ ] Dimension 1 Copywriting: PASS
-- [ ] Dimension 2 Visuals: PASS
-- [ ] Dimension 3 Color: PASS
-- [ ] Dimension 4 Typography: PASS
-- [ ] Dimension 5 Spacing: PASS
-- [ ] Dimension 6 Registry Safety: PASS
+- [x] Dimension 1 Copywriting: PASS
+- [x] Dimension 2 Visuals: PASS
+- [x] Dimension 3 Color: PASS
+- [x] Dimension 4 Typography: PASS
+- [x] Dimension 5 Spacing: PASS
+- [x] Dimension 6 Registry Safety: PASS
 
-**Approval:** pending
+**Approval:** APPROVED (all 6 dimensions PASS; UI Considerations probe: 8 covered, 0 backstop, 0 unresolved)
