@@ -52,7 +52,7 @@ export default defineConfig({
   // We use a simple static server because Playwright's webServer health
   // check requires http:// (not file://).
   webServer: {
-    command: 'bun run build:debug && bunx sirv-cli dist --host 127.0.0.1 --port 4173 --silent',
+    command: 'bun run build:debug && bunx sirv-cli dist/chrome --host 127.0.0.1 --port 4173 --silent',
     url: 'http://127.0.0.1:4173/src/dashboard/index.html',
     reuseExistingServer: true,
     timeout: 120_000,

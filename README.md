@@ -126,6 +126,9 @@ TrendCast/
 ├── tests/
 │   └── unit/
 │       └── correlation.test.ts
+├── dist/
+│   ├── chrome/                    # Chrome / Edge / Brave build
+│   └── firefox/                   # Firefox build
 ├── manifest.json
 ├── package.json
 ├── vite.config.ts
@@ -160,17 +163,33 @@ bun run dev:firefox
 ### Build
 
 ```bash
-# Build for Chrome
+# Build for BOTH Chrome and Firefox (recommended)
 bun run build
 
-# Build for Firefox
+# Build for a single browser
+bun run build:chrome
 bun run build:firefox
 
-# Package as ZIP
-bun run zip
+# Package as ZIP / XPI
+bun run zip:chrome
+bun run zip:firefox
 ```
 
-The built extension will be in `dist/`.
+Each browser gets its own output folder so the two builds never clobber
+each other:
+
+```
+dist/
+├── chrome/    # ← load this in Chrome / Edge / Brave
+│   └── manifest.json   → background.service_worker
+└── firefox/   # ← load this in Firefox
+    └── manifest.json   → background.scripts
+```
+
+> ⚠️ **Why separate folders?** Firefox does not support
+> `background.service_worker` in MV3 — it requires `background.scripts`.
+> The manifest switches automatically based on the build target, so the
+> two builds must live in separate directories.
 
 ## 🧪 Testing
 
@@ -230,8 +249,8 @@ git push origin v0.1.0
 
 This triggers the workflow which:
 1. Runs unit tests
-2. Builds both Chrome and Firefox targets in parallel
-3. Packages each as `trendcast-{chrome,firefox}-<tag>.zip`
+2. Builds both Chrome and Firefox targets in parallel (`build:chrome` / `build:firefox`)
+3. Packages each from its own folder as `trendcast-{chrome,firefox}-<tag>.zip`
 4. Creates a GitHub Release with auto-generated notes and both zips attached
 
 ### Manual dispatch
@@ -244,19 +263,19 @@ The release artifacts appear under **Releases** on your repository page, ready t
 
 ### Chrome / Edge / Brave
 
-1. Run `bun run build`
+1. Run `bun run build` (or `bun run build:chrome`)
 2. Open `chrome://extensions/`
 3. Enable **Developer mode** (top-right toggle)
 4. Click **Load unpacked**
-5. Select the `dist/` folder
+5. Select the `dist/chrome/` folder
 6. Open a new tab — the TrendCast dashboard appears
 
 ### Firefox
 
-1. Run `bun run build:firefox`
+1. Run `bun run build` (or `bun run build:firefox`)
 2. Open `about:debugging#/runtime/this-firefox`
 3. Click **Load Temporary Add-on**
-4. Select `dist/manifest.json`
+4. Select `dist/firefox/manifest.json`
 
 ## ⚙️ Configuration
 

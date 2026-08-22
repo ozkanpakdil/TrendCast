@@ -29,7 +29,11 @@ export default defineConfig(({ mode }) => {
       },
     },
     build: {
-      outDir: 'dist',
+      // Separate output folders per browser so `bun run build` can emit
+      // both Chrome and Firefox builds without clobbering each other.
+      //   dist/chrome/   ← TARGET unset (default)
+      //   dist/firefox/  ← TARGET=firefox
+      outDir: `dist/${isFirefox ? 'firefox' : 'chrome'}`,
       emptyOutDir: true,
       sourcemap: mode === 'development',
       target: 'es2022',

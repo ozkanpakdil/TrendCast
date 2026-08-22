@@ -9,7 +9,8 @@
   "scripts": {
     "dev": "vite",
     "dev:firefox": "TARGET=firefox vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && vite build && TARGET=firefox vite build",
+    "build:chrome": "tsc --noEmit && vite build",
     "build:firefox": "TARGET=firefox tsc --noEmit && TARGET=firefox vite build",
     "build:debug": "tsc --noEmit && vite build --mode development",
     "build:debug:firefox": "TARGET=firefox tsc --noEmit && TARGET=firefox vite build --mode development",
@@ -30,9 +31,9 @@
     "docs:build": "cd docs && hugo --minify",
     "docs:manifest": "bun run scripts/generate-screenshot-manifest.ts",
     "typecheck": "tsc --noEmit",
-    "zip": "cd dist && zip -r ../trendcast-v$(bun -p \"require('../package.json').version\").zip .",
-    "zip:chrome": "cd dist && zip -r ../trendcast-chrome-v$(bun -p \"require('../package.json').version\").zip .",
-    "zip:firefox": "cd dist && zip -r ../trendcast-firefox-v$(bun -p \"require('../package.json').version\").xpi ."
+    "zip": "cd dist/chrome && zip -r ../trendcast-v$(bun -p \"require('../package.json').version\").zip .",
+    "zip:chrome": "cd dist/chrome && zip -r ../trendcast-chrome-v$(bun -p \"require('../package.json').version\").zip .",
+    "zip:firefox": "cd dist/firefox && zip -r ../trendcast-firefox-v$(bun -p \"require('../package.json').version\").xpi ."
   },
   "dependencies": {
     "@huggingface/transformers": "^3.7.5",
