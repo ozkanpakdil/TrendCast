@@ -146,6 +146,9 @@ export const CONFIG = {
     tabLoadTimeoutMs: 15_000,
     // Max number of background tabs to open simultaneously.
     maxConcurrentTabs: 3,
+    // A source is considered "stale" if it hasn't been fetched within this
+    // window (2 missed hourly cycles).
+    stalenessThresholdMs: 2 * 60 * 60 * 1000,
   },
 
   // ── Storage keys ──────────────────────────────────────────────
@@ -178,6 +181,8 @@ export const CONFIG = {
     // When over budget, prune these keys (oldest first) down to this fraction.
     pruneTargetFraction: 0.7,
     // Max items retained per collection type (defensive caps).
+    // Note: news is intentionally uncapped in mergeNews() so all 6 sources
+    // survive a full cycle; storage pruning below protects the quota.
     maxMarkets: 500,
     maxSignals: 500,
     maxNews: 200,

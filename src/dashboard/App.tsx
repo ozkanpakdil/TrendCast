@@ -29,6 +29,7 @@ import { NewsFeed } from './components/NewsFeed';
 import { MarketOdds } from './components/MarketOdds';
 import { CorrelationPanel } from './components/CorrelationPanel';
 import { CorrelationStatsBar } from './components/CorrelationStatsBar';
+import { SourceHealthIndicator } from './components/SourceHealthIndicator';
 import { CorrelationRunHistory } from './components/CorrelationRunHistory';
 import { HistoryChart } from './components/HistoryChart';
 import { Watchlist } from './components/Watchlist';
@@ -42,6 +43,7 @@ import { CONFIG } from '@/config';
 import { browser } from '@/messaging/browser';
 import { sendMessage } from '@/messaging';
 import { downloadExport } from '@/utils/export';
+import { computeCorrelatedCounts } from '@/utils/source-health';
 
 // Build-time version stamp injected by Vite's define.
 // Format: "0.1.0+2026-08-14T13:21:00Z" — version + build timestamp.
@@ -80,7 +82,7 @@ function phaseLabel(phase: string): string {
 }
 
 export function App() {
-  const { snapshot, loading, collecting, lastCollectionAt, triggerCollection } = useSnapshot();
+  const { snapshot, loading, error: snapshotError, collecting, lastCollectionAt, triggerCollection } = useSnapshot();
   const { correlations, loading: corrLoading, error: corrError, progress: corrProgress, elapsedMs, runCorrelation, cancelCorrelation, runStats, runHistory } = useCorrelations();
   const [activeTab, setActiveTab] = useState<Tab>('feed');
   const [settings, setSettings] = useState<ExtensionSettings>(DEFAULT_SETTINGS);
@@ -321,6 +323,13 @@ export function App() {
                 <h2 className={`text-sm font-bold uppercase tracking-wider mb-3 ${sectionTitle}`}>
                   📰 Latest News
                 </h2>
+                <SourceHealthIndicator
+                  health={snapshot?.sourceHealth ?? {}}
+                  correlatedCounts={computeCorrelatedCounts(correlations?.newsMatches ?? [])}
+                  isDark={isDark}
+                  loading={loading}
+                  error={snapshotError}
+                />
                 <NewsFeed news={snapshot?.news ?? []} />
               </section>
             )}
@@ -605,6 +614,14 @@ export function App() {
                 )}
 
                 <CorrelationStatsBar stats={runStats} isDark={isDark} />
+
+                <SourceHealthIndicator
+                  health={snapshot?.sourceHealth ?? {}}
+                  correlatedCounts={computeCorrelatedCounts(correlations?.newsMatches ?? [])}
+                  isDark={isDark}
+                  loading={loading}
+                  error={snapshotError}
+                />
 
                 <CorrelationPanel
                   matches={correlations?.matches ?? []}

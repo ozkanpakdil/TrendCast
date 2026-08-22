@@ -295,6 +295,18 @@ test.describe('Dashboard — News Tab', () => {
     await page.waitForTimeout(300);
     await expect(page.locator('main')).toContainText(/Latest News/);
   });
+
+  test('renders source health indicator with fetched/correlated counts', async ({ page }) => {
+    await openDashboard(page);
+    await page.locator('nav button', { hasText: 'News' }).click();
+    await page.waitForTimeout(300);
+    const mainSection = page.locator('main');
+    // MOCK_SNAPSHOT.sourceHealth: seekingalpha healthy (fetched 10), investing degraded (fetched 0)
+    await expect(mainSection).toContainText(/Seeking Alpha/);
+    await expect(mainSection).toContainText(/fetched 10 · correlated/);
+    await expect(mainSection).toContainText(/Investing\.com/);
+    await expect(mainSection).toContainText(/fetched 0 · correlated/);
+  });
 });
 
 // ── Correlations Tab ──────────────────────────────────────────────

@@ -40,6 +40,7 @@ import type {
   NewsCorrelationMatch,
   NewsItem,
   SocialSignal,
+  SourceHealth,
   WatchlistEntry,
 } from '@/types';
 import { DEFAULT_SETTINGS } from '@/types';
@@ -460,10 +461,15 @@ async function runCollection(): Promise<CollectionSnapshot> {
   if (enabled.googleFinance) newsSources.push('googleFinance');
   if (enabled.seekingalpha) newsSources.push('seekingalpha');
   if (enabled.investing) newsSources.push('investing');
+  let newsHealth: SourceHealth = {};
   if (newsSources.length > 0) {
+    const prevSnapshot = await getLatestSnapshot();
     tasks.push(
-      collectNews(newsSources)
-        .then((news) => storeNews(news))
+      collectNews(newsSources, prevSnapshot?.sourceHealth ?? {})
+        .then(({ news, health }) => {
+          newsHealth = health;
+          return storeNews(news);
+        })
         .catch((err) => console.error('[TrendCast] ❌ News failed:', err)),
     );
   }
@@ -483,6 +489,7 @@ async function runCollection(): Promise<CollectionSnapshot> {
     markets,
     signals,
     news,
+    sourceHealth: newsHealth,
   };
 
   await browser.storage.local.set({
@@ -786,8 +793,12 @@ function mergeNews(existing: NewsItem[], incoming: NewsItem[]): NewsItem[] {
   for (const n of incoming) {
     map.set(n.id, n);
   }
-  // Keep only the latest 200 news items.
-  return Array.from(map.values()).slice(-200);
+  // Keep all news items — no cap. With 6 sources (BBC, CNN, Yahoo,
+  // Google Finance, Seeking Alpha, Investing.com) a full cycle can
+  // produce ~460 items; a hard cap would silently drop earlier sources.
+  // Storage budget pruning (pruneStorageIfNeeded) still protects the
+  // chrome.storage.local quota by evicting oldest items when over budget.
+  return Array.from(map.values());
 }
 
 // ── History helpers (Phase 3: historical charts) ─────────────────

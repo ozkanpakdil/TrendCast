@@ -49,6 +49,12 @@ export const MOCK_SETTINGS = {
 
 export const MOCK_SNAPSHOT = {
   collectedAt: Date.now(),
+  sourceHealth: {
+    bbc: { lastFetchedAt: Date.now(), itemCount: 2, consecutiveFailures: 0 },
+    cnn: { lastFetchedAt: Date.now(), itemCount: 2, consecutiveFailures: 0 },
+    seekingalpha: { lastFetchedAt: Date.now(), itemCount: 10, consecutiveFailures: 0 },
+    investing: { lastFetchedAt: Date.now(), itemCount: 0, consecutiveFailures: 1 },
+  },
   markets: [
     {
       id: 'market-1',

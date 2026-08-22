@@ -12,6 +12,7 @@ import { sendMessage } from '@/messaging';
 export function useSnapshot() {
   const [snapshot, setSnapshot] = useState<CollectionSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [collecting, setCollecting] = useState(false);
   const [lastCollectionAt, setLastCollectionAt] = useState<number | null>(null);
 
@@ -25,8 +26,10 @@ export function useSnapshot() {
       const lastAt = result[CONFIG.storage.lastCollectionAt] as number | undefined;
       if (snap) setSnapshot(snap);
       if (lastAt) setLastCollectionAt(lastAt);
+      setError(false);
     } catch (err) {
       console.error('[TrendCast] Failed to fetch snapshot:', err);
+      setError(true);
     } finally {
       setLoading(false);
     }
@@ -63,5 +66,5 @@ export function useSnapshot() {
     return () => browser.storage.onChanged.removeListener(listener);
   }, [fetchSnapshot]);
 
-  return { snapshot, loading, collecting, lastCollectionAt, triggerCollection, refresh: fetchSnapshot };
+  return { snapshot, loading, error, collecting, lastCollectionAt, triggerCollection, refresh: fetchSnapshot };
 }

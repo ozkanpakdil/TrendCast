@@ -14,7 +14,7 @@
  *   CNN: Google News RSS filtered to CNN via rss2json
  */
 
-import type { NewsItem, NewsSource } from '@/types';
+import type { NewsItem, NewsSource, SourceHealth } from '@/types';
 import { CONFIG } from '@/config';
 import { extractKeywords } from '@/utils/keywords';
 import { conditionalFetchJson } from '@/utils/conditional-fetch';
@@ -37,25 +37,45 @@ interface Rss2JsonResponse {
 /**
  * Collect news headlines from configured sources via rss2json.com.
  * Supports BBC, CNN, Yahoo Finance, and Google News finance/politics.
- * Returns a combined array of NewsItems.
+ * Returns the combined array of NewsItems plus a per-source health map
+ * recording fetch outcomes (item count, failures, last error).
  */
 export async function collectNews(
   sources: NewsSource[] = ['bbc', 'cnn'],
-): Promise<NewsItem[]> {
+  previousHealth: SourceHealth = {},
+): Promise<{ news: NewsItem[]; health: SourceHealth }> {
   const results = await Promise.allSettled(
     sources.map((source) => collectFromSource(source)),
   );
 
-  const items = results.flatMap((result, i) => {
-    if (result.status !== 'fulfilled') {
-      console.warn(`[TrendCast] Failed to collect news from ${sources[i]}:`, result.reason);
-      return [];
+  const items: NewsItem[] = [];
+  const health: SourceHealth = {};
+
+  results.forEach((result, i) => {
+    const source = sources[i];
+    const prev = previousHealth[source];
+
+    if (result.status === 'fulfilled') {
+      const sourceItems = result.value;
+      items.push(...sourceItems);
+      health[source] = {
+        lastFetchedAt: Date.now(),
+        itemCount: sourceItems.length,
+        consecutiveFailures: sourceItems.length > 0 ? 0 : (prev?.consecutiveFailures ?? 0) + 1,
+      };
+    } else {
+      // Record the failure into the health map instead of silently dropping it.
+      health[source] = {
+        lastFetchedAt: Date.now(),
+        itemCount: 0,
+        consecutiveFailures: (prev?.consecutiveFailures ?? 0) + 1,
+        lastError: String(result.reason),
+      };
     }
-    return result.value;
   });
 
   console.log(`[TrendCast] News: ${items.length} items collected`);
-  return items;
+  return { news: items, health };
 }
 
 /** Collect news from a single source via rss2json.com. */

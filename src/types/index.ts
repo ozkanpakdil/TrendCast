@@ -87,6 +87,27 @@ export interface SocialSignal {
  */
 export type NewsSource = 'bbc' | 'cnn' | 'yahoo' | 'googleFinance' | 'seekingalpha' | 'investing';
 
+/**
+ * Per-source fetch outcome recorded at collection time.
+ * Persisted inside `CollectionSnapshot` so it survives MV3 worker restarts.
+ */
+export interface SourceHealthEntry {
+  /** Epoch ms when this source was last fetched. */
+  lastFetchedAt: number;
+  /** Number of items returned by the last successful fetch. */
+  itemCount: number;
+  /** Consecutive failed/empty fetches (accumulates across cycles). */
+  consecutiveFailures: number;
+  /** Last error message, if the last fetch rejected. */
+  lastError?: string;
+}
+
+/**
+ * Health map keyed by the typed `NewsSource` union.
+ * Never index with an unvalidated string (ASVS V5 input validation).
+ */
+export type SourceHealth = Partial<Record<NewsSource, SourceHealthEntry>>;
+
 /** A normalised news headline. */
 export interface NewsItem {
   id: string;
@@ -273,6 +294,8 @@ export interface CollectionSnapshot {
   markets: MarketContract[];
   signals: SocialSignal[];
   news: NewsItem[];
+  /** Per-source fetch health, recorded at collection time. */
+  sourceHealth: SourceHealth;
 }
 
 /** A compact market reference for history detail panels. */
