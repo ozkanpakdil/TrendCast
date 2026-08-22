@@ -35,8 +35,14 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Both the heuristic and ML correlation paths use the same tokenization source and index, so results stay consistent across engines
   4. The index is built incrementally (cached by data version) and falls back to the naive loop for tiny inputs without breaking correlation
 
-**Plans**: TBD
+**Plans**: 4 plans
 **UI hint**: no
+
+Plans:
+- [ ] 03-01-PLAN.md — Build shared InvertedIndex + unit tests + shared fixtures
+- [ ] 03-02-PLAN.md — Convert heuristic path to candidate-filtered + equivalence test
+- [ ] 03-03-PLAN.md — Route zeroshot/sentiment/LLM through the index + per-engine equivalence
+- [ ] 03-04-PLAN.md — Embedding/NER equivalence tests (naive-loop oracle, index not applicable)
 
 ### Phase 4: Correlation Alerts
 
@@ -113,7 +119,7 @@ Phases execute in numeric order: 3 → 4 → 5 → 6 → 7 → 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 3. Correlation Speedup | 0/TBD | Not started | - |
+| 3. Correlation Speedup | 0/4 | Not started | - |
 | 4. Correlation Alerts | 0/TBD | Not started | - |
 | 5. Market-Driven News | 0/TBD | Not started | - |
 | 6. Watchlist & Export | 0/TBD | Not started | - |
