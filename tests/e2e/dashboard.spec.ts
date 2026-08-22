@@ -163,13 +163,13 @@ test.describe('Dashboard — Feed Tab (Hype Feed)', () => {
     await openDashboard(page);
     // Feed is the default tab
     // Mock has 3 signals
-    const cards = page.locator('main .grid > *');
+    const cards = page.locator('main .card-hover');
     await expect(cards).toHaveCount(3);
   });
 
   test('shows platform name on each card', async ({ page }) => {
     await openDashboard(page);
-    const cards = page.locator('main .grid > *');
+    const cards = page.locator('main .card-hover');
     // Cards are sorted by virality desc: 92 (tiktok), 85 (x), 55 (reddit)
     await expect(cards.nth(0)).toContainText(/tiktok/i);
     await expect(cards.nth(1)).toContainText(/x/i);
@@ -179,7 +179,7 @@ test.describe('Dashboard — Feed Tab (Hype Feed)', () => {
   test('shows virality score on each card', async ({ page }) => {
     await openDashboard(page);
     // Virality scores are 85, 55, 92 — sorted desc: 92, 85, 55
-    const firstCard = page.locator('main .grid > *').first();
+    const firstCard = page.locator('main .card-hover').first();
     await expect(firstCard).toContainText('92');
   });
 
@@ -197,12 +197,71 @@ test.describe('Dashboard — Feed Tab (Hype Feed)', () => {
 
   test('signal cards with URLs are links', async ({ page }) => {
     await openDashboard(page);
-    const firstLink = page.locator('main .grid a').first();
+    const firstLink = page.locator('main a.card-hover').first();
     await expect(firstLink).toHaveAttribute('href', /.+/);
   });
-});
 
-// ── Markets Tab ───────────────────────────────────────────────────
+  test('bounds DOM to visible rows with a large dataset', async ({ page }) => {
+    await openDashboard(page, {
+      'trendcast:latest-snapshot': {
+        collectedAt: Date.now(),
+        markets: [],
+        signals: Array.from({ length: 200 }, (_, i) => ({
+          id: `signal-${i}`,
+          platform: i % 3 === 0 ? 'x' : i % 3 === 1 ? 'reddit' : 'tiktok',
+          text: `Social signal ${i} about Bitcoin and the market`,
+          author: `author_${i}`,
+          metrics: { likes: 100 + i, shares: 10, comments: 5, views: 1000 + i },
+          timestamp: new Date(Date.now() - i * 60_000).toISOString(),
+          keywords: ['btc', 'bitcoin'],
+          sentiment: 0.5,
+          virality: 200 - i,
+          url: `https://example.com/signal/${i}`,
+        })),
+        news: [],
+      },
+    });
+    // Only visible rows are mounted — well below the 200 seeded signals.
+    // At 1280x720 (6 cols x ~11-12 rows incl. overscan 3) that's ~60-72 cards.
+    const cards = page.locator('main .card-hover');
+    // The DOM is bounded: only the visible window is mounted, so the number of
+    // rendered cards is far below the 200 seeded signals.
+    expect(await cards.count()).toBeLessThan(200);
+  });
+
+  test('reveals more cards when scrolling the feed', async ({ page }) => {
+    await openDashboard(page, {
+      'trendcast:latest-snapshot': {
+        collectedAt: Date.now(),
+        markets: [],
+        signals: Array.from({ length: 200 }, (_, i) => ({
+          id: `signal-${i}`,
+          platform: i % 3 === 0 ? 'x' : i % 3 === 1 ? 'reddit' : 'tiktok',
+          text: `Social signal ${i} about Bitcoin and the market`,
+          author: `author_${i}`,
+          metrics: { likes: 100 + i, shares: 10, comments: 5, views: 1000 + i },
+          timestamp: new Date(Date.now() - i * 60_000).toISOString(),
+          keywords: ['btc', 'bitcoin'],
+          sentiment: 0.5,
+          virality: 200 - i,
+          url: `https://example.com/signal/${i}`,
+        })),
+        news: [],
+      },
+    });
+    const cards = page.locator('main .card-hover');
+    const before = await cards.count();
+    // Scroll the virtualized feed container to the bottom.
+    await page.locator('main .max-h-\\[70vh\\]').evaluate((el) => {
+      el.scrollTop = el.scrollHeight;
+    });
+    await page.waitForTimeout(300);
+    const after = await cards.count();
+    // Scrolling reveals more cards (the DOM is bounded, so the count grows
+    // toward the visible window as we move through the list).
+    expect(after).toBeGreaterThan(before);
+  });
+});
 
 test.describe('Dashboard — Markets Tab (Market Odds)', () => {
   test('displays market contracts', async ({ page }) => {

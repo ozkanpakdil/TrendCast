@@ -6,6 +6,7 @@
 
 import { useMemo, memo } from 'react';
 import type { NewsItem } from '@/types';
+import { VirtualizedGrid } from './VirtualizedGrid';
 
 interface NewsFeedProps {
   news: NewsItem[];
@@ -68,8 +69,8 @@ function NewsFeedImpl({ news }: NewsFeedProps) {
   }
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
-      {sorted.map((item) => {
+    <VirtualizedGrid
+      items={sorted.map((item) => {
         const bg = sourceColor(item.source);
         const fg = textColor(item.source);
 
@@ -121,7 +122,7 @@ function NewsFeedImpl({ news }: NewsFeedProps) {
           </a>
         );
       })}
-    </div>
+    />
   );
 }
 

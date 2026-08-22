@@ -6,6 +6,7 @@
 
 import { useMemo, memo } from 'react';
 import type { SocialSignal } from '@/types';
+import { VirtualizedGrid } from './VirtualizedGrid';
 
 interface HypeFeedProps {
   signals: SocialSignal[];
@@ -70,8 +71,8 @@ function HypeFeedImpl({ signals, highlightThreshold }: HypeFeedProps) {
   }
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
-      {sorted.map((signal) => {
+    <VirtualizedGrid
+      items={sorted.map((signal) => {
         const icon = platformIcons[signal.platform] ?? '?';
         const bg = heatColor(signal.sentiment);
         const fg = textColor(signal.sentiment);
@@ -135,7 +136,7 @@ function HypeFeedImpl({ signals, highlightThreshold }: HypeFeedProps) {
           </Wrapper>
         );
       })}
-    </div>
+    />
   );
 }
 
