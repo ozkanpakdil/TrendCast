@@ -138,6 +138,50 @@ export function useCorrelations() {
     startTimeRef.current = null;
   }, []);
 
+  // Shared handler that applies a completed correlation result to state.
+  // Used by both the CORRELATION_RESULT message listener and the storage
+  // polling fallback. Returns true if the result was applied.
+  const applyResult = useCallback((corrResult: CorrelationResultType): boolean => {
+    if (!corrResult || typeof corrResult !== 'object' || !('matches' in corrResult)) {
+      return false;
+    }
+    // Only apply if this result matches the current active request.
+    // If the result carries a requestId and we have an active one, they
+    // must match. A result without a requestId is accepted as a fallback.
+    if (corrResult.requestId && requestIdRef.current && corrResult.requestId !== requestIdRef.current) {
+      console.log('[TrendCast] [Dashboard] Ignoring stale result (requestId mismatch)');
+      return false;
+    }
+
+    setCorrelations(corrResult);
+    setError(corrResult.error ?? null);
+
+    const elapsed = startTimeRef.current ? Date.now() - startTimeRef.current : 0;
+    const stats = computeRunStats(
+      corrResult,
+      corrResult.engine,
+      undefined,
+      elapsed,
+      corrResult.matches.length,
+      0,
+      corrResult.newsMatches.length + corrResult.newsSocialMatches.length,
+    );
+    setRunStats(stats);
+    persistRunStats(stats);
+    setRunHistory((prev) => [...prev, stats].slice(-MAX_RUN_HISTORY));
+
+    setLoading(false);
+    setProgress(null);
+    stopTimer();
+    requestIdRef.current = null;
+    return true;
+  }, [stopTimer]);
+
+  // Keep the latest applyResult in a ref so the polling interval and the
+  // message listener never capture a stale closure.
+  const applyResultRef = useRef(applyResult);
+  applyResultRef.current = applyResult;
+
   // Listen for progress + result messages from the background
   useEffect(() => {
     const listener = (msg: unknown) => {
@@ -151,30 +195,12 @@ export function useCorrelations() {
       // when the async correlation completes
       if (data.type === 'CORRELATION_RESULT' && data.payload) {
         const corrResult = data.payload as CorrelationResultType;
-        if (corrResult && typeof corrResult === 'object' && 'matches' in corrResult) {
-          setCorrelations(corrResult);
-          setError(corrResult.error ?? null);
-
-          // Compute and persist run stats
-          const elapsed = startTimeRef.current ? Date.now() - startTimeRef.current : 0;
-          const stats = computeRunStats(
-            corrResult,
-            corrResult.engine,
-            undefined,
-            elapsed,
-            corrResult.matches.length,
-            0,
-            corrResult.newsMatches.length + corrResult.newsSocialMatches.length,
-          );
-          setRunStats(stats);
-          persistRunStats(stats);
-          setRunHistory((prev) => [...prev, stats].slice(-MAX_RUN_HISTORY));
-
-          setLoading(false);
-          setProgress(null);
-          stopTimer();
-          requestIdRef.current = null;
-        }
+        console.log('[TrendCast] [Dashboard] CORRELATION_RESULT received:', {
+          resultRequestId: corrResult.requestId,
+          activeRequestId: requestIdRef.current,
+          matches: corrResult.matches?.length,
+        });
+        applyResultRef.current(corrResult);
       }
     };
 
@@ -182,7 +208,33 @@ export function useCorrelations() {
     return () => {
       browser.runtime.onMessage.removeListener(listener);
     };
-  }, [stopTimer]);
+  }, []);
+
+  // Storage-polling fallback: the background writes the result to
+  // chrome.storage.local before broadcasting CORRELATION_RESULT. If the
+  // message is missed (e.g. the dashboard tab was backgrounded, or the
+  // message channel dropped), poll storage until the result for the active
+  // request appears, then apply it. This guarantees the loading state is
+  // always cleared even if the message never arrives.
+  useEffect(() => {
+    if (!loading) return;
+    const pollId = setInterval(async () => {
+      try {
+        const stored = await browser.storage.local.get(CONFIG.storage.correlations);
+        const cached = stored[CONFIG.storage.correlations] as CorrelationResultType | undefined;
+        if (cached && typeof cached === 'object' && 'matches' in cached) {
+          // Only apply if it corresponds to the active request (or has no id).
+          const activeId = requestIdRef.current;
+          if (!activeId || !cached.requestId || cached.requestId === activeId) {
+            applyResultRef.current(cached);
+          }
+        }
+      } catch (err) {
+        console.warn('[TrendCast] [Dashboard] Storage poll failed:', err);
+      }
+    }, 1000);
+    return () => clearInterval(pollId);
+  }, [loading]);
 
   const runCorrelation = useCallback(
     async (engine?: CorrelationEngine, model?: string) => {
@@ -217,27 +269,8 @@ export function useCorrelations() {
         // Legacy mode: some engines may still return the result inline
         if (unwrapped && typeof unwrapped === 'object' && 'matches' in unwrapped) {
           const corrResult = unwrapped as CorrelationResultType;
-          setCorrelations(corrResult);
-          setError(corrResult.error ?? null);
-
-          const elapsed = startTimeRef.current ? Date.now() - startTimeRef.current : 0;
-          const stats = computeRunStats(
-            corrResult,
-            engine,
-            model,
-            elapsed,
-            corrResult.matches.length,
-            0,
-            corrResult.newsMatches.length + corrResult.newsSocialMatches.length,
-          );
-          setRunStats(stats);
-          persistRunStats(stats);
-          setRunHistory((prev) => [...prev, stats].slice(-MAX_RUN_HISTORY));
-
-          setLoading(false);
-          setProgress(null);
-          stopTimer();
-          requestIdRef.current = null;
+          if (!corrResult.requestId) corrResult.requestId = requestId;
+          applyResultRef.current(corrResult);
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);

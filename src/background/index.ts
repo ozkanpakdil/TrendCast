@@ -554,14 +554,23 @@ async function runCorrelationAsync(
 
     const result = await runCorrelationWithEngine(markets, signals, news, engine, model, requestId);
 
+    // Ensure requestId is preserved in the result for the UI
+    if (result && !result.requestId) {
+      result.requestId = requestId;
+    }
+
     await browser.storage.local.set({ [CONFIG.storage.correlations]: result });
 
     // Broadcast the result to any listening dashboard/popup tabs
+    console.log('[TrendCast] Broadcasting CORRELATION_RESULT:', {
+      requestId: result.requestId,
+      matches: result.matches.length,
+    });
     browser.runtime.sendMessage({
       type: 'CORRELATION_RESULT',
       payload: result,
-    }).catch(() => {
-      // No listener — that's fine, result is in storage
+    }).catch((err) => {
+      console.error('[TrendCast] CORRELATION_RESULT sendMessage failed:', err);
     });
 
     if (result.error) {

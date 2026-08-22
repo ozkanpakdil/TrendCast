@@ -208,6 +208,7 @@ export interface NewsSocialCorrelationMatch {
 
 /** All correlation results from the engine. */
 export interface CorrelationResult {
+  requestId?: string;
   matches: CorrelationMatch[];
   newsMatches: NewsCorrelationMatch[];
   newsSocialMatches: NewsSocialCorrelationMatch[];

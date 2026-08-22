@@ -193,6 +193,7 @@ async function handleCorrelate(msg: WorkerRequest): Promise<void> {
     }
 
     const result: CorrelationResult = {
+      requestId,
       matches,
       newsMatches,
       newsSocialMatches,
