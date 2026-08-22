@@ -37,11 +37,10 @@ import {
   type SentimentResult,
   getSentimentPipeline,
 } from './transformers';
+import { computeBatchSize } from './math';
 
 // ── Batched sentiment classifier ─────────────────────────────────
 // Runs the pipeline over chunks of texts in a single forward pass each.
-
-const BATCH_SIZE = 128;
 
 class BatchSentimentClassifier {
   private pipeline: Pipeline | null = null;
@@ -65,19 +64,20 @@ class BatchSentimentClassifier {
   async classifyBatch(texts: string[]): Promise<{ score: number; label: string }[]> {
     const pipeline = await this.getPipeline();
     const results: { score: number; label: string }[] = [];
+    const batchSize = computeBatchSize(texts.length);
 
-    for (let start = 0; start < texts.length; start += BATCH_SIZE) {
-      const chunk = texts.slice(start, start + BATCH_SIZE);
+    for (let start = 0; start < texts.length; start += batchSize) {
+      const chunk = texts.slice(start, start + batchSize);
       const output = (await pipeline(chunk)) as SentimentResult | SentimentResult[];
 
-      // text-classification returns an array of { label, score } entries per
-      // input text. For a batched call this is an array of arrays.
-      const batchResults: SentimentResult[] =
-        Array.isArray(output) && Array.isArray(output[0])
-          ? (output as SentimentResult[])
-          : [output as SentimentResult];
+      // text-classification with the default top_k=1 returns a FLAT array of
+      // { label, score } objects (one per input text). With top_k>1 it returns
+      // an array of arrays. Normalize both shapes to a flat list of results.
+      const flatResults: SentimentResult = Array.isArray(output[0])
+        ? (output as SentimentResult[]).map((r) => r[0])
+        : (output as SentimentResult);
 
-      for (const res of batchResults) {
+      for (const res of flatResults) {
         results.push(normalizeSentiment(res));
       }
     }
@@ -94,19 +94,15 @@ class BatchSentimentClassifier {
  *   - Twitter RoBERTa:  { positive, negative, neutral }
  *   - Tiny DistilBERT:  { LABEL_0, LABEL_1 }
  */
-function normalizeSentiment(results: SentimentResult): { score: number; label: string } {
-  const top = results[0] ?? { label: 'neutral', score: 0.5 };
-
+function normalizeSentiment(top: { label: string; score: number }): { score: number; label: string } {
   let score = 0;
   const label = top.label.toLowerCase();
   if (label.includes('pos') || label === 'label_1') {
     score = top.score;
   } else if (label.includes('neg') || label === 'label_0') {
     score = -top.score;
-  } else {
-    // neutral — map to a small magnitude
-    score = 0;
   }
+  // neutral — score stays 0
 
   return { score, label: top.label };
 }
@@ -151,8 +147,9 @@ class SentimentIndex {
 
     if (missing.length > 0) {
       let done = 0;
-      for (let start = 0; start < missing.length; start += BATCH_SIZE) {
-        const chunk = missing.slice(start, start + BATCH_SIZE);
+      const batchSize = computeBatchSize(missing.length);
+      for (let start = 0; start < missing.length; start += batchSize) {
+        const chunk = missing.slice(start, start + batchSize);
         const classified = await this.classifier.classifyBatch(chunk);
         for (let k = 0; k < chunk.length; k++) {
           this.cache.set(chunk[k], classified[k]);

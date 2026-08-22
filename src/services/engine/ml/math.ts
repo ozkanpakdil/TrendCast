@@ -54,3 +54,33 @@ export function meanPool(tensor: number[][]): number[] {
   }
   return result;
 }
+
+/**
+ * Compute a batch size that scales with the amount of data.
+ *
+ * Returns `fraction` (default 10%) of `dataSize`, clamped to `[min, max]` so
+ * small datasets don't produce degenerate batches and large datasets don't
+ * blow up memory. Shared by the embedding, NER, and sentiment engines so
+ * they all use the same batching logic.
+ *
+ * Memoized: the same arguments always yield the same result, and the engines
+ * call this repeatedly with identical `dataSize` values across passes, so we
+ * cache the result to avoid redundant math and log spam.
+ */
+const batchSizeCache = new Map<string, number>();
+
+export function computeBatchSize(
+  dataSize: number,
+  fraction = 0.1,
+  min = 1,
+  max = 128,
+): number {
+  const key = `${dataSize}|${fraction}|${min}|${max}`;
+  const cached = batchSizeCache.get(key);
+  if (cached !== undefined) return cached;
+
+  const batchSize = Math.max(min, Math.min(max, Math.ceil(dataSize * fraction)));
+  batchSizeCache.set(key, batchSize);
+  console.debug(`[TrendCast] computeBatchSize: dataSize=${dataSize}, fraction=${fraction}, min=${min}, max=${max} => batchSize=${batchSize}`);
+  return batchSize;
+}

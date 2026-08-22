@@ -36,12 +36,10 @@ import {
   type Pipeline,
   getEmbeddingPipeline,
 } from './transformers';
-import { cosineSimilarity, meanPool, normalize } from './math';
+import { computeBatchSize, cosineSimilarity, meanPool, normalize } from './math';
 
 // ── Batched embedder ─────────────────────────────────────────────
 // Runs the pipeline over chunks of texts in a single forward pass each.
-
-const BATCH_SIZE = 128;
 
 class BatchEmbedder {
   private pipeline: Pipeline | null = null;
@@ -66,9 +64,10 @@ class BatchEmbedder {
   async embedBatch(texts: string[]): Promise<number[][]> {
     const pipeline = await this.getPipeline();
     const vectors: number[][] = [];
+    const batchSize = computeBatchSize(texts.length);
 
-    for (let start = 0; start < texts.length; start += BATCH_SIZE) {
-      const chunk = texts.slice(start, start + BATCH_SIZE);
+    for (let start = 0; start < texts.length; start += batchSize) {
+      const chunk = texts.slice(start, start + batchSize);
       const rawData = await this.runChunk(pipeline, chunk);
       this.pushVectors(vectors, rawData, chunk.length);
     }
@@ -170,8 +169,9 @@ class EmbeddingIndex {
     if (missing.length > 0) {
       // Report progress as each batch finishes so the bar moves smoothly.
       let done = 0;
-      for (let start = 0; start < missing.length; start += BATCH_SIZE) {
-        const chunk = missing.slice(start, start + BATCH_SIZE);
+      const batchSize = computeBatchSize(missing.length);
+      for (let start = 0; start < missing.length; start += batchSize) {
+        const chunk = missing.slice(start, start + batchSize);
         const vectors = await this.embedder.embedBatch(chunk);
         for (let k = 0; k < chunk.length; k++) {
           this.cache.set(chunk[k], vectors[k]);

@@ -36,6 +36,7 @@ import {
   type Pipeline,
   getNERPipeline,
 } from './transformers';
+import { computeBatchSize } from './math';
 
 /**
  * NER token classification result from the pipeline.
@@ -52,8 +53,6 @@ interface NEREntity {
 
 // ── Batched entity extractor ─────────────────────────────────────
 // Runs the pipeline over chunks of texts in a single forward pass each.
-
-const BATCH_SIZE = 128;
 
 class BatchEntityExtractor {
   private pipeline: Pipeline | null = null;
@@ -77,9 +76,10 @@ class BatchEntityExtractor {
   async extractBatch(texts: string[]): Promise<Map<string, number>[]> {
     const pipeline = await this.getPipeline();
     const results: Map<string, number>[] = [];
+    const batchSize = computeBatchSize(texts.length);
 
-    for (let start = 0; start < texts.length; start += BATCH_SIZE) {
-      const chunk = texts.slice(start, start + BATCH_SIZE);
+    for (let start = 0; start < texts.length; start += batchSize) {
+      const chunk = texts.slice(start, start + batchSize);
       const output = (await pipeline(chunk)) as NEREntity[] | NEREntity[][];
 
       // token-classification returns an array of entity predictions per input
@@ -193,8 +193,9 @@ class NEREntityIndex {
 
     if (missing.length > 0) {
       let done = 0;
-      for (let start = 0; start < missing.length; start += BATCH_SIZE) {
-        const chunk = missing.slice(start, start + BATCH_SIZE);
+      const batchSize = computeBatchSize(missing.length);
+      for (let start = 0; start < missing.length; start += batchSize) {
+        const chunk = missing.slice(start, start + batchSize);
         const extracted = await this.extractor.extractBatch(chunk);
         for (let k = 0; k < chunk.length; k++) {
           this.cache.set(chunk[k], extracted[k]);
