@@ -186,20 +186,14 @@ async function runMLCorrelation(
       const all = await ml.correlateAllEmbedding(signals, markets, news, model as never, onProgress as never);
       return { matches: all.matches, newsMatches: all.newsMatches, newsSocialMatches: all.newsSocialMatches, engine };
     } else if (engine === 'sentiment') {
-      const matches = await ml.correlateSentiment(signals, markets, model as never, onProgress as never);
-      const newsMatches = await ml.correlateNewsSentiment(news, markets, model as never, onProgress as never);
-      const newsSocialMatches = await ml.correlateNewsSocialSentiment(news, signals, model as never, onProgress as never);
-      return { matches, newsMatches, newsSocialMatches, engine };
+      const all = await ml.correlateAllSentiment(signals, markets, news, model as never, onProgress as never);
+      return { matches: all.matches, newsMatches: all.newsMatches, newsSocialMatches: all.newsSocialMatches, engine };
     } else if (engine === 'zeroshot') {
-      const matches = await ml.correlateZeroShot(signals, markets, model as never, onProgress as never);
-      const newsMatches = await ml.correlateNewsZeroShot(news, markets, model as never, onProgress as never);
-      const newsSocialMatches = await ml.correlateNewsSocialZeroShot(news, signals, model as never, onProgress as never);
-      return { matches, newsMatches, newsSocialMatches, engine };
+      const all = await ml.correlateAllZeroShot(signals, markets, news, model as never, onProgress as never);
+      return { matches: all.matches, newsMatches: all.newsMatches, newsSocialMatches: all.newsSocialMatches, engine };
     } else if (engine === 'ner') {
-      const matches = await ml.correlateNER(signals, markets, model as never, onProgress as never);
-      const newsMatches = await ml.correlateNewsNER(news, markets, model as never, onProgress as never);
-      const newsSocialMatches = await ml.correlateNewsSocialNER(news, signals, model as never, onProgress as never);
-      return { matches, newsMatches, newsSocialMatches, engine };
+      const all = await ml.correlateAllNER(signals, markets, news, model as never, onProgress as never);
+      return { matches: all.matches, newsMatches: all.newsMatches, newsSocialMatches: all.newsSocialMatches, engine };
     } else {
       // llm
       const matches = await ml.correlateLLM(signals, markets, model as never, onProgress as never);

@@ -56,6 +56,7 @@ export {
   correlateSentiment,
   correlateNewsSentiment,
   correlateNewsSocialSentiment,
+  correlateAllSentiment,
 } from './ml/sentiment';
 
 // Zero-shot classification engine
@@ -63,6 +64,7 @@ export {
   correlateZeroShot,
   correlateNewsZeroShot,
   correlateNewsSocialZeroShot,
+  correlateAllZeroShot,
 } from './ml/zeroshot';
 
 // NER engine
@@ -70,6 +72,7 @@ export {
   correlateNER,
   correlateNewsNER,
   correlateNewsSocialNER,
+  correlateAllNER,
 } from './ml/ner';
 
 // LLM engine

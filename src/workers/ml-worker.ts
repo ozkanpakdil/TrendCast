@@ -29,15 +29,9 @@ import type {
 import {
   setWasmPath,
   correlateAllEmbedding,
-  correlateSentiment,
-  correlateNewsSentiment,
-  correlateNewsSocialSentiment,
-  correlateZeroShot,
-  correlateNewsZeroShot,
-  correlateNewsSocialZeroShot,
-  correlateNER,
-  correlateNewsNER,
-  correlateNewsSocialNER,
+  correlateAllSentiment,
+  correlateAllZeroShot,
+  correlateAllNER,
   correlateLLM,
   correlateNewsLLM,
   correlateNewsSocialLLM,
@@ -171,19 +165,22 @@ async function handleCorrelate(msg: WorkerRequest): Promise<void> {
       newsSocialMatches = all.newsSocialMatches;
     } else if (engine === 'sentiment') {
       console.log(`[TrendCast ML Worker] Starting sentiment correlation: model="${model}"`);
-      matches = await correlateSentiment(signals, markets, model as never, onProgress, cancelFlag);
-      newsMatches = await correlateNewsSentiment(news, markets, model as never, onProgress, cancelFlag);
-      newsSocialMatches = await correlateNewsSocialSentiment(news, signals, model as never, onProgress, cancelFlag);
+      const all = await correlateAllSentiment(signals, markets, news, model as never, onProgress, cancelFlag);
+      matches = all.matches;
+      newsMatches = all.newsMatches;
+      newsSocialMatches = all.newsSocialMatches;
     } else if (engine === 'zeroshot') {
       console.log(`[TrendCast ML Worker] Starting zero-shot correlation: model="${model}"`);
-      matches = await correlateZeroShot(signals, markets, model as never, onProgress, cancelFlag);
-      newsMatches = await correlateNewsZeroShot(news, markets, model as never, onProgress, cancelFlag);
-      newsSocialMatches = await correlateNewsSocialZeroShot(news, signals, model as never, onProgress, cancelFlag);
+      const all = await correlateAllZeroShot(signals, markets, news, model as never, onProgress, cancelFlag);
+      matches = all.matches;
+      newsMatches = all.newsMatches;
+      newsSocialMatches = all.newsSocialMatches;
     } else if (engine === 'ner') {
       console.log(`[TrendCast ML Worker] Starting NER correlation: model="${model}"`);
-      matches = await correlateNER(signals, markets, model as never, onProgress, cancelFlag);
-      newsMatches = await correlateNewsNER(news, markets, model as never, onProgress, cancelFlag);
-      newsSocialMatches = await correlateNewsSocialNER(news, signals, model as never, onProgress, cancelFlag);
+      const all = await correlateAllNER(signals, markets, news, model as never, onProgress, cancelFlag);
+      matches = all.matches;
+      newsMatches = all.newsMatches;
+      newsSocialMatches = all.newsSocialMatches;
     } else if (engine === 'llm') {
       console.log(`[TrendCast ML Worker] Starting LLM correlation: model="${model}"`);
       matches = await correlateLLM(signals, markets, model as never, onProgress, cancelFlag);
