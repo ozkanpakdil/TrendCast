@@ -2,7 +2,19 @@
  * Math helpers shared across ML correlation engines.
  */
 
-/** Cosine similarity between two equal-length vectors. */
+/** Dot product between two equal-length vectors. */
+export function dotProduct(a: number[], b: number[]): number {
+  let dot = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+  }
+  return dot;
+}
+
+/**
+ * Cosine similarity between two equal-length vectors.
+ * If both vectors are L2-normalized (norm = 1), this equals the dot product.
+ */
 export function cosineSimilarity(a: number[], b: number[]): number {
   let dot = 0;
   let normA = 0;
@@ -14,6 +26,17 @@ export function cosineSimilarity(a: number[], b: number[]): number {
   }
   const denom = Math.sqrt(normA) * Math.sqrt(normB);
   return denom > 0 ? dot / denom : 0;
+}
+
+/** L2-normalize a vector in place and return it (no-op if norm is 0). */
+export function normalize(vector: number[]): number[] {
+  let norm = 0;
+  for (const v of vector) norm += v * v;
+  norm = Math.sqrt(norm);
+  if (norm > 0) {
+    for (let i = 0; i < vector.length; i++) vector[i] /= norm;
+  }
+  return vector;
 }
 
 /** Mean-pool a 2D embedding [tokens][dims] into a single [dims] vector. */

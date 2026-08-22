@@ -183,10 +183,8 @@ async function runMLCorrelation(
     // Fallback: import and run inline (will block main thread, but at least works)
     const ml = await import('@/services/engine/ml');
     if (engine === 'embedding') {
-      const matches = await ml.correlateEmbedding(signals, markets, model as never, onProgress as never);
-      const newsMatches = await ml.correlateNewsEmbedding(news, markets, model as never, onProgress as never);
-      const newsSocialMatches = await ml.correlateNewsSocialEmbedding(news, signals, model as never, onProgress as never);
-      return { matches, newsMatches, newsSocialMatches, engine };
+      const all = await ml.correlateAllEmbedding(signals, markets, news, model as never, onProgress as never);
+      return { matches: all.matches, newsMatches: all.newsMatches, newsSocialMatches: all.newsSocialMatches, engine };
     } else if (engine === 'sentiment') {
       const matches = await ml.correlateSentiment(signals, markets, model as never, onProgress as never);
       const newsMatches = await ml.correlateNewsSentiment(news, markets, model as never, onProgress as never);

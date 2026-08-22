@@ -28,9 +28,7 @@ import type {
 } from '@/types';
 import {
   setWasmPath,
-  correlateEmbedding,
-  correlateNewsEmbedding,
-  correlateNewsSocialEmbedding,
+  correlateAllEmbedding,
   correlateSentiment,
   correlateNewsSentiment,
   correlateNewsSocialSentiment,
@@ -167,9 +165,10 @@ async function handleCorrelate(msg: WorkerRequest): Promise<void> {
 
     if (engine === 'embedding') {
       console.log(`[TrendCast ML Worker] Starting embedding correlation: model="${model}"`);
-      matches = await correlateEmbedding(signals, markets, model as never, onProgress, cancelFlag);
-      newsMatches = await correlateNewsEmbedding(news, markets, model as never, onProgress, cancelFlag);
-      newsSocialMatches = await correlateNewsSocialEmbedding(news, signals, model as never, onProgress, cancelFlag);
+      const all = await correlateAllEmbedding(signals, markets, news, model as never, onProgress, cancelFlag);
+      matches = all.matches;
+      newsMatches = all.newsMatches;
+      newsSocialMatches = all.newsSocialMatches;
     } else if (engine === 'sentiment') {
       console.log(`[TrendCast ML Worker] Starting sentiment correlation: model="${model}"`);
       matches = await correlateSentiment(signals, markets, model as never, onProgress, cancelFlag);

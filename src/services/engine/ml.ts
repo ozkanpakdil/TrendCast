@@ -48,6 +48,7 @@ export {
   correlateEmbedding,
   correlateNewsEmbedding,
   correlateNewsSocialEmbedding,
+  correlateAllEmbedding,
 } from './ml/embedding';
 
 // Sentiment engine
