@@ -85,7 +85,7 @@ describe('collectNews health map', () => {
     expect(health.yahoo?.lastError).toBeUndefined();
   });
 
-  it('preserves prior consecutiveFailures across a 304 (unchanged) cycle', async () => {
+  it('resets prior consecutiveFailures across a 304 (unchanged) cycle', async () => {
     mockedFetch.mockResolvedValue(null); // 304 Not Modified
 
     const previousHealth: SourceHealth = {
@@ -94,8 +94,9 @@ describe('collectNews health map', () => {
 
     const { health } = await collectNews(['yahoo'], previousHealth);
 
-    // A 304 is a healthy no-op — it neither resets nor increments failures.
-    expect(health.yahoo?.consecutiveFailures).toBe(2);
+    // A 304 means the server responded successfully (just no new content),
+    // so the source is healthy again — prior failures must be cleared.
+    expect(health.yahoo?.consecutiveFailures).toBe(0);
   });
 
   it('records lastFetchedAt for every source', async () => {

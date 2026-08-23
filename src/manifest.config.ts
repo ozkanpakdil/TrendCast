@@ -219,7 +219,7 @@ export default defineManifest({
   //    bundled locally. This is fine for our React popup.
   content_security_policy: {
     extension_pages:
-      "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; style-src 'self' 'unsafe-inline'",
+      "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://www.google.com https://*.google.com https://*.gstatic.com",
   },
 
   // ── Cross-browser metadata ─────────────────────────────────────

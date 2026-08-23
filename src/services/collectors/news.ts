@@ -71,10 +71,10 @@ export async function collectNews(
       items.push(...sourceItems);
       // A 304 (unchanged) is a healthy no-op — it must NOT count as a
       // failure, otherwise a healthy-but-quiet source drifts to Degraded.
-      let consecutiveFailures = prev?.consecutiveFailures ?? 0;
-      if (!unchanged) {
-        consecutiveFailures = sourceItems.length > 0 ? 0 : consecutiveFailures + 1;
-      }
+      // It also RESETS any prior failure counter: a 304 means the server
+      // responded successfully (just no new content), so the source is
+      // healthy again.
+      const consecutiveFailures = unchanged ? 0 : sourceItems.length > 0 ? 0 : (prev?.consecutiveFailures ?? 0) + 1;
       health[source] = {
         lastFetchedAt: Date.now(),
         itemCount: sourceItems.length,

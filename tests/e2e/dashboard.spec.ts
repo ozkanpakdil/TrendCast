@@ -115,8 +115,8 @@ test.describe('Dashboard — Tab Navigation', () => {
 
   test('switches to News tab on click', async ({ page }) => {
     await openDashboard(page);
-    await page.locator('nav button', { hasText: 'News' }).click();
-    await expect(page.locator('nav button', { hasText: 'News' })).toHaveClass(/border-brand-400/);
+    await page.getByRole('button', { name: '📰 News', exact: true }).click();
+    await expect(page.getByRole('button', { name: '📰 News', exact: true })).toHaveClass(/border-brand-400/);
   });
 
   test('switches to Correlations tab on click', async ({ page }) => {
@@ -314,7 +314,7 @@ test.describe('Dashboard — Markets Tab (Market Odds)', () => {
 test.describe('Dashboard — News Tab', () => {
   test('displays news headlines', async ({ page }) => {
     await openDashboard(page);
-    await page.locator('nav button', { hasText: 'News' }).click();
+    await page.getByRole('button', { name: '📰 News', exact: true }).click();
     await page.waitForTimeout(300);
     const mainSection = page.locator('main');
     await expect(mainSection).toContainText('Bitcoin surges past $98,000');
@@ -323,7 +323,7 @@ test.describe('Dashboard — News Tab', () => {
 
   test('shows news source badges', async ({ page }) => {
     await openDashboard(page);
-    await page.locator('nav button', { hasText: 'News' }).click();
+    await page.getByRole('button', { name: '📰 News', exact: true }).click();
     await page.waitForTimeout(300);
     const mainSection = page.locator('main');
     await expect(mainSection).toContainText(/bbc/i);
@@ -332,10 +332,10 @@ test.describe('Dashboard — News Tab', () => {
 
   test('news items are links to original articles', async ({ page }) => {
     await openDashboard(page);
-    await page.locator('nav button', { hasText: 'News' }).click();
+    await page.getByRole('button', { name: '📰 News', exact: true }).click();
     await page.waitForTimeout(300);
     const firstNewsLink = page.locator('main a').first();
-    await expect(firstNewsLink).toHaveAttribute('href', /bbc\.com|cnn\.com/);
+    await expect(firstNewsLink).toHaveAttribute('href', /bbc\.com|cnn\.com|seekingalpha\.com/);
   });
 
   test('shows empty state when no news', async ({ page }) => {
@@ -347,28 +347,49 @@ test.describe('Dashboard — News Tab', () => {
         news: [],
       },
     });
-    await page.locator('nav button', { hasText: 'News' }).click();
+    await page.getByRole('button', { name: '📰 News', exact: true }).click();
     await page.waitForTimeout(300);
     await expect(page.locator('main')).toContainText(/No news collected yet/);
   });
 
   test('shows section heading', async ({ page }) => {
     await openDashboard(page);
-    await page.locator('nav button', { hasText: 'News' }).click();
+    await page.getByRole('button', { name: '📰 News', exact: true }).click();
     await page.waitForTimeout(300);
     await expect(page.locator('main')).toContainText(/Latest News/);
   });
 
   test('renders source health indicator with fetched/correlated counts', async ({ page }) => {
     await openDashboard(page);
-    await page.locator('nav button', { hasText: 'News' }).click();
+    await page.getByRole('button', { name: '📰 News', exact: true }).click();
     await page.waitForTimeout(300);
     const mainSection = page.locator('main');
     // MOCK_SNAPSHOT.sourceHealth: seekingalpha healthy (fetched 10), investing degraded (fetched 0)
-    await expect(mainSection).toContainText(/Seeking Alpha/);
-    await expect(mainSection).toContainText(/fetched 10 · correlated/);
-    await expect(mainSection).toContainText(/Investing\.com/);
-    await expect(mainSection).toContainText(/fetched 0 · correlated/);
+    // The sidebar shows each source's label + a bare fetched count.
+    const seeking = mainSection.locator('button', { hasText: 'Seeking Alpha' });
+    await expect(seeking).toBeVisible();
+    await expect(seeking).toContainText('10');
+    const investing = mainSection.locator('button', { hasText: 'Investing.com' });
+    await expect(investing).toBeVisible();
+    await expect(investing).toContainText('0');
+  });
+
+  test('filters the news feed by selected sources (multi-select)', async ({ page }) => {
+    await openDashboard(page);
+    await page.getByRole('button', { name: '📰 News', exact: true }).click();
+    await page.waitForTimeout(300);
+    const mainSection = page.locator('main');
+    // MOCK_SNAPSHOT.news: bbc, cnn, + 10 seekingalpha items.
+    const seeking = mainSection.locator('button', { hasText: 'Seeking Alpha' });
+    await seeking.click();
+    // Only seekingalpha items should remain in the feed.
+    await expect(mainSection.locator('a[href*="seekingalpha"]').first()).toBeVisible();
+    await expect(mainSection.locator('a[href*="bbc"]')).toHaveCount(0);
+    // Toggle a second source on — both should now be present.
+    const bbc = mainSection.locator('button', { hasText: 'BBC' });
+    await bbc.click();
+    await expect(mainSection.locator('a[href*="seekingalpha"]').first()).toBeVisible();
+    await expect(mainSection.locator('a[href*="bbc"]').first()).toBeVisible();
   });
 
   test('bounds DOM to visible rows with a large news dataset', async ({ page }) => {
@@ -388,7 +409,7 @@ test.describe('Dashboard — News Tab', () => {
         })),
       },
     });
-    await page.locator('nav button', { hasText: 'News' }).click();
+    await page.getByRole('button', { name: '📰 News', exact: true }).click();
     await page.waitForTimeout(300);
     // Only visible rows are mounted — well below the 200 seeded news items.
     // At 1280x720 (6 cols x ~11-12 rows incl. overscan 3) that's ~60-72 cards.
@@ -414,7 +435,7 @@ test.describe('Dashboard — News Tab', () => {
       },
     });
     // Switch to the News tab with a large dataset — must render without error.
-    await page.locator('nav button', { hasText: 'News' }).click();
+    await page.getByRole('button', { name: '📰 News', exact: true }).click();
     await page.waitForTimeout(300);
     // The feed is interactive: the first news card link is clickable (has an href).
     const firstNewsLink = page.locator('main a.card-hover').first();
@@ -467,6 +488,80 @@ test.describe('Dashboard — Correlations Tab', () => {
     // Mock correlations have 2 signal-market matches, 2 news-market, 1 news-social
     const mainSection = page.locator('main');
     await expect(mainSection).toBeVisible();
+  });
+
+  test('filters correlation news matches by selected sources', async ({ page }) => {
+    await openDashboard(page);
+    await page.locator('nav button', { hasText: 'Correlations' }).click();
+    await page.waitForTimeout(500);
+    const mainSection = page.locator('main');
+    // Mock newsMatches: news[0] is bbc ("Bitcoin surges…"), news[1] is cnn ("Federal Reserve…").
+    // Switch to list view to make the matches queryable as text.
+    const listToggle = mainSection.locator('button', { hasText: /^List$/ });
+    if (await listToggle.isVisible()) {
+      await listToggle.click();
+      await page.waitForTimeout(300);
+    }
+    // Both bbc and cnn headlines should be present initially.
+    await expect(mainSection).toContainText(/Bitcoin surges past/);
+    await expect(mainSection).toContainText(/Federal Reserve hints/);
+    // Filter to only CNN — the bbc match should disappear.
+    const cnnBadge = mainSection.locator('button', { hasText: 'CNN' });
+    await cnnBadge.click();
+    await page.waitForTimeout(300);
+    // The bbc news headline should no longer be rendered.
+    await expect(mainSection).not.toContainText(/Bitcoin surges past/);
+    await expect(mainSection).toContainText(/Federal Reserve hints/);
+  });
+
+  test('filters correlation social matches by selected platforms', async ({ page }) => {
+    await openDashboard(page);
+    await page.locator('nav button', { hasText: 'Correlations' }).click();
+    await page.waitForTimeout(500);
+    const mainSection = page.locator('main');
+    // Social platform badges should be present in the sidebar.
+    const xBadge = mainSection.locator('button', { hasText: 'X' });
+    const redditBadge = mainSection.locator('button', { hasText: 'Reddit' });
+    await expect(xBadge).toBeVisible();
+    await expect(redditBadge).toBeVisible();
+    // Switch to list view to make the matches queryable as text.
+    const listToggle = mainSection.locator('button', { hasText: /^List$/ });
+    if (await listToggle.isVisible()) {
+      await listToggle.click();
+      await page.waitForTimeout(300);
+    }
+    // Mock matches: signals[0] is x ("$BTC to the moon!…"), signals[1] is reddit ("Fed signals…").
+    await expect(mainSection).toContainText(/BTC to the moon/);
+    await expect(mainSection).toContainText(/Fed signals possible rate cut/);
+    // Filter to only Reddit — the x match should disappear.
+    await redditBadge.click();
+    await page.waitForTimeout(300);
+    await expect(mainSection).not.toContainText(/BTC to the moon/);
+    await expect(mainSection).toContainText(/Fed signals possible rate cut/);
+  });
+
+  test('selecting a news badge hides unrelated social→market matches', async ({ page }) => {
+    await openDashboard(page);
+    await page.locator('nav button', { hasText: 'Correlations' }).click();
+    await page.waitForTimeout(500);
+    const mainSection = page.locator('main');
+    // Switch to list view to make the matches queryable as text.
+    const listToggle = mainSection.locator('button', { hasText: /^List$/ });
+    if (await listToggle.isVisible()) {
+      await listToggle.click();
+      await page.waitForTimeout(300);
+    }
+    // Initially both a social→market (reddit) and news→market (bbc/cnn) match are shown.
+    await expect(mainSection).toContainText(/Fed signals possible rate cut/);
+    await expect(mainSection).toContainText(/Bitcoin surges past/);
+    // Select only the CNN news badge — the reddit social→market match must be hidden.
+    const cnnBadge = mainSection.locator('button', { hasText: 'CNN' });
+    await cnnBadge.click();
+    await page.waitForTimeout(300);
+    await expect(mainSection).not.toContainText(/Fed signals possible rate cut/);
+    await expect(mainSection).not.toContainText(/BTC to the moon/);
+    // The CNN news→market match should remain.
+    await expect(mainSection).toContainText(/Federal Reserve hints/);
   });
 
   test('switching to embedding engine shows model selector', async ({ page }) => {

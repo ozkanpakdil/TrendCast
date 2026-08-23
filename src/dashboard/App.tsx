@@ -30,6 +30,7 @@ import { MarketOdds } from './components/MarketOdds';
 import { CorrelationPanel } from './components/CorrelationPanel';
 import { CorrelationStatsBar } from './components/CorrelationStatsBar';
 import { SourceHealthIndicator } from './components/SourceHealthIndicator';
+import { SocialSourceFilter } from './components/SocialSourceFilter';
 import { SocialHealthBadge } from './components/SocialHealthBadge';
 import { CorrelationRunHistory } from './components/CorrelationRunHistory';
 import { HistoryChart } from './components/HistoryChart';
@@ -43,7 +44,7 @@ import { useCorrelations } from './hooks/useCorrelations';
 import { useAlerts } from './hooks/useAlerts';
 import { useMarketNews } from './hooks/useMarketNews';
 import { DEFAULT_SETTINGS } from '@/types';
-import type { ExtensionSettings, ThemeMode, CorrelationEngine, SocialSourceHealth } from '@/types';
+import type { ExtensionSettings, ThemeMode, CorrelationEngine, SocialSourceHealth, NewsSource, SocialPlatform, CorrelationMatch, NewsCorrelationMatch, NewsSocialCorrelationMatch } from '@/types';
 import { CONFIG } from '@/config';
 import { browser } from '@/messaging/browser';
 import { sendMessage } from '@/messaging';
@@ -87,6 +88,44 @@ function phaseLabel(phase: string): string {
   return labels[phase] ?? phase;
 }
 
+// ── Unified correlation filtering ──────────────────────────────
+// When ANY badge (news source or social platform) is selected, every match
+// type is filtered to only those touching a selected entity. A match with
+// no selected entity on either side is hidden. When nothing is selected,
+// everything is shown.
+
+/** social→market: keep only when the signal's platform is selected. */
+function filterMatches(
+  matches: CorrelationMatch[],
+  newsFilter: NewsSource[],
+  socialFilter: SocialPlatform[],
+): CorrelationMatch[] {
+  if (newsFilter.length === 0 && socialFilter.length === 0) return matches;
+  return matches.filter((m) => socialFilter.includes(m.signal.platform));
+}
+
+/** news→market: keep only when the news source is selected. */
+function filterNewsMatches(
+  matches: NewsCorrelationMatch[],
+  newsFilter: NewsSource[],
+  socialFilter: SocialPlatform[],
+): NewsCorrelationMatch[] {
+  if (newsFilter.length === 0 && socialFilter.length === 0) return matches;
+  return matches.filter((m) => newsFilter.includes(m.news.source));
+}
+
+/** news→social: keep when EITHER side is selected (it bridges both). */
+function filterNewsSocialMatches(
+  matches: NewsSocialCorrelationMatch[],
+  newsFilter: NewsSource[],
+  socialFilter: SocialPlatform[],
+): NewsSocialCorrelationMatch[] {
+  if (newsFilter.length === 0 && socialFilter.length === 0) return matches;
+  return matches.filter(
+    (m) => newsFilter.includes(m.news.source) || socialFilter.includes(m.signal.platform),
+  );
+}
+
 export function App() {
   const { snapshot, loading, error: snapshotError, collecting, lastCollectionAt, triggerCollection } = useSnapshot();
   const { correlations, loading: corrLoading, error: corrError, progress: corrProgress, elapsedMs, runCorrelation, cancelCorrelation, runStats, runHistory } = useCorrelations();
@@ -97,6 +136,10 @@ export function App() {
   const [theme, setTheme] = useState<ThemeMode>('dark');
   const [exporting, setExporting] = useState(false);
   const [socialHealth, setSocialHealth] = useState<SocialSourceHealth>({});
+  // Selected news sources for filtering the news feed (multi-select).
+  const [newsFilter, setNewsFilter] = useState<NewsSource[]>([]);
+  // Selected social platforms for filtering correlations (multi-select).
+  const [socialFilter, setSocialFilter] = useState<SocialPlatform[]>([]);
 
   // Load settings + theme
   useEffect(() => {
@@ -353,15 +396,37 @@ export function App() {
                 <h2 className={`text-sm font-bold uppercase tracking-wider mb-3 ${sectionTitle}`}>
                   📰 Latest News
                 </h2>
-                <SourceHealthIndicator
-                  health={snapshot?.sourceHealth ?? {}}
-                  correlatedCounts={computeCorrelatedCounts(correlations?.newsMatches ?? [])}
-                  news={snapshot?.news ?? []}
-                  isDark={isDark}
-                  loading={loading}
-                  error={snapshotError}
-                />
-                <NewsFeed news={snapshot?.news ?? []} />
+                <div className="flex gap-4">
+                  {/* Source filter sidebar */}
+                  <aside className="w-44 shrink-0">
+                    <SourceHealthIndicator
+                      health={snapshot?.sourceHealth ?? {}}
+                      correlatedCounts={computeCorrelatedCounts(correlations?.newsMatches ?? [])}
+                      news={snapshot?.news ?? []}
+                      selected={newsFilter}
+                      onToggle={(source) =>
+                        setNewsFilter((prev) =>
+                          prev.includes(source)
+                            ? prev.filter((s) => s !== source)
+                            : [...prev, source],
+                        )
+                      }
+                      isDark={isDark}
+                      loading={loading}
+                      error={snapshotError}
+                    />
+                  </aside>
+                  {/* Filtered news feed */}
+                  <div className="flex-1 min-w-0">
+                    <NewsFeed
+                      news={
+                        newsFilter.length > 0
+                          ? (snapshot?.news ?? []).filter((n) => newsFilter.includes(n.source))
+                          : (snapshot?.news ?? [])
+                      }
+                    />
+                  </div>
+                </div>
               </section>
             )}
 
@@ -646,20 +711,58 @@ export function App() {
 
                 <CorrelationStatsBar stats={runStats} isDark={isDark} />
 
-                <SourceHealthIndicator
-                  health={snapshot?.sourceHealth ?? {}}
-                  correlatedCounts={computeCorrelatedCounts(correlations?.newsMatches ?? [])}
-                  news={snapshot?.news ?? []}
-                  isDark={isDark}
-                  loading={loading}
-                  error={snapshotError}
-                />
+                <div className="flex gap-4">
+                  {/* Source filter sidebar: news sources + social platforms */}
+                  <aside className="w-40 shrink-0 space-y-3">
+                    <SourceHealthIndicator
+                      health={snapshot?.sourceHealth ?? {}}
+                      correlatedCounts={computeCorrelatedCounts(correlations?.newsMatches ?? [])}
+                      news={snapshot?.news ?? []}
+                      selected={newsFilter}
+                      onToggle={(source) =>
+                        setNewsFilter((prev) =>
+                          prev.includes(source)
+                            ? prev.filter((s) => s !== source)
+                            : [...prev, source],
+                        )
+                      }
+                      isDark={isDark}
+                      loading={loading}
+                      error={snapshotError}
+                    />
+                    <SocialSourceFilter
+                      health={socialHealth}
+                      signals={snapshot?.signals ?? []}
+                      selected={socialFilter}
+                      onToggle={(platform) =>
+                        setSocialFilter((prev) =>
+                          prev.includes(platform)
+                            ? prev.filter((p) => p !== platform)
+                            : [...prev, platform],
+                        )
+                      }
+                      isDark={isDark}
+                      loading={loading}
+                    />
+                  </aside>
 
-                <CorrelationPanel
-                  matches={correlations?.matches ?? []}
-                  newsMatches={correlations?.newsMatches ?? []}
-                  newsSocialMatches={correlations?.newsSocialMatches ?? []}
-                />
+                  {/* Filtered correlation panel */}
+                  <div className="flex-1 min-w-0">
+                    <CorrelationPanel
+                      matches={filterMatches(correlations?.matches ?? [], newsFilter, socialFilter)}
+                      newsMatches={filterNewsMatches(
+                        correlations?.newsMatches ?? [],
+                        newsFilter,
+                        socialFilter,
+                      )}
+                      newsSocialMatches={filterNewsSocialMatches(
+                        correlations?.newsSocialMatches ?? [],
+                        newsFilter,
+                        socialFilter,
+                      )}
+                    />
+                  </div>
+                </div>
               </section>
             )}
 

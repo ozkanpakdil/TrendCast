@@ -21,17 +21,28 @@ export type SourceHealthState = 'healthy' | 'stale' | 'degraded' | 'no-data';
  *
  * Rules (grounded in UI-SPEC):
  * - `undefined` entry → `'no-data'`
+ * - `fetchedCount > 0` (source has accumulated news) → `'healthy'` unless stale
  * - `consecutiveFailures > 0` → `'degraded'`
  * - `itemCount === 0` and not unchanged (304) → `'degraded'`
  * - `now - lastFetchedAt > stalenessThresholdMs` → `'stale'`
  * - otherwise → `'healthy'`
+ *
+ * `fetchedCount` is the number of news items actually stored for the source
+ * (from the accumulated feed). A source that has data is healthy even if a
+ * stale `consecutiveFailures` counter was left over from an earlier cycle —
+ * otherwise a recovered source stays red "Degraded" forever.
  */
 export function computeHealth(
   entry: SourceHealthEntry | undefined,
   stalenessThresholdMs: number,
   now: number,
+  fetchedCount = 0,
 ): SourceHealthState {
   if (!entry) return 'no-data';
+  // A source with real fetched data is healthy (unless it went stale).
+  if (fetchedCount > 0) {
+    return now - entry.lastFetchedAt > stalenessThresholdMs ? 'stale' : 'healthy';
+  }
   if (entry.consecutiveFailures > 0) return 'degraded';
   if (entry.itemCount === 0 && !entry.lastUnchanged) return 'degraded';
   if (now - entry.lastFetchedAt > stalenessThresholdMs) return 'stale';

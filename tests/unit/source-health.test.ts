@@ -41,6 +41,30 @@ describe('computeHealth', () => {
     ).toBe('degraded');
   });
 
+  it('returns healthy when the source has fetched data despite a stale failure counter', () => {
+    // A recovered source with accumulated news must not stay red "Degraded"
+    // just because a prior cycle left consecutiveFailures > 0.
+    expect(
+      computeHealth(
+        entry({ consecutiveFailures: 3, itemCount: 0 }),
+        STALE_MS,
+        NOW,
+        8, // fetchedCount from the accumulated feed
+      ),
+    ).toBe('healthy');
+  });
+
+  it('returns stale when a source with fetched data exceeds the threshold', () => {
+    expect(
+      computeHealth(
+        entry({ consecutiveFailures: 3, lastFetchedAt: NOW - STALE_MS - 1 }),
+        STALE_MS,
+        NOW,
+        8,
+      ),
+    ).toBe('stale');
+  });
+
   it('returns degraded when itemCount is 0', () => {
     expect(computeHealth(entry({ itemCount: 0 }), STALE_MS, NOW)).toBe('degraded');
   });
