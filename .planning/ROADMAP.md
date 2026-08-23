@@ -30,19 +30,30 @@ The **v1.1 News Source Fix** milestone is a focused bug fix: existing users with
 **Milestone Goal:** Fix the news tab so Seeking Alpha and Investing.com headlines actually appear for existing users.
 
 #### Phase 9: News Source Fix
+
 **Goal**: Existing users see Seeking Alpha and Investing.com headlines in the news tab even with pre-existing saved settings
 **Depends on**: Phase 8
 **Requirements**: NEWS-01, NEWS-02, NEWS-03
 **Success Criteria** (what must be TRUE):
+
   1. User with pre-existing saved settings sees Seeking Alpha and Investing.com headlines in the news tab (deep-merged `enabledSources` defaults those flags to `true`)
   2. User's saved settings are migrated on load to backfill any missing source flags, so the fix persists across restarts
   3. User's existing enabled/disabled source choices are preserved (deep-merge never overwrites an explicit user preference)
   4. Regression unit tests prove the deep-merge + migration behavior (NEWS-03)
+
 **Plans**: 3 plans
 
 Plans:
+**Wave 1**
+
 - [ ] 09-01: Deep-merge `enabledSources` in `getSettings` (background) and dashboard settings load
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 09-02: Settings migration to backfill missing source flags on load
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 09-03: Unit-test regression coverage for the deep-merge + migration fix
 
 ## Progress
@@ -59,4 +70,3 @@ Phases execute in numeric order: 3 → 4 → 5 → 6 → 7 → 8 → 9
 | 7. TikTok Collector | v1.0 | 3/3 | Complete | 2026-08-23 |
 | 8. Storage & ML Hardening | v1.0 | 3/3 | Complete | 2026-08-23 |
 | 9. News Source Fix | v1.1 | 0/3 | Not started | - |
-
