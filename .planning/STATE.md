@@ -1,20 +1,20 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.0
-current_phase: 7
-current_phase_name: TikTok Collector
-status: planning
-stopped_at: Phase 6 complete, ready to plan Phase 7
-last_updated: "2026-08-23T15:26:24.403Z"
+status: Complete
+stopped_at: Milestone v1.0 complete and archived
+last_updated: "2026-08-23T17:45:00.000Z"
 last_activity: 2026-08-23
-last_activity_desc: Phase 6 complete, transitioned to Phase 7
-state_head: efe6fcc18f3184c81bc5d89c0737088ecf7a8e97
+last_activity_desc: Milestone v1.0 completed and archived
+state_head: ffbe489ee24c52c289c06c8fc9bd4f669ee91ba3
 progress:
   total_phases: 6
-  completed_phases: 4
-  total_plans: 13
-  completed_plans: 13
+  completed_phases: 6
+  total_plans: 19
+  completed_plans: 19
 milestone_name: Speed, Alerts & New Data
+current_phase: 8
+current_phase_name: Storage & ML Hardening
 ---
 
 # Project State
@@ -24,22 +24,20 @@ milestone_name: Speed, Alerts & New Data
 See: .planning/PROJECT.md (updated 2026-08-23)
 
 **Core value:** Surface the strongest, most reliable signal of what prediction markets are moving and why — by correlating social hype, news, and market odds — fast enough that the user trusts it as a daily decision aid.
-**Current focus:** Phase 05 — Market-Driven News (Ready to plan)
+**Current focus:** Milestone v1.0 complete — planning next milestone
 
 ## Current Position
 
-Phase: 7 — TikTok Collector
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-08-23 — Phase 6 complete, transitioned to Phase 7
-
-Progress: [██░░░░░░░░] 17%
+Phase: Milestone v1.0 complete
+Plan: —
+Status: Complete
+Last activity: 2026-08-23 — Milestone v1.0 completed and archived
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 16 (prior milestone)
+- Total plans completed: 22 (prior milestone)
 - Average duration: 30 min
 - Total execution time: 1.5 hours
 
@@ -53,6 +51,8 @@ Progress: [██░░░░░░░░] 17%
 | 5 | 3 | - | - |
 | 4 | 3 | - | - |
 | 6 | 3 | - | - |
+| 07-tiktok-collector | 3 | - | - |
+| 08-storage-ml-hardening | 3 | - | - |
 
 **Recent Trend:**
 
@@ -100,10 +100,16 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 | Category | Item | Status | Deferred At | Milestone |
 |----------|------|--------|-------------|-----------|
-| *(none)* | | | | |
+| uat_gaps | 04/04-UAT.md | passed | 2026-08-23 | v1.0 |
+| uat_gaps | 05/05-UAT.md | passed | 2026-08-23 | v1.0 |
+| uat_gaps | 06/06-UAT.md | passed | 2026-08-23 | v1.0 |
 
 ## Session Continuity
 
-Last session: 2026-08-23T13:42:06.598Z
-Stopped at: Phase 6 complete, ready to plan Phase 7
-Resume file: .planning/phases/06-watchlist-export/06-CONTEXT.md
+Last session: 2026-08-23T17:45:00.000Z
+Stopped at: Milestone v1.0 complete and archived
+Resume file: .planning/milestones/v1.0-phases/06-watchlist-export/06-CONTEXT.md
+
+## Operator Next Steps
+
+- Start the next milestone with /gsd-new-milestone

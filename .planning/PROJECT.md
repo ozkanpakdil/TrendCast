@@ -8,12 +8,12 @@ A 100% client-side Manifest V3 browser extension (Chrome + Firefox) that collect
 
 Surface the strongest, most reliable signal of what prediction markets are moving and why — by correlating social hype, news, and market odds — fast enough that the user trusts it as a daily decision aid.
 
-## Current Milestone: v1.0 Speed, Alerts & New Data
+## Current Milestone: v1.0 Speed, Alerts & New Data — SHIPPED 2026-08-23
 
 **Goal:** Make TrendCast faster and more useful as a daily decision aid — speed up correlation, add correlation alerts, surface market-driven news, expand data sources, and polish the dashboard.
 
-**Target features:**
-- Correlation speedup (inverted keyword→contract index) + storage caps + ML quantization/WebGPU
+**Shipped features:**
+- Correlation speedup (inverted keyword→contract index) + storage caps + ML quantization/WebGPU→WASM fallback
 - Correlation alerts via notifications (direction-aware, deduped, watchlist-scoped)
 - "Market-driven news" view with category taxonomy
 - New data sources (TikTok collector + more outlets/platforms)
@@ -33,17 +33,24 @@ Surface the strongest, most reliable signal of what prediction markets are movin
 - ✓ Cross-browser build (Chrome + Firefox) — existing
 - ✓ Storage-as-state architecture with `chrome.storage.local` — existing
 - ✓ Storage budget pruning + conditional fetch (ETag/304) — existing
-- ✓ UI responsiveness when rendering large datasets (virtualized HypeFeed + NewsFeed via @tanstack/react-virtual) — Phase 2
+- ✓ UI responsiveness when rendering large datasets (virtualized HypeFeed + NewsFeed via @tanstack/react-virtual) — v1.0 (PERF-01)
+- ✓ Correlation speedup via inverted keyword→contract index (O(n×m) → candidate filtering) — v1.0 (PERF-02)
+- ✓ Storage stays within budget via per-key caps + incremental byte estimation — v1.0 (PERF-03)
+- ✓ ML correlation with quantization (q8/q4) + WebGPU, falling back to WASM — v1.0 (PERF-04)
+- ✓ Correlation alerts via notifications + alarms, deduped + throttled, watchlist-scoped — v1.0 (ALERT-01)
+- ✓ Alerts with direction (bullish/bearish) + top correlated signal/news — v1.0 (ALERT-02)
+- ✓ "Market-driven news" view — important markets → news/direction they imply — v1.0 (MKT-01)
+- ✓ Consistent category taxonomy (reuse Reddit categories across markets + news) — v1.0 (MKT-02)
+- ✓ TikTok social sentiment (best-effort, graceful degradation) — v1.0 (SRC-01)
+- ✓ More data sources (news outlets / market platforms) — v1.0 (SRC-02)
+- ✓ Sort/filter watchlist + correlation status badge — v1.0 (DASH-01)
+- ✓ Export data covering new sources — v1.0 (DASH-02)
+- ✓ Seeking Alpha + Investing.com news in correlation tab (root cause diagnosed + fixed) — v1.0 (REL-01)
+- ✓ Per-source health/staleness indicators — v1.0 (REL-02)
 
 ### Active
 
-- [ ] Improve correlation speed (O(n×m) nested loops → inverted index / candidate filtering)
-- [ ] Improve collection speed and storage growth (per-key caps, incremental byte estimation)
-- [ ] Add correlation alerts/notifications when a strong correlation appears
-- [ ] Add "market-driven news" view — surface important prediction markets and the news/direction they imply across finance, politics, technology, and other categories
-- [ ] Add TikTok collector (known gap — no collector exists)
-- [ ] Add more data sources (news outlets and/or market platforms)
-- [ ] Add dashboard features (export, watchlist, history improvements)
+- (None — v1.0 shipped; next milestone to be scoped)
 
 ### Out of Scope
 
@@ -55,19 +62,20 @@ Surface the strongest, most reliable signal of what prediction markets are movin
 
 TrendCast is a mature, working extension. The codebase map (`.planning/codebase/`) documents a clean background-orchestrator + storage-as-state + React-UI architecture. The user is happy with the direction and wants to **harden features and make them faster**.
 
-**Known issue (immediate concern):** Seeking Alpha and Investing.com news do not appear in the correlation tab. Investigation shows the sources ARE fully wired end-to-end (config, background collector, manifest permissions, settings toggles, UI labels). Likely causes to verify:
-1. Google News RSS (`site:seekingalpha.com+when:1d`, `site:investing.com+when:1d`) returns few/no items — Seeking Alpha is paywalled and poorly indexed.
-2. Correlation threshold (`MIN_CONFIDENCE = 0.75`, or `0.35` with shared entity) filters out headlines that don't overlap market contract keywords.
-3. Display truncation — `CorrelationPanel.tsx` slices to top 15 (list) / top 30 (graph).
-4. Storage pruning evicts oldest news when over the 7 MB budget (news is uncapped in `mergeNews`).
+**v1.0 shipped (2026-08-23):** All 11 milestone requirements satisfied, 298/298 unit tests pass, typecheck clean. Cross-phase integration verified end-to-end (collector → storage → correlation → derived view → dashboard render). Milestone audit passed.
 
-**Performance concerns (from codebase map):**
-- O(n×m) correlation loops in `correlation.ts` and `ml/ner.ts` — no keyword→contract index.
-- Uncapped signal/news accumulation in `mergeSignals`/`mergeNews` (~460 news items/cycle).
-- Large ML model downloads (up to 1.5 GB) with slow WASM CPU inference.
-- `estimateBytes` re-serializes the entire dataset on every budget check.
+**Known issue (resolved in v1.0):** Seeking Alpha and Investing.com news did not appear in the correlation tab. Root cause diagnosed and fixed (REL-01) — sources are fully wired end-to-end; the fix addressed the correlation threshold / display path.
 
-**New capability direction:** The user wants to see prediction markets generating important news and direction — i.e., a view where notable market bets surface the news and directional implications across finance, politics, technology, and other categories.
+**Performance (resolved in v1.0):**
+- O(n×m) correlation loops → inverted keyword→contract index (PERF-02), with equivalence tests proving no result drift.
+- Uncapped signal/news accumulation → per-key caps (1000/1000/1000) + `getBytesInUse()`-authoritative budget (PERF-03).
+- Large ML model downloads → quantization (q8/q4) + WebGPU acceleration with WASM fallback (PERF-04).
+
+**Deferred / tech debt (non-blocking):**
+- Live-browser confirmations for sustained-collection storage budget, ML WASM fallback, and TikTok live fetch (unit-tested in isolation).
+- E2E suite hasn't caught up with the two new tabs (Alerts, Market News) — asserts 9 tabs but app has 11.
+- Export test lacks an explicit TikTok-in-export assertion.
+- `rebuildMarketNewsView` has no alarm fallback (self-heals via dashboard `corrInitRef` on load).
 
 ## Constraints
 
@@ -82,12 +90,18 @@ TrendCast is a mature, working extension. The codebase map (`.planning/codebase/
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Stay 100% client-side | User requirement; privacy + no infra | — Pending |
-| Support both Chrome + Firefox | User requirement; current build supports both | — Pending |
-| Diagnose & fix Seeking Alpha/Investing root cause (not just force-display) | User chose "diagnose & fix root cause" | — Pending |
-| Prioritize performance across correlation, collection, and UI | User chose "all of the above" | — Pending |
-| Add new capabilities (TikTok, more sources, alerts, dashboard, market-driven news view) | User chose "new capabilities" | — Pending |
-| Virtualize dashboard feeds by row with @tanstack/react-virtual | Shared VirtualizedGrid helper; bounded DOM preserves visuals and interaction | ✓ Phase 2 — PERF-01 shipped |
+| Stay 100% client-side | User requirement; privacy + no infra | ✓ Good |
+| Support both Chrome + Firefox | User requirement; current build supports both | ✓ Good |
+| Diagnose & fix Seeking Alpha/Investing root cause (not just force-display) | User chose "diagnose & fix root cause" | ✓ Good — REL-01 shipped |
+| Prioritize performance across correlation, collection, and UI | User chose "all of the above" | ✓ Good — PERF-01/02/03/04 shipped |
+| Add new capabilities (TikTok, more sources, alerts, dashboard, market-driven news view) | User chose "new capabilities" | ✓ Good — SRC-01/02, ALERT-01/02, DASH-01/02, MKT-01/02 shipped |
+| Virtualize dashboard feeds by row with @tanstack/react-virtual | Shared VirtualizedGrid helper; bounded DOM preserves visuals and interaction | ✓ Good — PERF-01 shipped |
+| Inverted keyword→contract index as the correlation enabler | Collapses O(n×m) loop; unblocks alerts + market-driven view | ✓ Good — PERF-02 shipped |
+| Per-key storage caps + `getBytesInUse()` authority | Stops unbounded growth; authoritative budget | ✓ Good — PERF-03 shipped |
+| ML quantization + WebGPU→WASM fallback | Faster inference; graceful degradation on Firefox | ✓ Good — PERF-04 shipped |
+| Alerts via `chrome.alarms` + persisted state (not timers) | Survive ephemeral MV3 service worker | ✓ Good — ALERT-01 shipped |
+| Category taxonomy reusing Reddit categories | Consistency across markets + news | ✓ Good — MKT-02 shipped |
+| TikTok as best-effort source with graceful degradation | Never breaks the collection pipeline | ✓ Good — SRC-01 shipped |
 
 ## Evolution
 
@@ -107,4 +121,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-08-22 after Milestone v1.0 start*
+*Last updated: 2026-08-23 after Milestone v1.0 shipped*
