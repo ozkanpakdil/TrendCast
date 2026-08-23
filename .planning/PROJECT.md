@@ -8,16 +8,15 @@ A 100% client-side Manifest V3 browser extension (Chrome + Firefox) that collect
 
 Surface the strongest, most reliable signal of what prediction markets are moving and why — by correlating social hype, news, and market odds — fast enough that the user trusts it as a daily decision aid.
 
-## Current Milestone: v1.0 Speed, Alerts & New Data — SHIPPED 2026-08-23
+## Current Milestone: v1.1 News Source Fix
 
-**Goal:** Make TrendCast faster and more useful as a daily decision aid — speed up correlation, add correlation alerts, surface market-driven news, expand data sources, and polish the dashboard.
+**Goal:** Fix the news tab so Seeking Alpha and Investing.com headlines actually appear for existing users.
 
-**Shipped features:**
-- Correlation speedup (inverted keyword→contract index) + storage caps + ML quantization/WebGPU→WASM fallback
-- Correlation alerts via notifications (direction-aware, deduped, watchlist-scoped)
-- "Market-driven news" view with category taxonomy
-- New data sources (TikTok collector + more outlets/platforms)
-- Dashboard enhancements (watchlist improvements, export coverage)
+**Target features:**
+- Deep-merge `enabledSources` so newer source flags default to `true` for existing users
+- Verify Seeking Alpha + Investing.com news appears in the news tab
+- Add a settings migration to backfill missing source flags
+- Regression coverage (unit tests for the merge fix)
 
 ## Requirements
 
@@ -50,7 +49,8 @@ Surface the strongest, most reliable signal of what prediction markets are movin
 
 ### Active
 
-- (None — v1.0 shipped; next milestone to be scoped)
+- ✓ Seeking Alpha + Investing.com news appears in the news tab for existing users (deep-merge `enabledSources` + migration) — v1.1 (NEWS-01)
+- ✓ Regression coverage for the settings deep-merge fix — v1.1 (NEWS-02)
 
 ### Out of Scope
 
@@ -121,4 +121,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-08-23 after Milestone v1.0 shipped*
+*Last updated: 2026-08-23 — Milestone v1.1 started (News Source Fix)*
