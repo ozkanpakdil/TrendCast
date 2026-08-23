@@ -278,7 +278,7 @@ const newsSet: NewsItem[] = [
   newsItem('cnn', 'Ethereum hits new all-time high'),
   newsItem('yahoo', 'Trump announces 2028 presidential run'),
   newsItem('investing', 'The weather forecast for tomorrow'),
-  newsItem('reuters', 'SpaceX launches a new satellite'),
+  newsItem('yahoo', 'SpaceX launches a new satellite'),
 ];
 
 // ── Equivalence: correlateSentiment ─────────────────────────────────

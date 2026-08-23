@@ -51,7 +51,7 @@ const MODEL: ZeroShotModel = 'Xenova/distilbert-base-uncased-mnli';
 
 vi.mock('@/services/engine/ml/transformers', () => ({
   getZeroShotPipeline: vi.fn(async () => {
-    return async (text: string, labels: string[]) => ({
+    return async (_text: string, labels: string[]) => ({
       labels,
       scores: labels.map((_, i) => (i === 0 ? 0.9 : 0.1)),
     });
@@ -271,7 +271,7 @@ const newsSet: NewsItem[] = [
   newsItem('cnn', 'Ethereum hits new all-time high'),
   newsItem('yahoo', 'Trump announces 2028 presidential run'),
   newsItem('investing', 'The weather forecast for tomorrow'),
-  newsItem('reuters', 'SpaceX launches a new satellite'),
+  newsItem('yahoo', 'SpaceX launches a new satellite'),
 ];
 
 // ── Equivalence: correlateZeroShot ──────────────────────────────────

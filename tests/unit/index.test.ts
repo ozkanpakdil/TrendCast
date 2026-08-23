@@ -24,11 +24,6 @@ import {
   hashtagOnlySignal,
 } from './fixtures';
 
-/** Convert a MarketContract into an Indexable (id + keywords + question). */
-function toIndexable(c: { id: string; keywords: string[]; question?: string }): Indexable {
-  return { id: c.id, keywords: c.keywords, question: c.question };
-}
-
 describe('InvertedIndex.build', () => {
   it('populates the map with keyword → contract indices', () => {
     const idx = InvertedIndex.build([mockContract]);
