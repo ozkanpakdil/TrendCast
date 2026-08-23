@@ -12,11 +12,22 @@ import { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { browser } from '@/messaging/browser';
 import { CONFIG } from '@/config';
 import { sendMessage } from '@/messaging';
-import type { MarketContract, WatchlistEntry } from '@/types';
+import { backfillWatchlist } from '@/utils/watchlist';
+import {
+  sortWatchlist,
+  filterWatchlist,
+  correlationStatusFor,
+  correlationDirectionFor,
+  type WatchlistSort,
+  type WatchlistPlatformFilter,
+} from '@/dashboard/utils/watchlistView';
+import type { CorrelationResult, MarketContract, WatchlistEntry } from '@/types';
 
 interface WatchlistProps {
   /** All collected markets (to match against watchlist entries). */
   markets: MarketContract[];
+  /** Correlation results (to derive per-market correlation status). */
+  correlations: CorrelationResult | null;
 }
 
 const platformBadges: Record<string, { icon: string; color: string }> = {
@@ -24,9 +35,22 @@ const platformBadges: Record<string, { icon: string; color: string }> = {
   kalshi: { icon: '🟢', color: 'bg-green-900/50 text-green-300' },
 };
 
-export function WatchlistImpl({ markets }: WatchlistProps) {
+/** Correlation-status badge styling (D-07), reusing the alert direction color contract. */
+const correlationBadges: Record<
+  'none' | 'bull' | 'bear' | 'neutral',
+  { label: string; arrow: string; cls: string }
+> = {
+  none: { label: 'No correlation', arrow: '○', cls: 'bg-slate-800 text-slate-500' },
+  bull: { label: 'Bullish', arrow: '▲', cls: 'bg-green-900/50 text-green-300' },
+  bear: { label: 'Bearish', arrow: '▼', cls: 'bg-red-900/50 text-red-300' },
+  neutral: { label: 'Neutral', arrow: '◆', cls: 'bg-slate-700 text-slate-300' },
+};
+
+export function WatchlistImpl({ markets, correlations }: WatchlistProps) {
   const [watchlist, setWatchlist] = useState<WatchlistEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [sort, setSort] = useState<WatchlistSort>('addedAt');
+  const [platformFilter, setPlatformFilter] = useState<WatchlistPlatformFilter>('all');
 
   const fetchWatchlist = useCallback(async () => {
     try {
@@ -44,7 +68,9 @@ export function WatchlistImpl({ markets }: WatchlistProps) {
       // Fallback: read directly from storage
       try {
         const storageResult = await browser.storage.local.get(CONFIG.storage.watchlist);
-        setWatchlist((storageResult[CONFIG.storage.watchlist] as WatchlistEntry[]) ?? []);
+        setWatchlist(
+          backfillWatchlist((storageResult[CONFIG.storage.watchlist] as WatchlistEntry[]) ?? []),
+        );
       } catch {
         // ignore
       }
@@ -75,10 +101,10 @@ export function WatchlistImpl({ markets }: WatchlistProps) {
     }
   }, []);
 
-  // Sort watchlist by addedAt (newest first) — memoized before conditional returns
-  const sorted = useMemo(
-    () => [...watchlist].sort((a, b) => b.addedAt - a.addedAt),
-    [watchlist],
+  // Apply platform filter then sort (D-04, D-05) — memoized before conditional returns.
+  const view = useMemo(
+    () => sortWatchlist(filterWatchlist(watchlist, platformFilter), sort, markets),
+    [watchlist, platformFilter, sort, markets],
   );
 
   if (loading) {
@@ -107,7 +133,31 @@ export function WatchlistImpl({ markets }: WatchlistProps) {
           ⭐ Watchlist ({watchlist.length})
         </h3>
       </div>
-      {sorted.map((entry) => {
+
+      {/* Sort + filter controls (D-04, D-05) */}
+      <div className="flex items-center gap-2 mb-2">
+        <select
+          value={sort}
+          onChange={(e) => setSort(e.target.value as WatchlistSort)}
+          className="text-xs bg-slate-800 border border-slate-700 rounded px-2 py-1 text-slate-300"
+          aria-label="Sort watchlist"
+        >
+          <option value="addedAt">Newest first</option>
+          <option value="volume24h">Volume</option>
+        </select>
+        <select
+          value={platformFilter}
+          onChange={(e) => setPlatformFilter(e.target.value as WatchlistPlatformFilter)}
+          className="text-xs bg-slate-800 border border-slate-700 rounded px-2 py-1 text-slate-300"
+          aria-label="Filter watchlist by platform"
+        >
+          <option value="all">All platforms</option>
+          <option value="polymarket">Polymarket</option>
+          <option value="kalshi">Kalshi</option>
+        </select>
+      </div>
+
+      {view.map((entry) => {
         // Find the live market data if available
         const liveMarket = markets.find(
           (m) => m.id === entry.contractId && m.platform === entry.platform,
@@ -116,6 +166,13 @@ export function WatchlistImpl({ markets }: WatchlistProps) {
           icon: '⚪',
           color: 'bg-slate-700 text-slate-300',
         };
+
+        // Correlation status + direction (D-07)
+        const corrStatus = correlationStatusFor(entry.contractId, entry.platform, correlations);
+        const corrDir = corrStatus === 'has-correlation'
+          ? correlationDirectionFor(entry.contractId, entry.platform, correlations)
+          : 'none';
+        const corrBadge = correlationBadges[corrDir];
 
         // Get current odds if we have live data
         const yesOutcome = liveMarket?.outcomes.find((o) => o.label.toLowerCase() === 'yes');
@@ -133,6 +190,9 @@ export function WatchlistImpl({ markets }: WatchlistProps) {
                 <div className="flex items-center gap-2 mb-1">
                   <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${badge.color}`}>
                     {badge.icon} {entry.platform}
+                  </span>
+                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${corrBadge.cls}`}>
+                    {corrBadge.arrow} {corrBadge.label}
                   </span>
                   {liveMarket?.volume24h != null && (
                     <span className="text-xs text-slate-500">

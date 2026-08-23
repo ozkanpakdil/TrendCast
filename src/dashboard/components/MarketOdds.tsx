@@ -14,6 +14,7 @@ import type { MarketContract, WatchlistEntry } from '@/types';
 import { sendMessage } from '@/messaging';
 import { browser } from '@/messaging/browser';
 import { CONFIG } from '@/config';
+import { WATCHLIST_VERSION } from '@/utils/watchlist';
 import { StarToggle } from './Watchlist';
 import { squarify, type TreemapRect } from '../utils/treemap';
 
@@ -154,6 +155,7 @@ export function MarketOddsImpl({ markets }: MarketOddsProps) {
           platform: market.platform,
           question: market.question,
           addedAt: Date.now(),
+          version: WATCHLIST_VERSION,
         },
       });
     }

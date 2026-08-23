@@ -48,6 +48,7 @@ import { collectPolymarketMarkets, collectKalshiMarkets, collectRedditSignals, c
 import { correlate, correlateNews, correlateNewsSocial } from '@/services/engine/correlation';
 import { exportToCsv, exportToJson } from '@/utils/export';
 import { pruneStorageIfNeeded, measureStorageUsage } from '@/utils/storage';
+import { backfillWatchlist } from '@/utils/watchlist';
 import { evaluateAlerts, dispatchAlerts, broadcastAlerts, clearAlerts, updateBadge, getAlertHistory } from '@/background/alerts';
 import { buildMarketDrivenNews } from '@/background/correlationNews';
 
@@ -981,5 +982,5 @@ async function getHistory(limit: number): Promise<HistoryEntry[]> {
 /** Get the user's watchlist. */
 async function getWatchlist(): Promise<WatchlistEntry[]> {
   const result = await browser.storage.local.get(CONFIG.storage.watchlist);
-  return (result[CONFIG.storage.watchlist] as WatchlistEntry[]) ?? [];
+  return backfillWatchlist((result[CONFIG.storage.watchlist] as WatchlistEntry[]) ?? []);
 }

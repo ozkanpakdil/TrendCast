@@ -14,13 +14,13 @@
 
 ### Alerts
 
-- [ ] **ALERT-01**: User receives correlation alerts via `chrome.notifications` + alarms, deduped + throttled, watchlist-scoped
-- [ ] **ALERT-02**: User sees alerts with direction (bullish/bearish) + top correlated signal/news
+- [x] **ALERT-01**: User receives correlation alerts via `chrome.notifications` + alarms, deduped + throttled, watchlist-scoped
+- [x] **ALERT-02**: User sees alerts with direction (bullish/bearish) + top correlated signal/news
 
 ### Market-Driven News
 
-- [ ] **MKT-01**: User can see a "market-driven news" view — important markets → news/direction they imply (finance + politics + tech)
-- [ ] **MKT-02**: User sees a consistent category taxonomy (reuse Reddit categories across markets + news)
+- [x] **MKT-01**: User can see a "market-driven news" view — important markets → news/direction they imply (finance + politics + tech)
+- [x] **MKT-02**: User sees a consistent category taxonomy (reuse Reddit categories across markets + news)
 
 ### Sources
 
@@ -29,8 +29,8 @@
 
 ### Dashboard
 
-- [ ] **DASH-01**: User can sort/filter watchlist and see correlation status
-- [ ] **DASH-02**: User can export data covering new sources
+- [x] **DASH-01**: User can sort/filter watchlist and see correlation status
+- [x] **DASH-02**: User can export data covering new sources
 
 ## Completed (Prior Milestone — Hardening v1)
 
@@ -56,11 +56,11 @@
 | PERF-02 | Phase 3 | Complete |
 | PERF-03 | Phase 8 | Pending |
 | PERF-04 | Phase 8 | Pending |
-| ALERT-01 | Phase 4 | Pending |
-| ALERT-02 | Phase 4 | Pending |
-| MKT-01 | Phase 5 | Pending |
-| MKT-02 | Phase 5 | Pending |
+| ALERT-01 | Phase 4 | Complete |
+| ALERT-02 | Phase 4 | Complete |
+| MKT-01 | Phase 5 | Complete |
+| MKT-02 | Phase 5 | Complete |
 | SRC-01 | Phase 7 | Pending |
 | SRC-02 | Phase 7 | Pending |
-| DASH-01 | Phase 6 | Pending |
-| DASH-02 | Phase 6 | Pending |
+| DASH-01 | Phase 6 | Complete |
+| DASH-02 | Phase 6 | Complete |

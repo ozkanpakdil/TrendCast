@@ -14,9 +14,9 @@ TrendCast is a mature, working 100% client-side MV3 browser extension that corre
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 3: Correlation Speedup** - Inverted keyword→contract index collapses O(n×m) to near-linear candidate filtering across heuristic + ML paths
-- [ ] **Phase 4: Correlation Alerts** - Deduped, throttled, watchlist-scoped, direction-aware `chrome.notifications` alerts
-- [ ] **Phase 5: Market-Driven News** - Read-only derived view: important markets → correlated news → directional implication (finance/politics/tech)
-- [ ] **Phase 6: Watchlist & Export** - Watchlist sort/filter/correlation-status badges + export coverage for new sources
+- [x] **Phase 4: Correlation Alerts** - Deduped, throttled, watchlist-scoped, direction-aware `chrome.notifications` alerts (completed 2026-08-23)
+- [x] **Phase 5: Market-Driven News** - Read-only derived view: important markets → correlated news → directional implication (finance/politics/tech) (completed 2026-08-23)
+- [x] **Phase 6: Watchlist & Export** - Watchlist sort/filter/correlation-status badges + export coverage for new sources (completed 2026-08-23)
 - [ ] **Phase 7: TikTok Collector** - Best-effort content-script-driven TikTok sentiment with hard timeout + graceful degradation
 - [ ] **Phase 8: Storage & ML Hardening** - Per-key storage caps + incremental byte estimation; ML quantization (q8/q4) + WebGPU with WASM fallback
 
@@ -77,9 +77,9 @@ Plans:
 
 Plans:
 
-- [ ] 05-01-PLAN.md — Category taxonomy + NewsItem category persistence
-- [ ] 05-02-PLAN.md — buildMarketDrivenNews aggregation module + background wiring
-- [ ] 05-03-PLAN.md — Market-driven news dashboard view
+- [x] 05-01-PLAN.md — Category taxonomy + NewsItem category persistence
+- [x] 05-02-PLAN.md — buildMarketDrivenNews aggregation module + background wiring
+- [x] 05-03-PLAN.md — Market-driven news dashboard view
 
 ### Phase 6: Watchlist & Export
 
@@ -93,6 +93,14 @@ Plans:
   3. Existing stored watchlist data loads correctly after the schema change (migration + backfill on read), and dashboard virtualization is preserved
 
 **UI**: yes
+
+**Plans**: 3/3 plans planned
+
+Plans:
+
+- [x] 06-01-PLAN.md — WatchlistEntry schema version + backfill on read (migration)
+- [x] 06-02-PLAN.md — Watchlist sort/filter controls + correlation-status badge
+- [x] 06-03-PLAN.md — Export coverage: category trailing column on News CSV + JSON
 
 ### Phase 7: TikTok Collector
 
@@ -129,8 +137,8 @@ Phases execute in numeric order: 3 → 4 → 5 → 6 → 7 → 8
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 3. Correlation Speedup | 4/4 | Complete | 2026-08-22 |
-| 4. Correlation Alerts | 3/3 | Planned | - |
-| 5. Market-Driven News | 3/3 | Planned | - |
-| 6. Watchlist & Export | 0/TBD | Not started | - |
+| 4. Correlation Alerts | 3/3 | Complete    | 2026-08-23 |
+| 5. Market-Driven News | 3/3 | Complete    | 2026-08-23 |
+| 6. Watchlist & Export | 3/3 | Complete    | 2026-08-23 |
 | 7. TikTok Collector | 0/TBD | Not started | - |
 | 8. Storage & ML Hardening | 0/TBD | Not started | - |

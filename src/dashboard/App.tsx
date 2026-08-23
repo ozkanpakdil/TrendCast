@@ -644,7 +644,7 @@ export function App() {
                 <h2 className={`text-sm font-bold uppercase tracking-wider mb-3 ${sectionTitle}`}>
                   ⭐ Your Watchlist
                 </h2>
-                <Watchlist markets={snapshot?.markets ?? []} />
+                <Watchlist markets={snapshot?.markets ?? []} correlations={correlations} />
               </section>
             )}
 

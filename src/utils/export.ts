@@ -104,8 +104,9 @@ export function exportToCsv(data: ExportData): string {
         url: n.url,
         publishedAt: n.publishedAt,
         keywords: n.keywords.join(' | '),
+        category: n.category ?? '',
       })),
-      ['id', 'source', 'headline', 'summary', 'url', 'publishedAt', 'keywords'],
+      ['id', 'source', 'headline', 'summary', 'url', 'publishedAt', 'keywords', 'category'],
     ),
   );
 

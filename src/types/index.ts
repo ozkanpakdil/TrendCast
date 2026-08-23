@@ -378,6 +378,11 @@ export interface WatchlistEntry {
   question: string;
   /** When the user added this to the watchlist (epoch ms). */
   addedAt: number;
+  /**
+   * Schema version for backfill-on-read. Old records without this field are
+   * backfilled to `WATCHLIST_VERSION` on read via `backfillWatchlist`.
+   */
+  version?: number;
 }
 
 // ── Alerts (Phase 4: correlation alerts) ─────────────────────────

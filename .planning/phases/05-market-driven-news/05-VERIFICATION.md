@@ -1,7 +1,7 @@
 ---
 phase: 05-market-driven-news
 verified: 2026-08-23T13:35:00Z
-status: human_needed
+status: passed
 score: 3/3 must-haves verified
 behavior_unverified: 0
 overrides_applied: 0
@@ -22,7 +22,7 @@ human_verification:
 
 **Phase Goal:** Users can see a "market-driven news" view — important prediction markets and the news/direction they imply, organized by a consistent category taxonomy
 **Verified:** 2026-08-23T13:35:00Z
-**Status:** human_needed
+**Status:** passed
 **Re-verification:** No — initial verification
 
 ## Goal Achievement
