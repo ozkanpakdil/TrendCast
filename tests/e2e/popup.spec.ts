@@ -212,7 +212,7 @@ test.describe('Popup — Settings Tab', () => {
     await openPopup(page);
     await page.locator('nav button', { hasText: 'Settings' }).click();
     await page.waitForTimeout(300);
-    const intervalInput = page.locator('main input[type="number"]');
+    const intervalInput = page.getByRole('spinbutton', { name: /Collection interval/i });
     await expect(intervalInput).toBeVisible();
     await expect(intervalInput).toHaveValue('60');
   });
@@ -276,7 +276,7 @@ test.describe('Popup — Settings Tab', () => {
     await openPopup(page);
     await page.locator('nav button', { hasText: 'Settings' }).click();
     await page.waitForTimeout(300);
-    const intervalInput = page.locator('main input[type="number"]');
+    const intervalInput = page.getByRole('spinbutton', { name: /Collection interval/i });
     await intervalInput.fill('30');
     await expect(intervalInput).toHaveValue('30');
   });

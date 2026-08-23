@@ -64,21 +64,19 @@ test.describe('Dashboard — Header', () => {
   test('renders all 9 tab buttons', async ({ page }) => {
     await openDashboard(page);
     const tabLabels = [
-      'Hype Feed',
-      'Markets',
-      'News',
-      'Correlations',
-      'Watchlist',
-      'History',
-      'Community',
-      'FAQ',
-      'Settings',
+      '🔥 Hype Feed',
+      '📈 Markets',
+      '📰 News',
+      '🔗 Correlations',
+      '⭐ Watchlist',
+      '📊 History',
+      '💬 Community',
+      '❓ FAQ',
+      '⚙️ Settings',
     ];
     for (const label of tabLabels) {
-      // 'News' is a substring of 'Market News' — use exact text matching to
-      // avoid a strict-mode violation.
       await expect(
-        page.locator('nav button', { hasText: new RegExp(`^${label}$`) }),
+        page.getByRole('button', { name: label, exact: true })
       ).toBeVisible();
     }
   });
@@ -874,7 +872,7 @@ test.describe('Dashboard — Settings Tab', () => {
     await openDashboard(page);
     await page.locator('nav button', { hasText: 'Settings' }).click();
     await page.waitForTimeout(300);
-    const intervalInput = page.locator('main input[type="number"]');
+    const intervalInput = page.getByRole('spinbutton', { name: /Collection interval/i });
     await expect(intervalInput).toBeVisible();
     await expect(intervalInput).toHaveValue('60');
   });
@@ -923,7 +921,7 @@ test.describe('Dashboard — Settings Tab', () => {
     await openDashboard(page);
     await page.locator('nav button', { hasText: 'Settings' }).click();
     await page.waitForTimeout(300);
-    const intervalInput = page.locator('main input[type="number"]');
+    const intervalInput = page.getByRole('spinbutton', { name: /Collection interval/i });
     await intervalInput.fill('30');
     await expect(intervalInput).toHaveValue('30');
   });
