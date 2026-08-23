@@ -17,7 +17,7 @@ import { browser } from '@/messaging/browser';
 import { CONFIG } from '@/config';
 
 /** TrendCast-owned storage keys to include in the budget calculation. */
-const BUDGET_KEYS = [
+export const BUDGET_KEYS = [
   CONFIG.storage.latestSnapshot,
   CONFIG.storage.collectedMarkets,
   CONFIG.storage.collectedSignals,
@@ -27,6 +27,8 @@ const BUDGET_KEYS = [
   CONFIG.storage.watchlist,
   CONFIG.storage.settings,
   CONFIG.storage.lastCollectionAt,
+  CONFIG.storage.alertState,
+  CONFIG.storage.alertHistory,
 ] as const;
 
 /**

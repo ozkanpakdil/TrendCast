@@ -325,6 +325,39 @@ export function Settings({ settings, onUpdate }: SettingsProps) {
           Disable to keep your browser&apos;s default new tab page.
         </p>
       </Section>
+
+      {/* Correlation alerts (Phase 4) */}
+      <Section title="Alerts">
+        <label className="flex items-center justify-between text-xs py-1 px-2 rounded bg-slate-800 cursor-pointer">
+          <span className="text-slate-300">🔔 Correlation alerts</span>
+          <input
+            type="checkbox"
+            checked={settings.alertsEnabled}
+            onChange={(e) => onUpdate({ alertsEnabled: e.target.checked })}
+            className="accent-brand-500"
+          />
+        </label>
+        <p className="text-[10px] text-slate-500 mt-1">
+          Notify me when a watchlisted market shows a new or changed correlation.
+        </p>
+
+        <label className="block mt-3">
+          <span className="text-xs text-slate-400">Alert cooldown (minutes)</span>
+          <input
+            type="number"
+            min={1}
+            max={1440}
+            value={settings.alertCooldownMinutes}
+            onChange={(e) =>
+              onUpdate({ alertCooldownMinutes: parseInt(e.target.value) || 60 })
+            }
+            className="w-full mt-1 px-2 py-1 text-xs bg-slate-800 border border-slate-700 rounded focus:outline-none focus:border-brand-400"
+          />
+          <span className="text-[10px] text-slate-500 mt-0.5 block">
+            Minimum time between alerts for the same market (default: 60).
+          </span>
+        </label>
+      </Section>
     </div>
   );
 }

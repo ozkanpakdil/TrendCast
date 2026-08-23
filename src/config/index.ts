@@ -163,6 +163,34 @@ export const CONFIG = {
     lastCollectionAt: 'trendcast:last-collection',
     history: 'trendcast:history',
     watchlist: 'trendcast:watchlist',
+    alertState: 'trendcast:alert-state',
+    alertHistory: 'trendcast:alert-history',
+  },
+
+  // ── Correlation alerts (Phase 4) ─────────────────────────────
+  // Alert engine tuning. Alerts are deduped, throttled, and scoped to
+  // the user's watchlist. Direction is derived from aggregate signal
+  // sentiment + Yes-price delta vs a prior snapshot.
+  alerts: {
+    // Alarm that re-checks the last stored correlation result so alerts
+    // still fire if the worker was killed mid-correlation.
+    alarmName: 'trendcast-alert-sweep',
+    // How often the alert sweep runs (minutes). Respects the MV3
+    // chrome.alarms 30-second floor.
+    sweepIntervalMinutes: 10,
+    // Max alert records retained (ring-buffer cap).
+    historyCap: 100,
+    // Global throttle: at most one alert per this many minutes.
+    globalCooldownMinutes: 5,
+    // Per-market cooldown: no repeat alert for the same market within
+    // this many minutes (defaults to the settings value).
+    perMarketCooldownMinutes: 60,
+    // Meaningful-band flip: a direction change only alerts when the
+    // sentiment delta crosses ±this, OR the Yes price moves > yesPriceBand.
+    sentimentBand: 0.2,
+    yesPriceBand: 0.02,
+    // Toolbar badge shows total alerts within this window (hours).
+    badgeWindowHours: 24,
   },
 
   // ── Overlay injection ─────────────────────────────────────────

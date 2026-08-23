@@ -33,10 +33,12 @@ import { SourceHealthIndicator } from './components/SourceHealthIndicator';
 import { CorrelationRunHistory } from './components/CorrelationRunHistory';
 import { HistoryChart } from './components/HistoryChart';
 import { Watchlist } from './components/Watchlist';
+import { AlertsTab } from './components/AlertsTab';
 import { FAQContent } from './components/FAQContent';
 import { Settings } from '../popup/components/Settings';
 import { useSnapshot } from './hooks/useSnapshot';
 import { useCorrelations } from './hooks/useCorrelations';
+import { useAlerts } from './hooks/useAlerts';
 import { DEFAULT_SETTINGS } from '@/types';
 import type { ExtensionSettings, ThemeMode, CorrelationEngine } from '@/types';
 import { CONFIG } from '@/config';
@@ -49,7 +51,7 @@ import { computeCorrelatedCounts } from '@/utils/source-health';
 // Format: "0.1.0+2026-08-14T13:21:00Z" — version + build timestamp.
 const BUILD_VERSION = import.meta.env.BUILD_VERSION ?? 'dev';
 
-type Tab = 'feed' | 'markets' | 'news' | 'correlations' | 'watchlist' | 'history' | 'community' | 'faq' | 'settings';
+type Tab = 'feed' | 'markets' | 'news' | 'correlations' | 'watchlist' | 'alerts' | 'history' | 'community' | 'faq' | 'settings';
 
 /** Human-readable label for ML correlation phases. */
 function phaseLabel(phase: string): string {
@@ -84,6 +86,7 @@ function phaseLabel(phase: string): string {
 export function App() {
   const { snapshot, loading, error: snapshotError, collecting, lastCollectionAt, triggerCollection } = useSnapshot();
   const { correlations, loading: corrLoading, error: corrError, progress: corrProgress, elapsedMs, runCorrelation, cancelCorrelation, runStats, runHistory } = useCorrelations();
+  const { alerts, loading: alertsLoading, error: alertsError, clearAlerts } = useAlerts();
   const [activeTab, setActiveTab] = useState<Tab>('feed');
   const [settings, setSettings] = useState<ExtensionSettings>(DEFAULT_SETTINGS);
   const [theme, setTheme] = useState<ThemeMode>('dark');
@@ -277,6 +280,7 @@ export function App() {
             ['news', '📰 News'],
             ['correlations', '🔗 Correlations'],
             ['watchlist', '⭐ Watchlist'],
+            ['alerts', '🔔 Alerts'],
             ['history', '📊 History'],
             ['community', '💬 Community'],
             ['faq', '❓ FAQ'],
@@ -637,6 +641,21 @@ export function App() {
                   ⭐ Your Watchlist
                 </h2>
                 <Watchlist markets={snapshot?.markets ?? []} />
+              </section>
+            )}
+
+            {activeTab === 'alerts' && (
+              <section>
+                <h2 className={`text-sm font-bold uppercase tracking-wider mb-3 ${sectionTitle}`}>
+                  🔔 Correlation Alerts
+                </h2>
+                <AlertsTab
+                  alerts={alerts}
+                  loading={alertsLoading}
+                  error={alertsError}
+                  onClear={clearAlerts}
+                  isDark={isDark}
+                />
               </section>
             )}
 

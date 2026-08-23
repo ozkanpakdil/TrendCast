@@ -151,6 +151,7 @@ export default defineManifest({
     'alarms', // scheduled hourly collection (replaces setInterval in MV3)
     'tabs', // open background tabs for collection, detect active tab URL
     'scripting', // programmatic content script injection for bg tab collection
+    'notifications', // correlation alerts (Phase 4)
   ],
 
   // Host permissions — declared separately per MV3 spec.

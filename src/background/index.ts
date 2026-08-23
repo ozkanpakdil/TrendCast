@@ -48,6 +48,7 @@ import { collectPolymarketMarkets, collectKalshiMarkets, collectRedditSignals, c
 import { correlate, correlateNews, correlateNewsSocial } from '@/services/engine/correlation';
 import { exportToCsv, exportToJson } from '@/utils/export';
 import { pruneStorageIfNeeded, measureStorageUsage } from '@/utils/storage';
+import { evaluateAlerts, dispatchAlerts, broadcastAlerts, clearAlerts, updateBadge, getAlertHistory } from '@/background/alerts';
 
 // Vite worker import — bundles ml-worker.ts as a separate chunk.
 // The `?worker` suffix tells Vite to compile this as a Web Worker.
@@ -238,11 +239,48 @@ function setupAlarms(): void {
     periodInMinutes: CONFIG.collection.defaultIntervalMinutes,
   });
 
-  browser.alarms.onAlarm.addListener(async (alarm) => {
-    if (alarm.name !== CONFIG.collection.alarmName) return;
-    console.log('[TrendCast] Alarm fired — starting hourly collection');
-    await runCollection();
+  // Phase 4: alert-sweep alarm — periodically re-evaluates the last stored
+  // correlation result against the watchlist so alerts fire even when no
+  // new collection/correlation has run (e.g. price drift on a watchlisted
+  // market). Runs on a shorter cadence than the collection alarm.
+  browser.alarms.create(CONFIG.alerts.alarmName, {
+    periodInMinutes: CONFIG.alerts.sweepIntervalMinutes,
   });
+
+  browser.alarms.onAlarm.addListener(async (alarm) => {
+    if (alarm.name === CONFIG.collection.alarmName) {
+      console.log('[TrendCast] Alarm fired — starting hourly collection');
+      await runCollection();
+      return;
+    }
+
+    if (alarm.name === CONFIG.alerts.alarmName) {
+      console.log('[TrendCast] Alert-sweep alarm fired');
+      await runAlertSweep();
+    }
+  });
+}
+
+/**
+ * Re-evaluate the last stored correlation result against the watchlist.
+ * Used by the alert-sweep alarm and after each correlation completes.
+ */
+async function runAlertSweep(): Promise<void> {
+  try {
+    const stored = await browser.storage.local.get(CONFIG.storage.correlations);
+    const result = stored[CONFIG.storage.correlations] as CorrelationResult | undefined;
+    if (!result) return;
+
+    const [watchlist, settings] = await Promise.all([getWatchlist(), getSettings()]);
+    const newAlerts = await evaluateAlerts(result, watchlist, settings);
+    if (newAlerts.length > 0) {
+      await dispatchAlerts(newAlerts);
+      await broadcastAlerts(await getAlertHistory());
+    }
+    await updateBadge();
+  } catch (err) {
+    console.error('[TrendCast] Alert sweep failed:', err);
+  }
 }
 
 // ── Message handlers ─────────────────────────────────────────────
@@ -384,6 +422,12 @@ function setupMessageHandlers(): void {
     const usage = await measureStorageUsage();
     return { usage };
   });
+
+  // Dashboard → Background: clear all alerts (Phase 4)
+  onMessage('CLEAR_ALERTS', async () => {
+    await clearAlerts();
+    return { cleared: true };
+  });
 }
 
 // ── Install / update handler ─────────────────────────────────────
@@ -400,6 +444,14 @@ function setupInstallHandler(): void {
     // Always re-register alarms on install/update.
     browser.alarms.create(CONFIG.collection.alarmName, {
       periodInMinutes: CONFIG.collection.defaultIntervalMinutes,
+    });
+  });
+
+  // Phase 4: clicking an alert notification opens the dashboard.
+  browser.notifications.onClicked.addListener((notificationId) => {
+    if (!notificationId.startsWith('trendcast-alert-')) return;
+    browser.tabs.create({ url: browser.runtime.getURL('dashboard/index.html') }).catch((err) => {
+      console.error('[TrendCast] Failed to open dashboard from notification:', err);
     });
   });
 }
@@ -572,6 +624,10 @@ async function runCorrelationAsync(
       console.error('[TrendCast] CORRELATION_RESULT sendMessage failed:', err);
     });
 
+    // Phase 4: evaluate the fresh result against the watchlist and dispatch
+    // any new alerts (badge fallback if notifications are denied).
+    await runAlertSweep();
+
     if (result.error) {
       console.error(
         `[TrendCast] CORRELATE_ALL FAILED — engine="${engine}", model="${model}":`,
@@ -706,6 +762,11 @@ async function runCorrelationPrecompute(
   const result = await runCorrelationWithEngine(markets, signals, news, engine, model, `precompute-${Date.now()}`);
 
   await browser.storage.local.set({ [CONFIG.storage.correlations]: result });
+
+  // Phase 4: evaluate the fresh result against the watchlist and dispatch
+  // any new alerts (badge fallback if notifications are denied).
+  await runAlertSweep();
+
   if (result.error) {
     console.warn(
       `[TrendCast] Pre-compute (${engine}) failed: ${result.error} — ${result.matches.length} results`,

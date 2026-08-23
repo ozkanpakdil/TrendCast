@@ -372,6 +372,53 @@ export interface WatchlistEntry {
   addedAt: number;
 }
 
+// ── Alerts (Phase 4: correlation alerts) ─────────────────────────
+
+/** Direction of a market-level correlation alert. */
+export type AlertDirection = 'bullish' | 'bearish' | 'mixed';
+
+/**
+ * A single correlation alert record.
+ * Persisted to `alertHistory` (capped at ~100) and shown in the
+ * dashboard Alerts tab / notification body.
+ */
+export interface AlertRecord {
+  /** Stable unique id (e.g. `${contractId}:${alertedAt}`). */
+  id: string;
+  /** The watchlisted market contract ID. */
+  contractId: string;
+  platform: MarketPlatform;
+  /** The market question text (cached for display). */
+  question: string;
+  /** Market-level direction derived from sentiment + Yes-price delta. */
+  direction: AlertDirection;
+  /** Aggregate signal sentiment (-1..+1) at alert time. */
+  sentiment: number;
+  /** Best Yes price (0–1) at alert time. */
+  yesPrice: number;
+  /** Text of the top correlated signal (if any). */
+  topSignalText?: string;
+  /** Headline of the top correlated news item (if any). */
+  topNewsHeadline?: string;
+  /** Confidence of the top correlated match (0–1). */
+  confidence: number;
+  /** Epoch ms when the alert fired. */
+  alertedAt: number;
+}
+
+/**
+ * Persisted alert engine state.
+ * Survives the ephemeral MV3 service worker via chrome.storage.local.
+ */
+export interface AlertState {
+  /** contractId → epoch ms of the last alert for that market. */
+  lastNotified: Record<string, number>;
+  /** contractId → last-seen Yes price (0–1) for direction delta. */
+  priorYesPrice: Record<string, number>;
+  /** Epoch ms of the last global alert (global throttle). */
+  lastGlobalAlertAt: number;
+}
+
 // ── Theme ─────────────────────────────────────────────────────────
 
 export type ThemeMode = 'dark' | 'light';
@@ -426,6 +473,10 @@ export type Message =
   // Dashboard → Background: export collected data
   | { type: 'EXPORT_DATA'; payload: { format: 'csv' | 'json' } }
   | { type: 'EXPORT_RESULT'; payload: { data: string; filename: string } }
+  // Background → Dashboard: alert records updated (Phase 4)
+  | { type: 'ALERTS_UPDATED'; payload: { alerts: AlertRecord[] } }
+  // Dashboard → Background: clear all alert records + reset badge
+  | { type: 'CLEAR_ALERTS'; payload: Record<string, never> }
   // Dashboard / Popup → Background: get storage usage stats (Phase 4)
   | { type: 'GET_STORAGE_USAGE'; payload: Record<string, never> }
   | { type: 'STORAGE_USAGE_RESULT'; payload: { usage: { totalBytes: number; perKey: Record<string, number> } } };
@@ -476,6 +527,10 @@ export interface ExtensionSettings {
    * Defaults to the finance preset. Users can customise from settings.
    */
   redditSubreddits: string[];
+  /** Whether correlation alerts are enabled (Phase 4). */
+  alertsEnabled: boolean;
+  /** Per-market cooldown between alerts, in minutes (Phase 4). */
+  alertCooldownMinutes: number;
 }
 
 export const DEFAULT_SETTINGS: ExtensionSettings = {
@@ -504,4 +559,6 @@ export const DEFAULT_SETTINGS: ExtensionSettings = {
   nerModel: 'Xenova/bert-base-NER-uncased',
   llmModel: 'HuggingFaceTB/SmolLM2-135M-Instruct',
   redditSubreddits: ['investing', 'stocks', 'wallstreetbets', 'UKInvesting'],
+  alertsEnabled: true,
+  alertCooldownMinutes: 60,
 };
