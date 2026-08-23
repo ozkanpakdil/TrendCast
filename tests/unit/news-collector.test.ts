@@ -108,4 +108,32 @@ describe('collectNews health map', () => {
     expect(health.investing?.lastFetchedAt).toBeGreaterThanOrEqual(before);
     expect(health.investing?.lastFetchedAt).toBeLessThanOrEqual(after);
   });
+
+  it('retries a rate-limited (429) fetch and recovers on the retry', async () => {
+    // First call throws a 429 rate-limit error; the retry succeeds.
+    mockedFetch
+      .mockRejectedValueOnce(new Error('Fetch error: 429 Too Many Requests for https://api.rss2json.com/...'))
+      .mockResolvedValueOnce({ status: 'ok', items: okItems('bbc', 2) });
+
+    const { news, health } = await collectNews(['bbc']);
+
+    expect(mockedFetch).toHaveBeenCalledTimes(2);
+    expect(news).toHaveLength(2);
+    // A recovered source must NOT be recorded as a failure.
+    expect(health.bbc?.consecutiveFailures).toBe(0);
+    expect(health.bbc?.itemCount).toBe(2);
+    expect(health.bbc?.lastError).toBeUndefined();
+  });
+
+  it('records a failure when a source stays rate-limited past the retry budget', async () => {
+    // Every attempt returns 429 — the source should end up degraded.
+    mockedFetch.mockRejectedValue(new Error('Fetch error: 429 Too Many Requests for https://api.rss2json.com/...'));
+
+    const { news, health } = await collectNews(['cnn']);
+
+    expect(news).toHaveLength(0);
+    expect(health.cnn?.itemCount).toBe(0);
+    expect(health.cnn?.consecutiveFailures).toBe(1);
+    expect(health.cnn?.lastError).toContain('429');
+  });
 });

@@ -45,9 +45,19 @@ export async function collectNews(
   sources: NewsSource[] = ['bbc', 'cnn'],
   previousHealth: SourceHealth = {},
 ): Promise<{ news: NewsItem[]; health: SourceHealth }> {
-  const results = await Promise.allSettled(
-    sources.map((source) => collectFromSource(source)),
-  );
+  // Fetch sources sequentially with a stagger delay instead of firing all in
+  // parallel. rss2json.com's free tier rate-limits to ~1 req/sec, so a
+  // parallel burst of 6 causes several to be rejected (429) and drift
+  // healthy-but-quiet sources to Degraded. Sequential + stagger keeps each
+  // request under the limit while still completing within the collection
+  // window (6 sources × ~400ms ≈ 2.4s).
+  const results: PromiseSettledResult<CollectResult>[] = [];
+  for (const source of sources) {
+    results.push(await settleCollect(source));
+    if (sources.length > 1) {
+      await delay(CONFIG.collection.newsStaggerMs);
+    }
+  }
 
   const items: NewsItem[] = [];
   const health: SourceHealth = {};
@@ -86,6 +96,20 @@ export async function collectNews(
   return { news: items, health };
 }
 
+/** Wrap a single-source collect in a settled promise (keeps the loop simple). */
+async function settleCollect(source: NewsSource): Promise<PromiseSettledResult<CollectResult>> {
+  try {
+    return { status: 'fulfilled', value: await collectFromSource(source) };
+  } catch (reason) {
+    return { status: 'rejected', reason };
+  }
+}
+
+/** Resolve after `ms` milliseconds. */
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /** Result of collecting from a single source. */
 interface CollectResult {
   items: NewsItem[];
@@ -105,57 +129,84 @@ async function collectFromSource(source: NewsSource): Promise<CollectResult> {
   };
   const apiUrl = configMap[source].rssUrl;
 
-  const data = await conditionalFetchJson<Rss2JsonResponse>(apiUrl);
-  if (data === null) {
-    // 304 Not Modified — no new headlines. Signal "unchanged" so the health
-    // map does NOT count this as a failure.
-    console.log(`[TrendCast] ${source.toUpperCase()}: unchanged (304), skipping`);
-    return { items: [], unchanged: true };
+  // Retry on rate-limit (429) responses. rss2json.com's free tier throttles
+  // to ~1 req/sec; a transient 429 should not permanently degrade a source.
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= CONFIG.collection.newsMaxRetries; attempt++) {
+    if (attempt > 0) {
+      await delay(CONFIG.collection.newsRetryDelayMs);
+    }
+    try {
+      const data = await conditionalFetchJson<Rss2JsonResponse>(apiUrl);
+      if (data === null) {
+        // 304 Not Modified — no new headlines. Signal "unchanged" so the health
+        // map does NOT count this as a failure.
+        console.log(`[TrendCast] ${source.toUpperCase()}: unchanged (304), skipping`);
+        return { items: [], unchanged: true };
+      }
+
+      if (data.status !== 'ok' || !data.items) {
+        throw new Error(`${source.toUpperCase()} RSS feed could not be parsed`);
+      }
+
+      return {
+        unchanged: false,
+        items: data.items
+          .map((item): NewsItem | null => {
+            const title = item.title?.trim() ?? '';
+            const link = item.link?.trim() ?? '';
+
+            if (!title || !link) return null;
+
+            // Clean description — Google News wraps it in anchor tags.
+            const description = item.description
+              ?.replace(/<[^>]*>/g, '')
+              .trim() || undefined;
+
+            // For Google News sources, the title often includes " - Source Name" suffix.
+            // Strip it for cleaner headlines (applies to CNN, googleFinance, and any
+            // Google News RSS result).
+            const isGoogleNewsSource = source === 'cnn' || source === 'googleFinance' || source === 'seekingalpha' || source === 'investing';
+            const headline = isGoogleNewsSource && title.includes(' - ')
+              ? title.replace(/\s+-\s+[^-]+$/, '').trim()
+              : title;
+
+            const fullText = description ? `${headline} ${description}` : headline;
+            const imageUrl = item.thumbnail ?? item.enclosure?.link ?? undefined;
+
+            return {
+              id: `${source}:${link}`,
+              source,
+              headline,
+              summary: description,
+              url: link,
+              publishedAt: item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString(),
+              keywords: extractKeywords(fullText),
+              imageUrl: imageUrl ?? undefined,
+              // Category assigned at collection time (Phase 5, D-02) so the
+              // market-driven news view and export read a consistent category.
+              category: classifyCategory(headline),
+            } satisfies NewsItem;
+          })
+          .filter((item): item is NewsItem => item !== null),
+      };
+    } catch (err) {
+      // Only retry rate-limit (429) responses; other errors fail fast.
+      if (isRateLimitError(err)) {
+        lastError = err;
+        console.warn(
+          `[TrendCast] ${source.toUpperCase()}: rate-limited (attempt ${attempt + 1}/${CONFIG.collection.newsMaxRetries + 1}), retrying…`,
+        );
+        continue;
+      }
+      throw err;
+    }
   }
+  throw lastError;
+}
 
-  if (data.status !== 'ok' || !data.items) {
-    throw new Error(`${source.toUpperCase()} RSS feed could not be parsed`);
-  }
-
-  return {
-    unchanged: false,
-    items: data.items
-      .map((item): NewsItem | null => {
-        const title = item.title?.trim() ?? '';
-        const link = item.link?.trim() ?? '';
-
-        if (!title || !link) return null;
-
-        // Clean description — Google News wraps it in anchor tags.
-        const description = item.description
-          ?.replace(/<[^>]*>/g, '')
-          .trim() || undefined;
-
-        // For Google News sources, the title often includes " - Source Name" suffix.
-        // Strip it for cleaner headlines (applies to CNN, googleFinance, and any
-        // Google News RSS result).
-        const isGoogleNewsSource = source === 'cnn' || source === 'googleFinance' || source === 'seekingalpha' || source === 'investing';
-        const headline = isGoogleNewsSource && title.includes(' - ')
-          ? title.replace(/\s+-\s+[^-]+$/, '').trim()
-          : title;
-
-        const fullText = description ? `${headline} ${description}` : headline;
-        const imageUrl = item.thumbnail ?? item.enclosure?.link ?? undefined;
-
-        return {
-          id: `${source}:${link}`,
-          source,
-          headline,
-          summary: description,
-          url: link,
-          publishedAt: item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString(),
-          keywords: extractKeywords(fullText),
-          imageUrl: imageUrl ?? undefined,
-          // Category assigned at collection time (Phase 5, D-02) so the
-          // market-driven news view and export read a consistent category.
-          category: classifyCategory(headline),
-        } satisfies NewsItem;
-      })
-      .filter((item): item is NewsItem => item !== null),
-  };
+/** True when the error is a rate-limit (429) response. */
+function isRateLimitError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /429|rate.?limit|too many requests/i.test(msg);
 }

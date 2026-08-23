@@ -149,6 +149,14 @@ export const CONFIG = {
     // A source is considered "stale" if it hasn't been fetched within this
     // window (2 missed hourly cycles).
     stalenessThresholdMs: 2 * 60 * 60 * 1000,
+    // News source fetch tuning. rss2json.com's free tier rate-limits to
+    // ~1 request/sec, so firing all 6 sources in parallel causes several to
+    // be rejected (429) and drift healthy-but-quiet sources to Degraded.
+    // Sources are fetched sequentially with a stagger delay, and a
+    // rate-limited (429) fetch is retried after a short backoff.
+    newsStaggerMs: 400,
+    newsRetryDelayMs: 1_000,
+    newsMaxRetries: 2,
   },
 
   // ── Storage keys ──────────────────────────────────────────────
