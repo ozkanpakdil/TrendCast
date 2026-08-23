@@ -116,6 +116,14 @@ Plans:
 
 **UI**: yes
 
+**Plans**: 3 plans planned
+
+Plans:
+
+- [ ] 07-01-PLAN.md — TikTok content-script scraper + normalizer (socials/index.ts, debounce + hash dedup, Promise.race timeout)
+- [ ] 07-02-PLAN.md — SocialSourceHealth map + TikTok graceful-degradation badge
+- [ ] 07-03-PLAN.md — Manual URL-paste fallback (COLLECT_TIKTOK_URL + background tab) + SRC-02 end-to-end wiring
+
 ### Phase 8: Storage & ML Hardening
 
 **Goal**: Users' storage stays within budget via per-key caps + incremental byte estimation, and ML correlation runs with quantization/WebGPU falling back to WASM
@@ -140,5 +148,5 @@ Phases execute in numeric order: 3 → 4 → 5 → 6 → 7 → 8
 | 4. Correlation Alerts | 3/3 | Complete    | 2026-08-23 |
 | 5. Market-Driven News | 3/3 | Complete    | 2026-08-23 |
 | 6. Watchlist & Export | 3/3 | Complete    | 2026-08-23 |
-| 7. TikTok Collector | 0/TBD | Not started | - |
+| 7. TikTok Collector | 0/3 | Planned | - |
 | 8. Storage & ML Hardening | 0/TBD | Not started | - |

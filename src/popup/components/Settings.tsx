@@ -189,8 +189,9 @@ export function Settings({ settings, onUpdate }: SettingsProps) {
       {/* Data sources */}
       <Section title="Data Sources">
         <p className="text-[10px] text-slate-500 mb-2">
-          Enable or disable data sources. Social platforms (X, TikTok) require
-          you to visit those sites for content scripts to scrape data.
+          Enable or disable data sources. TikTok is collected automatically via
+          a background tab; X requires you to visit the site for the content
+          script to scrape data.
         </p>
         <div className="space-y-1.5">
           {(

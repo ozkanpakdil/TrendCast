@@ -110,6 +110,13 @@ export interface SourceHealthEntry {
  */
 export type SourceHealth = Partial<Record<NewsSource, SourceHealthEntry>>;
 
+/**
+ * Health map keyed by `SocialPlatform`, stored alongside the news
+ * `SourceHealth`. Kept separate so the `NewsSource`-keyed union is
+ * untouched (Phase 7, D-02).
+ */
+export type SocialSourceHealth = Partial<Record<SocialPlatform, SourceHealthEntry>>;
+
 /** A normalised news headline. */
 export interface NewsItem {
   id: string;
@@ -453,6 +460,8 @@ export type Message =
   | { type: 'REPORT_MARKET_DATA'; payload: { markets: MarketContract[] } }
   | { type: 'REPORT_SOCIAL_DATA'; payload: { signals: SocialSignal[] } }
   | { type: 'REPORT_NEWS_DATA'; payload: { news: NewsItem[] } }
+  // Content script → Background: report social-source health (Phase 7, D-02)
+  | { type: 'REPORT_SOCIAL_HEALTH'; payload: { platform: SocialPlatform; entry: SourceHealthEntry } }
   // Content script (prediction markets) → Background: resolve contract from URL
   | { type: 'GET_CONTRACT_CONTEXT'; payload: { url: string } }
   | { type: 'CONTRACT_CONTEXT_RESULT'; payload: { contract: MarketContract | null } }
@@ -553,7 +562,7 @@ export const DEFAULT_SETTINGS: ExtensionSettings = {
     kalshi: true,
     x: true,
     reddit: true,
-    tiktok: false,
+    tiktok: true,
     bbc: true,
     cnn: true,
     yahoo: true,

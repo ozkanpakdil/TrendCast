@@ -9,4 +9,5 @@ export { collectPolymarketMarkets } from './polymarket';
 export { collectKalshiMarkets } from './kalshi';
 export { collectRedditSignals } from './reddit';
 export { collectXTrends } from './x-trends';
+export { collectTikTokTrends } from './tiktok';
 export { collectNews } from './news';

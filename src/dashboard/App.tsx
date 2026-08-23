@@ -30,6 +30,7 @@ import { MarketOdds } from './components/MarketOdds';
 import { CorrelationPanel } from './components/CorrelationPanel';
 import { CorrelationStatsBar } from './components/CorrelationStatsBar';
 import { SourceHealthIndicator } from './components/SourceHealthIndicator';
+import { SocialHealthBadge } from './components/SocialHealthBadge';
 import { CorrelationRunHistory } from './components/CorrelationRunHistory';
 import { HistoryChart } from './components/HistoryChart';
 import { Watchlist } from './components/Watchlist';
@@ -42,7 +43,7 @@ import { useCorrelations } from './hooks/useCorrelations';
 import { useAlerts } from './hooks/useAlerts';
 import { useMarketNews } from './hooks/useMarketNews';
 import { DEFAULT_SETTINGS } from '@/types';
-import type { ExtensionSettings, ThemeMode, CorrelationEngine } from '@/types';
+import type { ExtensionSettings, ThemeMode, CorrelationEngine, SocialSourceHealth } from '@/types';
 import { CONFIG } from '@/config';
 import { browser } from '@/messaging/browser';
 import { sendMessage } from '@/messaging';
@@ -94,6 +95,7 @@ export function App() {
   const [settings, setSettings] = useState<ExtensionSettings>(DEFAULT_SETTINGS);
   const [theme, setTheme] = useState<ThemeMode>('dark');
   const [exporting, setExporting] = useState(false);
+  const [socialHealth, setSocialHealth] = useState<SocialSourceHealth>({});
 
   // Load settings + theme
   useEffect(() => {
@@ -118,6 +120,21 @@ export function App() {
       root.classList.add('dark');
     }
   }, [theme]);
+
+  // Load social-source health (TikTok) + subscribe to changes (Phase 7, D-02).
+  useEffect(() => {
+    const key = CONFIG.storage.socialSourceHealth;
+    browser.storage.local.get(key).then((result) => {
+      setSocialHealth((result[key] as SocialSourceHealth) ?? {});
+    });
+    const listener = (changes: Record<string, { newValue?: unknown }>) => {
+      if (changes[key]?.newValue) {
+        setSocialHealth(changes[key].newValue as SocialSourceHealth);
+      }
+    };
+    browser.storage.onChanged.addListener(listener);
+    return () => browser.storage.onChanged.removeListener(listener);
+  }, []);
 
   // Pre-compute correlations when the dashboard first loads with data.
   // The background worker already pre-computes after collection, but this
@@ -313,6 +330,9 @@ export function App() {
           <>
             {activeTab === 'feed' && (
               <section>
+                <div className="mb-3">
+                  <SocialHealthBadge health={socialHealth} isDark={isDark} loading={loading} />
+                </div>
                 <HypeFeed
                   signals={snapshot?.signals ?? []}
                   highlightThreshold={settings.highlightThreshold}

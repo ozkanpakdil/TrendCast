@@ -40,11 +40,13 @@ import type {
   NewsCorrelationMatch,
   NewsItem,
   SocialSignal,
+  SocialSourceHealth,
   SourceHealth,
   WatchlistEntry,
 } from '@/types';
 import { DEFAULT_SETTINGS } from '@/types';
-import { collectPolymarketMarkets, collectKalshiMarkets, collectRedditSignals, collectXTrends, collectNews } from '@/services/collectors';
+import { mergeSocialHealth } from '@/utils/source-health';
+import { collectPolymarketMarkets, collectKalshiMarkets, collectRedditSignals, collectXTrends, collectTikTokTrends, collectNews } from '@/services/collectors';
 import { correlate, correlateNews, correlateNewsSocial } from '@/services/engine/correlation';
 import { exportToCsv, exportToJson } from '@/utils/export';
 import { pruneStorageIfNeeded, measureStorageUsage } from '@/utils/storage';
@@ -338,6 +340,20 @@ function setupMessageHandlers(): void {
     console.log(`[TrendCast] Stored ${payload.news.length} news items from content script`);
   });
 
+  // Content script → Background: report social-source health (Phase 7, D-02)
+  onMessage('REPORT_SOCIAL_HEALTH', async (payload) => {
+    try {
+      const key = CONFIG.storage.socialSourceHealth;
+      const stored = await browser.storage.local.get(key);
+      const existing = (stored[key] ?? {}) as SocialSourceHealth;
+      const merged = mergeSocialHealth(existing, payload.platform, payload.entry);
+      await browser.storage.local.set({ [key]: merged });
+    } catch (err) {
+      // Isolate failures so a health-write error never breaks the handler.
+      console.warn('[TrendCast] Failed to store social-source health:', err);
+    }
+  });
+
   // Popup / Dashboard → Background: trigger manual collection
   onMessage('TRIGGER_COLLECTION', async () => {
     console.log('[TrendCast] Manual collection triggered');
@@ -467,6 +483,11 @@ function setupInstallHandler(): void {
       await browser.storage.local.set({
         [CONFIG.storage.settings]: DEFAULT_SETTINGS,
       });
+    } else if (details.reason === 'update') {
+      // Migration: TikTok is now collected automatically (like Reddit/X) and
+      // should be on by default. Existing users who had it disabled (the old
+      // opt-in default) get it flipped to true so "Collect now" brings TikTok.
+      await migrateTikTokDefault();
     }
 
     // Always re-register alarms on install/update.
@@ -530,6 +551,17 @@ async function runCollection(): Promise<CollectionSnapshot> {
       collectXTrends()
         .then((signals) => storeSignals(signals))
         .catch((err) => console.error('[TrendCast] ❌ X/Trends failed:', err)),
+    );
+  }
+
+  // TikTok — background fetch of the discover page's embedded SSR data
+  // (host_permissions allow the worker to fetch TikTok directly, no tab).
+  // Isolated so a TikTok failure never degrades other sources.
+  if (enabled.tiktok) {
+    tasks.push(
+      collectTikTokTrends()
+        .then((signals) => storeSignals(signals))
+        .catch((err) => console.error('[TrendCast] ❌ TikTok failed:', err)),
     );
   }
 
@@ -859,6 +891,31 @@ async function getSettings(): Promise<ExtensionSettings> {
   // Merge with defaults so newly-added fields (e.g. redditSubreddits)
   // are always present even if the user has older saved settings.
   return { ...DEFAULT_SETTINGS, ...stored };
+}
+
+/**
+ * Migration: TikTok is now collected automatically (like Reddit/X) and should
+ * be on by default. Existing users who saved the old opt-in default
+ * (`tiktok: false`) get it flipped to `true`. Only touches the `tiktok` key —
+ * all other user settings are preserved.
+ */
+async function migrateTikTokDefault(): Promise<void> {
+  try {
+    const result = await browser.storage.local.get(CONFIG.storage.settings);
+    const stored = result[CONFIG.storage.settings] as Partial<ExtensionSettings> | undefined;
+    if (!stored) return; // no saved settings — fresh default already applies
+    const enabled = stored.enabledSources;
+    if (!enabled || enabled.tiktok === true) return; // already on or unset
+    await browser.storage.local.set({
+      [CONFIG.storage.settings]: {
+        ...stored,
+        enabledSources: { ...enabled, tiktok: true },
+      },
+    });
+    console.log('[TrendCast] Migration: enabled TikTok by default (automatic collection)');
+  } catch (err) {
+    console.warn('[TrendCast] TikTok default migration failed (non-fatal):', err);
+  }
 }
 
 // ── Merge helpers (deduplicate by ID, keep newest) ───────────────

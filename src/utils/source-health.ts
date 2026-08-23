@@ -4,7 +4,13 @@
  * be unit-tested in isolation (RESEARCH "Don't Hand-Roll").
  */
 
-import type { NewsCorrelationMatch, NewsSource, SourceHealthEntry } from '@/types';
+import type {
+  NewsCorrelationMatch,
+  NewsSource,
+  SocialPlatform,
+  SocialSourceHealth,
+  SourceHealthEntry,
+} from '@/types';
 
 /** Semantic health states for a single news source. */
 export type SourceHealthState = 'healthy' | 'stale' | 'degraded' | 'no-data';
@@ -44,4 +50,17 @@ export function computeCorrelatedCounts(
     counts[source] = (counts[source] ?? 0) + 1;
   }
   return counts;
+}
+
+/**
+ * Pure merge helper for the social-health map (Phase 7, D-02).
+ * Returns a new map with only the given platform's entry updated;
+ * all other platforms are preserved. No storage I/O — unit-testable.
+ */
+export function mergeSocialHealth(
+  existing: SocialSourceHealth,
+  platform: SocialPlatform,
+  entry: SourceHealthEntry,
+): SocialSourceHealth {
+  return { ...existing, [platform]: entry };
 }

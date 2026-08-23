@@ -166,6 +166,7 @@ export const CONFIG = {
     alertState: 'trendcast:alert-state',
     alertHistory: 'trendcast:alert-history',
     marketNewsView: 'trendcast:market-news-view',
+    socialSourceHealth: 'trendcast:social-source-health',
   },
 
   // ── Market-driven news (Phase 5) ─────────────────────────────
