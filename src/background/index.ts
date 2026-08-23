@@ -53,6 +53,7 @@ import { pruneStorageIfNeeded, measureStorageUsage } from '@/utils/storage';
 import { backfillWatchlist } from '@/utils/watchlist';
 import { evaluateAlerts, dispatchAlerts, broadcastAlerts, clearAlerts, updateBadge, getAlertHistory } from '@/background/alerts';
 import { buildMarketDrivenNews } from '@/background/correlationNews';
+import { mergeMarkets, mergeSignals, mergeNews } from '@/background/merge';
 
 // Vite worker import — bundles ml-worker.ts as a separate chunk.
 // The `?worker` suffix tells Vite to compile this as a Web Worker.
@@ -919,39 +920,9 @@ async function migrateTikTokDefault(): Promise<void> {
 }
 
 // ── Merge helpers (deduplicate by ID, keep newest) ───────────────
-
-function mergeMarkets(existing: MarketContract[], incoming: MarketContract[]): MarketContract[] {
-  const map = new Map(existing.map((m) => [m.id, m]));
-  for (const m of incoming) {
-    const prev = map.get(m.id);
-    if (!prev || m.lastUpdated > prev.lastUpdated) {
-      map.set(m.id, m);
-    }
-  }
-  return Array.from(map.values());
-}
-
-function mergeSignals(existing: SocialSignal[], incoming: SocialSignal[]): SocialSignal[] {
-  const map = new Map(existing.map((s) => [s.id, s]));
-  for (const s of incoming) {
-    map.set(s.id, s); // always overwrite signals (newer = more recent)
-  }
-  // Keep all signals — no cap.
-  return Array.from(map.values());
-}
-
-function mergeNews(existing: NewsItem[], incoming: NewsItem[]): NewsItem[] {
-  const map = new Map(existing.map((n) => [n.id, n]));
-  for (const n of incoming) {
-    map.set(n.id, n);
-  }
-  // Keep all news items — no cap. With 6 sources (BBC, CNN, Yahoo,
-  // Google Finance, Seeking Alpha, Investing.com) a full cycle can
-  // produce ~460 items; a hard cap would silently drop earlier sources.
-  // Storage budget pruning (pruneStorageIfNeeded) still protects the
-  // chrome.storage.local quota by evicting oldest items when over budget.
-  return Array.from(map.values());
-}
+// Implemented in `src/background/merge.ts` (Phase 8, PERF-03) so the per-key
+// cap logic is unit-testable. Imported above as `mergeMarkets`/`mergeSignals`/
+// `mergeNews`.
 
 // ── History helpers (Phase 3: historical charts) ─────────────────
 

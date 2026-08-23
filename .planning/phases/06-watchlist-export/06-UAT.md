@@ -1,7 +1,16 @@
-# Phase 6: Watchlist & Export — UAT
+---
+status: passed
+phase: 06-watchlist-export
+source: [06-VERIFICATION.md]
+started: 2026-08-23T14:00:00Z
+updated: 2026-08-23T14:05:00Z
+audit_acknowledged:
+  milestone: v1.0
+  at: 2026-08-23
+  gap_snapshot: "passed::scenarios=0"
+---
 
-**Status:** passed
-**Date:** 2026-08-23
+# Phase 6: Watchlist & Export — UAT
 
 ## UAT Results
 

@@ -154,6 +154,81 @@ export async function getTransformers(): Promise<TransformersLib> {
   return transformersPromise;
 }
 
+// ── Device / dtype resolution (Phase 8, PERF-04, D-04) ─────────────
+
+/**
+ * Preferred dtype fallback chain, smallest first. When WebGPU is available
+ * we pick the smallest dtype the model supports to minimise download size
+ * and inference cost; if a dtype is unsupported we fall back to the next.
+ */
+export const DTYPE_FALLBACK_CHAIN = ['q4', 'q8', 'fp16', 'fp32'] as const;
+
+export type ResolvedDevice = { device?: string; dtype?: string };
+
+/**
+ * Shared device + dtype resolution used by every `get*Pipeline()`.
+ *
+ * Detects `navigator.gpu`; if present, returns `device: 'webgpu'` with the
+ * smallest supported dtype from `DTYPE_FALLBACK_CHAIN`. If WebGPU is absent
+ * (or detection throws), returns an empty object so the caller uses the
+ * default WASM CPU path with no dtype override.
+ *
+ * @param supportedDtypes optional list of dtypes the model supports; when
+ *   omitted, the smallest dtype in the chain is always chosen.
+ */
+export function resolveDeviceAndDtype(supportedDtypes?: readonly string[]): ResolvedDevice {
+  try {
+    const gpu = (navigator as unknown as { gpu?: unknown }).gpu;
+    if (gpu) {
+      const dtype = DTYPE_FALLBACK_CHAIN.find(
+        (d) => !supportedDtypes || supportedDtypes.includes(d),
+      );
+      return { device: 'webgpu', dtype };
+    }
+  } catch {
+    // WebGPU detection failed — fall through to WASM CPU.
+  }
+  return {};
+}
+
+/**
+ * Create a pipeline with WebGPU→WASM catch-and-retry fallback (D-04).
+ *
+ * Resolves device/dtype via `resolveDeviceAndDtype()`, attempts the pipeline
+ * on WebGPU, and on failure retries once on WASM CPU. Used by all five
+ * `get*Pipeline()` functions so the fallback lives at a single choke point.
+ */
+async function createPipelineWithFallback(
+  lib: TransformersLib,
+  task: string,
+  model: string,
+  supportedDtypes?: readonly string[],
+): Promise<Pipeline> {
+  const resolved = resolveDeviceAndDtype(supportedDtypes);
+  const options: { quantized: boolean; device?: string; dtype?: string } = {
+    quantized: true, // q4 quantization for smaller download + faster inference
+  };
+  if (resolved.device) options.device = resolved.device;
+  if (resolved.dtype) options.dtype = resolved.dtype;
+
+  try {
+    const p = await lib.pipeline(task, model, options);
+    console.log(
+      `[TrendCast] ML: ${task} pipeline "${model}" ready on ${resolved.device ?? 'wasm-cpu'}` +
+        (resolved.dtype ? ` (dtype=${resolved.dtype})` : ''),
+    );
+    return p;
+  } catch (err) {
+    // If WebGPU failed, retry with WASM CPU.
+    if (resolved.device) {
+      console.warn(`[TrendCast] ML: ${task} WebGPU failed for "${model}":`, err);
+      console.log(`[TrendCast] ML: Retrying ${task} pipeline with WASM CPU…`);
+      return lib.pipeline(task, model, { quantized: true });
+    }
+    throw err;
+  }
+}
+
 // ── Model cache ──────────────────────────────────────────────────
 
 const pipelineCache = new Map<string, Promise<Pipeline>>();
@@ -163,10 +238,7 @@ export async function getEmbeddingPipeline(model: EmbeddingModel): Promise<Pipel
   if (!pipeline) {
     console.log(`[TrendCast] ML: creating embedding pipeline for "${model}"…`);
     const lib = await getTransformers();
-    pipeline = lib.pipeline('feature-extraction', model, { quantized: true }).then((p) => {
-      console.log(`[TrendCast] ML: embedding pipeline "${model}" ready`);
-      return p;
-    }).catch((err) => {
+    pipeline = createPipelineWithFallback(lib, 'feature-extraction', model).catch((err) => {
       console.error(`[TrendCast] ML: embedding pipeline "${model}" failed:`, err);
       pipelineCache.delete(model);
       throw err;
@@ -181,10 +253,7 @@ export async function getSentimentPipeline(model: SentimentModel): Promise<Pipel
   if (!pipeline) {
     console.log(`[TrendCast] ML: creating sentiment pipeline for "${model}"…`);
     const lib = await getTransformers();
-    pipeline = lib.pipeline('text-classification', model, { quantized: true }).then((p) => {
-      console.log(`[TrendCast] ML: sentiment pipeline "${model}" ready`);
-      return p;
-    }).catch((err) => {
+    pipeline = createPipelineWithFallback(lib, 'text-classification', model).catch((err) => {
       console.error(`[TrendCast] ML: sentiment pipeline "${model}" failed:`, err);
       pipelineCache.delete(model);
       throw err;
@@ -204,10 +273,7 @@ export async function getZeroShotPipeline(model: ZeroShotModel): Promise<Pipelin
   if (!pipeline) {
     console.log(`[TrendCast] ML: creating zero-shot pipeline for "${model}"…`);
     const lib = await getTransformers();
-    pipeline = lib.pipeline('zero-shot-classification', model, { quantized: true }).then((p) => {
-      console.log(`[TrendCast] ML: zero-shot pipeline "${model}" ready`);
-      return p;
-    }).catch((err) => {
+    pipeline = createPipelineWithFallback(lib, 'zero-shot-classification', model).catch((err) => {
       console.error(`[TrendCast] ML: zero-shot pipeline "${model}" failed:`, err);
       pipelineCache.delete(model);
       throw err;
@@ -226,10 +292,7 @@ export async function getNERPipeline(model: NERModel): Promise<Pipeline> {
   if (!pipeline) {
     console.log(`[TrendCast] ML: creating NER pipeline for "${model}"…`);
     const lib = await getTransformers();
-    pipeline = lib.pipeline('token-classification', model, { quantized: true }).then((p) => {
-      console.log(`[TrendCast] ML: NER pipeline "${model}" ready`);
-      return p;
-    }).catch((err) => {
+    pipeline = createPipelineWithFallback(lib, 'token-classification', model).catch((err) => {
       console.error(`[TrendCast] ML: NER pipeline "${model}" failed:`, err);
       pipelineCache.delete(model);
       throw err;
@@ -252,48 +315,8 @@ export async function getLLMPipeline(model: LLMModel): Promise<Pipeline> {
   if (!pipeline) {
     console.log(`[TrendCast] ML: creating LLM text-generation pipeline for "${model}"…`);
     const lib = await getTransformers();
-
-    // Detect WebGPU — if available, use GPU for 10-50× faster LLM inference.
-    // Falls back to WASM CPU if WebGPU is not available or fails.
-    let device: string | undefined;
-    let dtype: string | undefined;
-    try {
-      const gpu = (navigator as unknown as { gpu?: unknown }).gpu;
-      if (gpu) {
-        device = 'webgpu';
-        dtype = 'fp32'; // WebGPU works best with fp32 for small models
-        console.log(`[TrendCast] ML: 🚀 LLM pipeline will use WebGPU (device=webgpu, dtype=fp32)`);
-      } else {
-        console.log(`[TrendCast] ML: 🐢 LLM pipeline will use WASM CPU (no WebGPU)`);
-      }
-    } catch {
-      console.log(`[TrendCast] ML: 🐢 LLM pipeline will use WASM CPU (WebGPU check failed)`);
-    }
-
-    const pipelineOptions: { quantized: boolean; device?: string; dtype?: string } = {
-      quantized: true, // q4 quantization for smaller download + faster inference
-    };
-    if (device) pipelineOptions.device = device;
-    if (dtype) pipelineOptions.dtype = dtype;
-
-    pipeline = lib.pipeline('text-generation', model, pipelineOptions).then((p) => {
-      console.log(`[TrendCast] ML: LLM pipeline "${model}" ready on ${device ?? 'wasm-cpu'}`);
-      return p;
-    }).catch((err) => {
-      // If WebGPU failed, retry with WASM CPU
-      if (device) {
-        console.warn(`[TrendCast] ML: LLM WebGPU failed for "${model}":`, err);
-        console.log(`[TrendCast] ML: Retrying LLM pipeline with WASM CPU…`);
-        return lib.pipeline('text-generation', model, { quantized: true }).then((p) => {
-          console.log(`[TrendCast] ML: LLM pipeline "${model}" ready on wasm-cpu (fallback)`);
-          return p;
-        }).catch((err2) => {
-          console.error(`[TrendCast] ML: LLM pipeline "${model}" failed on all backends:`, err2);
-          pipelineCache.delete(model);
-          throw err2;
-        });
-      }
-      console.error(`[TrendCast] ML: LLM pipeline "${model}" failed:`, err);
+    pipeline = createPipelineWithFallback(lib, 'text-generation', model).catch((err) => {
+      console.error(`[TrendCast] ML: LLM pipeline "${model}" failed on all backends:`, err);
       pipelineCache.delete(model);
       throw err;
     });

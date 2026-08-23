@@ -9,8 +9,8 @@
 ### Performance
 
 - [x] **PERF-02**: User can see correlation results faster via an inverted keyword→contract index (O(n×m) → candidate filtering), with results equivalent to the current engine
-- [ ] **PERF-03**: User's storage stays within budget via per-key caps + incremental byte estimation (stop unbounded growth)
-- [ ] **PERF-04**: User can run ML correlation with quantization (q8/q4) and WebGPU acceleration, falling back to WASM without breaking the engine
+- [x] **PERF-03**: User's storage stays within budget via per-key caps + incremental byte estimation (stop unbounded growth)
+- [x] **PERF-04**: User can run ML correlation with quantization (q8/q4) and WebGPU acceleration, falling back to WASM without breaking the engine
 
 ### Alerts
 
@@ -24,8 +24,8 @@
 
 ### Sources
 
-- [ ] **SRC-01**: User can see TikTok social sentiment (best-effort, graceful degradation)
-- [ ] **SRC-02**: User can see more data sources (news outlets / market platforms)
+- [x] **SRC-01**: User can see TikTok social sentiment (best-effort, graceful degradation)
+- [x] **SRC-02**: User can see more data sources (news outlets / market platforms)
 
 ### Dashboard
 
@@ -54,13 +54,16 @@
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | PERF-02 | Phase 3 | Complete |
-| PERF-03 | Phase 8 | Pending |
-| PERF-04 | Phase 8 | Pending |
+| PERF-03 | Phase 8 | Complete |
+| PERF-04 | Phase 8 | Complete |
 | ALERT-01 | Phase 4 | Complete |
 | ALERT-02 | Phase 4 | Complete |
 | MKT-01 | Phase 5 | Complete |
 | MKT-02 | Phase 5 | Complete |
-| SRC-01 | Phase 7 | Pending |
-| SRC-02 | Phase 7 | Pending |
+| SRC-01 | Phase 7 | Complete |
+| SRC-02 | Phase 7 | Complete |
 | DASH-01 | Phase 6 | Complete |
 | DASH-02 | Phase 6 | Complete |
+| REL-01 | Prior Milestone | Complete |
+| REL-02 | Prior Milestone | Complete |
+| PERF-01 | Prior Milestone | Complete |

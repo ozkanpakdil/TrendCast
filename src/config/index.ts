@@ -223,9 +223,9 @@ export const CONFIG = {
     // Max items retained per collection type (defensive caps).
     // Note: news is intentionally uncapped in mergeNews() so all 6 sources
     // survive a full cycle; storage pruning below protects the quota.
-    maxMarkets: 500,
-    maxSignals: 500,
-    maxNews: 200,
+    maxMarkets: 1000,
+    maxSignals: 1000,
+    maxNews: 1000,
   },
 
   // ── Conditional fetch (Phase 4: collection efficiency) ───────
