@@ -356,6 +356,7 @@ export function App() {
                 <SourceHealthIndicator
                   health={snapshot?.sourceHealth ?? {}}
                   correlatedCounts={computeCorrelatedCounts(correlations?.newsMatches ?? [])}
+                  news={snapshot?.news ?? []}
                   isDark={isDark}
                   loading={loading}
                   error={snapshotError}
@@ -648,6 +649,7 @@ export function App() {
                 <SourceHealthIndicator
                   health={snapshot?.sourceHealth ?? {}}
                   correlatedCounts={computeCorrelatedCounts(correlations?.newsMatches ?? [])}
+                  news={snapshot?.news ?? []}
                   isDark={isDark}
                   loading={loading}
                   error={snapshotError}

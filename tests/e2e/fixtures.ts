@@ -147,6 +147,17 @@ export const MOCK_SNAPSHOT = {
       publishedAt: new Date(Date.now() - 3_600_000).toISOString(),
       keywords: ['fed', 'rate', 'cut', 'inflation'],
     },
+    // 10 seekingalpha items so the health badge shows "fetched 10" (matches
+    // MOCK_SNAPSHOT.sourceHealth.seekingalpha.itemCount = 10).
+    ...Array.from({ length: 10 }, (_, i) => ({
+      id: `news-sa-${i}`,
+      source: 'seekingalpha' as const,
+      headline: `Seeking Alpha market analysis ${i + 1}`,
+      summary: 'Analyst breakdown of the latest market moves.',
+      url: `https://seekingalpha.com/article/${i + 1}`,
+      publishedAt: new Date(Date.now() - (i + 1) * 60_000).toISOString(),
+      keywords: ['market', 'analysis'],
+    })),
   ],
 };
 

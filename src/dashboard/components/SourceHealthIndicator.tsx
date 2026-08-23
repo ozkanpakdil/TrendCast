@@ -10,13 +10,15 @@
  */
 
 import { memo } from 'react';
-import type { NewsSource, SourceHealth } from '@/types';
-import { computeHealth, type SourceHealthState } from '@/utils/source-health';
+import type { NewsItem, NewsSource, SourceHealth } from '@/types';
+import { computeFetchedCounts, computeHealth, type SourceHealthState } from '@/utils/source-health';
 import { CONFIG } from '@/config';
 
 interface SourceHealthIndicatorProps {
   health: SourceHealth;
   correlatedCounts: Partial<Record<NewsSource, number>>;
+  /** Accumulated news items — used to show the real per-source fetched count. */
+  news: NewsItem[];
   isDark: boolean;
   loading: boolean;
   error?: boolean;
@@ -53,12 +55,14 @@ const STATE_META: Record<SourceHealthState, { label: string; dot: string; badge:
 function SourceHealthIndicatorImpl({
   health,
   correlatedCounts,
+  news,
   isDark,
   loading,
   error,
 }: SourceHealthIndicatorProps) {
   const now = Date.now();
   const stalenessThresholdMs = CONFIG.collection.stalenessThresholdMs;
+  const fetchedCounts = computeFetchedCounts(news);
 
   // loading: render placeholder skeleton badges instead of empty copy.
   if (loading) {
@@ -116,7 +120,7 @@ function SourceHealthIndicatorImpl({
           const entry = health[source];
           const state = computeHealth(entry, stalenessThresholdMs, now);
           const meta = STATE_META[state];
-          const fetched = entry?.itemCount ?? 0;
+          const fetched = fetchedCounts[source] ?? 0;
           const correlated = correlatedCounts[source] ?? 0;
 
           return (

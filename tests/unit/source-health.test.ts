@@ -7,8 +7,12 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { computeHealth, computeCorrelatedCounts } from '@/utils/source-health';
-import type { NewsCorrelationMatch, NewsSource, SourceHealthEntry } from '@/types';
+import {
+  computeHealth,
+  computeCorrelatedCounts,
+  computeFetchedCounts,
+} from '@/utils/source-health';
+import type { NewsCorrelationMatch, NewsItem, NewsSource, SourceHealthEntry } from '@/types';
 
 const STALE_MS = 2 * 60 * 60 * 1000; // 2h
 const NOW = 1_000_000_000_000;
@@ -113,6 +117,34 @@ describe('computeCorrelatedCounts', () => {
       match('bbc'),
       match('bbc'),
       match('seekingalpha'),
+    ]);
+    expect(counts.bbc).toBe(2);
+    expect(counts.seekingalpha).toBe(1);
+    expect(counts.cnn).toBeUndefined();
+  });
+});
+
+describe('computeFetchedCounts', () => {
+  function item(source: NewsSource, id: string): NewsItem {
+    return {
+      id,
+      source,
+      headline: 'h',
+      url: `https://example.com/${source}/${id}`,
+      publishedAt: new Date(NOW).toISOString(),
+      keywords: [],
+    };
+  }
+
+  it('returns an empty map for no news', () => {
+    expect(computeFetchedCounts([])).toEqual({});
+  });
+
+  it('counts accumulated news per source', () => {
+    const counts = computeFetchedCounts([
+      item('bbc', '1'),
+      item('bbc', '2'),
+      item('seekingalpha', '3'),
     ]);
     expect(counts.bbc).toBe(2);
     expect(counts.seekingalpha).toBe(1);

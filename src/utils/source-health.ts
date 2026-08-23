@@ -6,6 +6,7 @@
 
 import type {
   NewsCorrelationMatch,
+  NewsItem,
   NewsSource,
   SocialPlatform,
   SocialSourceHealth,
@@ -48,6 +49,24 @@ export function computeCorrelatedCounts(
   for (const match of newsMatches) {
     const source = match.news.source;
     counts[source] = (counts[source] ?? 0) + 1;
+  }
+  return counts;
+}
+
+/**
+ * Count the accumulated news items currently stored per source.
+ *
+ * Unlike `SourceHealthEntry.itemCount` (which only reflects the LAST
+ * collection cycle and is 0 for sources that returned 304 "unchanged"),
+ * this counts the actual news present in the feed so the UI's "fetched N"
+ * matches what the user sees below. Returns a map of source → count.
+ */
+export function computeFetchedCounts(
+  news: NewsItem[],
+): Partial<Record<NewsSource, number>> {
+  const counts: Partial<Record<NewsSource, number>> = {};
+  for (const item of news) {
+    counts[item.source] = (counts[item.source] ?? 0) + 1;
   }
   return counts;
 }
