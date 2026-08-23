@@ -47,8 +47,23 @@ async function openPopup(page: Page, overrides: Record<string, unknown> = {}) {
 
 /** Click a dashboard tab by label and wait for it to become active. */
 async function gotoTab(page: Page, label: string) {
-  await page.locator('nav button', { hasText: label }).click();
-  await expect(page.locator('nav button', { hasText: label })).toHaveClass(/border-brand-400/);
+  const index = await page.locator('nav button').evaluateAll((buttons, needle) => {
+    const normalize = (value: string) =>
+      value
+        .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    const target = normalize(needle);
+    return buttons.findIndex((button) => normalize(button.textContent ?? '') === target);
+  }, label);
+
+  if (index === -1) {
+    throw new Error(`Nav tab not found: ${label}`);
+  }
+
+  const button = page.locator('nav button').nth(index);
+  await button.click();
+  await expect(button).toHaveClass(/border-brand-400/);
   await page.waitForTimeout(400);
 }
 
