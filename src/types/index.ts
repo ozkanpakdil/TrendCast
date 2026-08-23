@@ -102,6 +102,8 @@ export interface SourceHealthEntry {
   consecutiveFailures: number;
   /** Last error message, if the last fetch rejected. */
   lastError?: string;
+  /** True when the last fetch returned 304 Not Modified (no new content). */
+  lastUnchanged?: boolean;
 }
 
 /**

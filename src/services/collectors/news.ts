@@ -69,6 +69,7 @@ export async function collectNews(
         lastFetchedAt: Date.now(),
         itemCount: sourceItems.length,
         consecutiveFailures,
+        lastUnchanged: unchanged,
       };
     } else {
       // Record the failure into the health map instead of silently dropping it.

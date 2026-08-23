@@ -41,6 +41,32 @@ describe('computeHealth', () => {
     expect(computeHealth(entry({ itemCount: 0 }), STALE_MS, NOW)).toBe('degraded');
   });
 
+  it('returns healthy when itemCount is 0 but lastUnchanged is true', () => {
+    expect(
+      computeHealth(entry({ itemCount: 0, lastUnchanged: true }), STALE_MS, NOW),
+    ).toBe('healthy');
+  });
+
+  it('returns degraded when lastUnchanged is true but consecutiveFailures > 0', () => {
+    expect(
+      computeHealth(
+        entry({ itemCount: 0, lastUnchanged: true, consecutiveFailures: 1 }),
+        STALE_MS,
+        NOW,
+      ),
+    ).toBe('degraded');
+  });
+
+  it('returns stale when an unchanged source exceeds the threshold', () => {
+    expect(
+      computeHealth(
+        entry({ itemCount: 0, lastUnchanged: true, lastFetchedAt: NOW - STALE_MS - 1 }),
+        STALE_MS,
+        NOW,
+      ),
+    ).toBe('stale');
+  });
+
   it('returns stale when lastFetchedAt exceeds the threshold', () => {
     const staleEntry = entry({ lastFetchedAt: NOW - STALE_MS - 1 });
     expect(computeHealth(staleEntry, STALE_MS, NOW)).toBe('stale');

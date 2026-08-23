@@ -48,6 +48,7 @@ import { CONFIG } from '@/config';
 import { browser } from '@/messaging/browser';
 import { sendMessage } from '@/messaging';
 import { downloadExport } from '@/utils/export';
+import { deepMergeSettings } from '@/utils/settings';
 import { computeCorrelatedCounts } from '@/utils/source-health';
 
 // Build-time version stamp injected by Vite's define.
@@ -101,9 +102,10 @@ export function App() {
   useEffect(() => {
     browser.storage.local.get(CONFIG.storage.settings).then((result) => {
       const s = result[CONFIG.storage.settings] as Partial<ExtensionSettings> | undefined;
-      // Merge with defaults so newly-added fields (e.g. redditSubreddits)
-      // are always present even if the user has older saved settings.
-      const merged = { ...DEFAULT_SETTINGS, ...s };
+      // Deep-merge so newly-added fields (e.g. seekingalpha/investing source flags)
+      // are always present even if the user has older saved settings, while explicit
+      // user preferences are preserved.
+      const merged = deepMergeSettings(DEFAULT_SETTINGS, s);
       setSettings(merged);
       setTheme(merged.theme ?? 'dark');
     });

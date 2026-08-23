@@ -21,7 +21,7 @@ export type SourceHealthState = 'healthy' | 'stale' | 'degraded' | 'no-data';
  * Rules (grounded in UI-SPEC):
  * - `undefined` entry → `'no-data'`
  * - `consecutiveFailures > 0` → `'degraded'`
- * - `itemCount === 0` → `'degraded'`
+ * - `itemCount === 0` and not unchanged (304) → `'degraded'`
  * - `now - lastFetchedAt > stalenessThresholdMs` → `'stale'`
  * - otherwise → `'healthy'`
  */
@@ -32,7 +32,7 @@ export function computeHealth(
 ): SourceHealthState {
   if (!entry) return 'no-data';
   if (entry.consecutiveFailures > 0) return 'degraded';
-  if (entry.itemCount === 0) return 'degraded';
+  if (entry.itemCount === 0 && !entry.lastUnchanged) return 'degraded';
   if (now - entry.lastFetchedAt > stalenessThresholdMs) return 'stale';
   return 'healthy';
 }

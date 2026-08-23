@@ -51,6 +51,7 @@ import { correlate, correlateNews, correlateNewsSocial } from '@/services/engine
 import { exportToCsv, exportToJson } from '@/utils/export';
 import { pruneStorageIfNeeded, measureStorageUsage } from '@/utils/storage';
 import { backfillWatchlist } from '@/utils/watchlist';
+import { deepMergeSettings, migrateEnabledSources } from '@/utils/settings';
 import { evaluateAlerts, dispatchAlerts, broadcastAlerts, clearAlerts, updateBadge, getAlertHistory } from '@/background/alerts';
 import { buildMarketDrivenNews } from '@/background/correlationNews';
 import { mergeMarkets, mergeSignals, mergeNews } from '@/background/merge';
@@ -489,6 +490,10 @@ function setupInstallHandler(): void {
       // should be on by default. Existing users who had it disabled (the old
       // opt-in default) get it flipped to true so "Collect now" brings TikTok.
       await migrateTikTokDefault();
+      // Migration: backfill any missing news source flags (e.g. seekingalpha/
+      // investing/googleFinance) into persisted settings so the deep-merge fix
+      // survives restarts. Silent and idempotent — never overwrites a preference.
+      await migrateEnabledSourcesDefault();
     }
 
     // Always re-register alarms on install/update.
@@ -889,9 +894,10 @@ async function getLatestSnapshot(): Promise<CollectionSnapshot | null> {
 async function getSettings(): Promise<ExtensionSettings> {
   const result = await browser.storage.local.get(CONFIG.storage.settings);
   const stored = result[CONFIG.storage.settings] as Partial<ExtensionSettings> | undefined;
-  // Merge with defaults so newly-added fields (e.g. redditSubreddits)
-  // are always present even if the user has older saved settings.
-  return { ...DEFAULT_SETTINGS, ...stored };
+  // Deep-merge so newly-added fields (e.g. seekingalpha/investing source flags)
+  // are always present even if the user has older saved settings, while explicit
+  // user preferences are preserved.
+  return deepMergeSettings(DEFAULT_SETTINGS, stored);
 }
 
 /**
@@ -916,6 +922,25 @@ async function migrateTikTokDefault(): Promise<void> {
     console.log('[TrendCast] Migration: enabled TikTok by default (automatic collection)');
   } catch (err) {
     console.warn('[TrendCast] TikTok default migration failed (non-fatal):', err);
+  }
+}
+
+/**
+ * Migration: backfill any missing news source flags (e.g. `seekingalpha`,
+ * `investing`, `googleFinance`) into persisted settings so the deep-merge fix
+ * survives restarts. Silent and idempotent — present keys (explicit user
+ * preferences) are never overwritten. Mirrors `migrateTikTokDefault()`.
+ */
+async function migrateEnabledSourcesDefault(): Promise<void> {
+  try {
+    const result = await browser.storage.local.get(CONFIG.storage.settings);
+    const stored = result[CONFIG.storage.settings] as Partial<ExtensionSettings> | undefined;
+    const migrated = migrateEnabledSources(stored);
+    if (!migrated) return; // nothing to backfill — skip the write
+    await browser.storage.local.set({ [CONFIG.storage.settings]: migrated });
+    console.log('[TrendCast] Migration: backfilled missing news source flags');
+  } catch (err) {
+    console.warn('[TrendCast] News source flags migration failed (non-fatal):', err);
   }
 }
 

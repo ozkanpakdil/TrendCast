@@ -8,6 +8,7 @@ import { browser } from '@/messaging/browser';
 import { CONFIG } from '@/config';
 import type { ExtensionSettings } from '@/types';
 import { DEFAULT_SETTINGS } from '@/types';
+import { deepMergeSettings } from '@/utils/settings';
 
 export function useSettings() {
   const [settings, setSettings] = useState<ExtensionSettings>(DEFAULT_SETTINGS);
@@ -15,9 +16,10 @@ export function useSettings() {
   const load = useCallback(async () => {
     const result = await browser.storage.local.get(CONFIG.storage.settings);
     const stored = result[CONFIG.storage.settings] as Partial<ExtensionSettings> | undefined;
-    // Merge with defaults so newly-added fields (e.g. redditSubreddits)
-    // are always present even if the user has older saved settings.
-    setSettings({ ...DEFAULT_SETTINGS, ...stored });
+    // Deep-merge so newly-added fields (e.g. seekingalpha/investing source flags)
+    // are always present even if the user has older saved settings, while explicit
+    // user preferences are preserved.
+    setSettings(deepMergeSettings(DEFAULT_SETTINGS, stored));
   }, []);
 
   const updateSettings = useCallback(async (partial: Partial<ExtensionSettings>) => {
