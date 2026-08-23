@@ -75,7 +75,11 @@ test.describe('Dashboard — Header', () => {
       'Settings',
     ];
     for (const label of tabLabels) {
-      await expect(page.locator('nav button', { hasText: label })).toBeVisible();
+      // 'News' is a substring of 'Market News' — use exact text matching to
+      // avoid a strict-mode violation.
+      await expect(
+        page.locator('nav button', { hasText: new RegExp(`^${label}$`) }),
+      ).toBeVisible();
     }
   });
 
@@ -562,6 +566,106 @@ test.describe('Dashboard — Correlations Tab', () => {
     await expect(mainSection).not.toContainText(/BTC to the moon/);
     // The CNN news→market match should remain.
     await expect(mainSection).toContainText(/Federal Reserve hints/);
+  });
+
+  // ── Unified filter OR-logic edge cases (news→social matches) ──
+  // The mock has exactly 1 news→social match: bbc (news[0]) → x (signals[0]).
+  // filterNewsSocialMatches keeps a match when EITHER side is selected.
+
+  test('news→social match shows when only its news source is selected', async ({ page }) => {
+    await openDashboard(page);
+    await page.locator('nav button', { hasText: 'Correlations' }).click();
+    await page.waitForTimeout(500);
+    const mainSection = page.locator('main');
+    const listToggle = mainSection.locator('button', { hasText: /^List$/ });
+    if (await listToggle.isVisible()) {
+      await listToggle.click();
+      await page.waitForTimeout(300);
+    }
+    // Select only BBC (news side of the bbc→x match). The bridge match should show.
+    await mainSection.locator('button', { hasText: 'BBC' }).click();
+    await page.waitForTimeout(300);
+    await expect(mainSection).toContainText(/News → Social \(1\)/);
+  });
+
+  test('news→social match shows when only its social platform is selected', async ({ page }) => {
+    await openDashboard(page);
+    await page.locator('nav button', { hasText: 'Correlations' }).click();
+    await page.waitForTimeout(500);
+    const mainSection = page.locator('main');
+    const listToggle = mainSection.locator('button', { hasText: /^List$/ });
+    if (await listToggle.isVisible()) {
+      await listToggle.click();
+      await page.waitForTimeout(300);
+    }
+    // Select only X (social side of the bbc→x match). The bridge match should show.
+    await mainSection.locator('button', { hasText: 'X' }).click();
+    await page.waitForTimeout(300);
+    await expect(mainSection).toContainText(/News → Social \(1\)/);
+  });
+
+  test('news→social match hidden when neither side is selected', async ({ page }) => {
+    await openDashboard(page);
+    await page.locator('nav button', { hasText: 'Correlations' }).click();
+    await page.waitForTimeout(500);
+    const mainSection = page.locator('main');
+    const listToggle = mainSection.locator('button', { hasText: /^List$/ });
+    if (await listToggle.isVisible()) {
+      await listToggle.click();
+      await page.waitForTimeout(300);
+    }
+    // Select only CNN — neither bbc nor x is selected, so the bbc→x bridge match hides.
+    await mainSection.locator('button', { hasText: 'CNN' }).click();
+    await page.waitForTimeout(300);
+    await expect(mainSection).toContainText(/News → Social \(0\)/);
+  });
+
+  test('deselecting all badges restores every match type', async ({ page }) => {
+    await openDashboard(page);
+    await page.locator('nav button', { hasText: 'Correlations' }).click();
+    await page.waitForTimeout(500);
+    const mainSection = page.locator('main');
+    const listToggle = mainSection.locator('button', { hasText: /^List$/ });
+    if (await listToggle.isVisible()) {
+      await listToggle.click();
+      await page.waitForTimeout(300);
+    }
+    // Select then deselect CNN — everything returns to the unfiltered state.
+    const cnnBadge = mainSection.locator('button', { hasText: 'CNN' });
+    await cnnBadge.click();
+    await page.waitForTimeout(300);
+    await expect(mainSection).toContainText(/News → Social \(0\)/);
+    await cnnBadge.click();
+    await page.waitForTimeout(300);
+    // Back to unfiltered: all three sections show their full mock counts.
+    await expect(mainSection).toContainText(/Social → Market \(2\)/);
+    await expect(mainSection).toContainText(/News → Market \(2\)/);
+    await expect(mainSection).toContainText(/News → Social \(1\)/);
+  });
+
+  // ── SocialSourceFilter badge rendering ──
+  test('social platform badges show fetched counts and toggle aria-pressed', async ({ page }) => {
+    await openDashboard(page);
+    await page.locator('nav button', { hasText: 'Correlations' }).click();
+    await page.waitForTimeout(500);
+    const mainSection = page.locator('main');
+    // Mock signals: 1 x, 1 reddit, 1 tiktok → each badge shows a fetched count of 1.
+    const xBadge = mainSection.locator('button', { hasText: 'X' });
+    const redditBadge = mainSection.locator('button', { hasText: 'Reddit' });
+    const tiktokBadge = mainSection.locator('button', { hasText: 'TikTok' });
+    await expect(xBadge).toBeVisible();
+    await expect(redditBadge).toBeVisible();
+    await expect(tiktokBadge).toBeVisible();
+    // Each badge shows its accumulated signal count.
+    await expect(xBadge).toContainText('1');
+    await expect(redditBadge).toContainText('1');
+    await expect(tiktokBadge).toContainText('1');
+    // Clicking toggles aria-pressed on/off.
+    await expect(redditBadge).toHaveAttribute('aria-pressed', 'false');
+    await redditBadge.click();
+    await expect(redditBadge).toHaveAttribute('aria-pressed', 'true');
+    await redditBadge.click();
+    await expect(redditBadge).toHaveAttribute('aria-pressed', 'false');
   });
 
   test('switching to embedding engine shows model selector', async ({ page }) => {
