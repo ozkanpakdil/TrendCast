@@ -36,6 +36,7 @@ import {
   ZEROSHOT_MAX_LABELS,
 } from './types';
 import { getZeroShotPipeline } from './transformers';
+import { getIncrementalIndex } from '../index';
 
 /**
  * Zero-shot classification result from the pipeline.
@@ -83,34 +84,6 @@ class ZeroShotIndex {
     this.cache.set(key, result);
     return result;
   }
-}
-
-/**
- * Find candidate contracts for a signal based on keyword overlap.
- * This pre-filters before the expensive zero-shot classification,
- * reducing the number of NLI forward passes from O(signals × contracts)
- * to O(signals × min(matching_contracts, MAX_LABELS)).
- */
-function findCandidateContracts(
-  signalKeywords: string[],
-  contracts: MarketContract[],
-): MarketContract[] {
-  const candidates = contracts
-    .filter((c) => c.keywords.some((k) => signalKeywords.includes(k)))
-    .slice(0, ZEROSHOT_MAX_LABELS);
-  return candidates;
-}
-
-/**
- * Find candidate contracts for a news item based on keyword overlap.
- */
-function findCandidateContractsForNews(
-  newsKeywords: string[],
-  contracts: MarketContract[],
-): MarketContract[] {
-  return contracts
-    .filter((c) => c.keywords.some((k) => newsKeywords.includes(k)))
-    .slice(0, ZEROSHOT_MAX_LABELS);
 }
 
 /**
@@ -199,11 +172,16 @@ async function correlateSignalsToContracts(
   const matches: CorrelationMatch[] = [];
 
   onProgress?.({ phase: 'zero-shot-signals', current: 0, total: signals.length, engine: 'zeroshot', model });
+  // Pre-filter via the shared inverted index (single tokenization source).
+  const candidateIndex = getIncrementalIndex(contracts);
   for (let i = 0; i < signals.length; i++) {
     checkCancelled(cancelFlag);
 
     // Pre-filter: only classify against contracts that share keywords
-    const candidates = findCandidateContracts(signals[i].keywords, contracts);
+    const candidates = candidateIndex
+      .candidates(signals[i].keywords)
+      .slice(0, ZEROSHOT_MAX_LABELS)
+      .map((idx) => contracts[idx]);
     if (candidates.length === 0) {
       if (i % 10 === 0 || i === signals.length - 1) {
         onProgress?.({ phase: 'zero-shot-signals', current: i + 1, total: signals.length, engine: 'zeroshot', model });
@@ -251,11 +229,16 @@ async function correlateNewsToContracts(
   const matches: NewsCorrelationMatch[] = [];
 
   onProgress?.({ phase: 'zero-shot-news', current: 0, total: news.length, engine: 'zeroshot', model });
+  // Pre-filter via the shared inverted index (single tokenization source).
+  const candidateIndex = getIncrementalIndex(contracts);
   for (let i = 0; i < news.length; i++) {
     checkCancelled(cancelFlag);
 
     // Pre-filter: only classify against contracts that share keywords
-    const candidates = findCandidateContractsForNews(news[i].keywords, contracts);
+    const candidates = candidateIndex
+      .candidates(news[i].keywords)
+      .slice(0, ZEROSHOT_MAX_LABELS)
+      .map((idx) => contracts[idx]);
     if (candidates.length === 0) {
       if (i % 10 === 0 || i === news.length - 1) {
         onProgress?.({ phase: 'zero-shot-news', current: i + 1, total: news.length, engine: 'zeroshot', model });
@@ -299,13 +282,16 @@ async function correlateNewsToSignals(
   const matches: NewsSocialCorrelationMatch[] = [];
 
   onProgress?.({ phase: 'zero-shot-news-social', current: 0, total: signals.length, engine: 'zeroshot', model });
+  // Pre-filter via the shared inverted index over the news array (single tokenization source).
+  const candidateIndex = getIncrementalIndex(news);
   for (let i = 0; i < signals.length; i++) {
     checkCancelled(cancelFlag);
 
     // Pre-filter: only classify against news that shares keywords with this signal
-    const candidateNews = news
-      .filter((n) => n.keywords.some((k) => signals[i].keywords.includes(k)))
-      .slice(0, ZEROSHOT_MAX_LABELS);
+    const candidateNews = candidateIndex
+      .candidates(signals[i].keywords)
+      .slice(0, ZEROSHOT_MAX_LABELS)
+      .map((idx) => news[idx]);
 
     if (candidateNews.length === 0) {
       if (i % 10 === 0 || i === signals.length - 1) {
@@ -331,7 +317,7 @@ async function correlateNewsToSignals(
         news: candidateNews[j],
         signal: signals[i],
         confidence,
-        matchedKeywords: news[j].keywords.filter((k) =>
+        matchedKeywords: candidateNews[j].keywords.filter((k) =>
           signals[i].keywords.includes(k),
         ),
         correlatedAt: Date.now(),

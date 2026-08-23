@@ -8,7 +8,7 @@
 
 ### Performance
 
-- [ ] **PERF-02**: User can see correlation results faster via an inverted keyword→contract index (O(n×m) → candidate filtering), with results equivalent to the current engine
+- [x] **PERF-02**: User can see correlation results faster via an inverted keyword→contract index (O(n×m) → candidate filtering), with results equivalent to the current engine
 - [ ] **PERF-03**: User's storage stays within budget via per-key caps + incremental byte estimation (stop unbounded growth)
 - [ ] **PERF-04**: User can run ML correlation with quantization (q8/q4) and WebGPU acceleration, falling back to WASM without breaking the engine
 
@@ -53,7 +53,7 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PERF-02 | Phase 3 | Pending |
+| PERF-02 | Phase 3 | Complete |
 | PERF-03 | Phase 8 | Pending |
 | PERF-04 | Phase 8 | Pending |
 | ALERT-01 | Phase 4 | Pending |

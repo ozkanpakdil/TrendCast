@@ -3,10 +3,11 @@ phase: 3
 slug: correlation-speedup
 # status lifecycle: draft (seeded by plan-phase) → validated (set by validate-phase §6)
 # audit-milestone §5.5 distinguishes NOT-VALIDATED (draft) from PARTIAL (validated + nyquist_compliant: false) (#2117)
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: validated
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-08-22
+validated: 2026-08-22
 ---
 
 # Phase 3 — Validation Strategy
@@ -40,16 +41,16 @@ created: 2026-08-22
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 3-01-01 | 01 | 1 | PERF-02 | T-3-01 / — | Index built from normalized `extractKeywords`; keyword array length capped | unit | `bun run test -- tests/unit/index.test.ts` | ❌ W0 | ⬜ pending |
-| 3-01-02 | 01 | 1 | PERF-02 | T-3-01 / — | Candidate set is superset of naive matches | unit | `bun run test -- tests/unit/index.test.ts` | ❌ W0 | ⬜ pending |
-| 3-01-03 | 01 | 1 | PERF-02 | — | Tiny-input fallback to naive loop | unit | `bun run test -- tests/unit/index.test.ts` | ❌ W0 | ⬜ pending |
-| 3-02-01 | 02 | 1 | PERF-02 | — | Heuristic indexed path == naive loop (same matches, confidence, order) | unit (equivalence) | `bun run test -- tests/unit/correlation-equivalence.test.ts` | ❌ W0 | ⬜ pending |
-| 3-02-02 | 02 | 1 | PERF-02 | — | Edge cases (empty keywords, single contract/signal, dup keywords, cashtag/hashtag-only, tiny-input fallback) | unit | `bun run test -- tests/unit/correlation-equivalence.test.ts` | ❌ W0 | ⬜ pending |
-| 3-03-01 | 03 | 2 | PERF-02 | — | Zeroshot indexed path == naive loop | unit (equivalence) | `bun run test -- tests/unit/zeroshot-equivalence.test.ts` | ❌ W0 | ⬜ pending |
-| 3-03-02 | 03 | 2 | PERF-02 | — | Embedding indexed path == naive loop | unit (equivalence) | `bun run test -- tests/unit/embedding-equivalence.test.ts` | ❌ W0 | ⬜ pending |
-| 3-03-03 | 03 | 2 | PERF-02 | — | Sentiment indexed path == naive loop | unit (equivalence) | `bun run test -- tests/unit/sentiment-equivalence.test.ts` | ❌ W0 | ⬜ pending |
-| 3-03-04 | 03 | 2 | PERF-02 | — | NER indexed path == naive loop | unit (equivalence) | `bun run test -- tests/unit/ner-equivalence.test.ts` | ❌ W0 | ⬜ pending |
-| 3-03-05 | 03 | 2 | PERF-02 | — | LLM indexed path == naive loop | unit (equivalence) | `bun run test -- tests/unit/llm-equivalence.test.ts` | ❌ W0 | ⬜ pending |
+| 3-01-01 | 01 | 1 | PERF-02 | T-3-01 / — | Index built from normalized `extractKeywords`; keyword array length capped | unit | `bun run test -- tests/unit/index.test.ts` | ✅ | ✅ green |
+| 3-01-02 | 01 | 1 | PERF-02 | T-3-01 / — | Candidate set is superset of naive matches | unit | `bun run test -- tests/unit/index.test.ts` | ✅ | ✅ green |
+| 3-01-03 | 01 | 1 | PERF-02 | — | Tiny-input fallback to naive loop | unit | `bun run test -- tests/unit/index.test.ts` | ✅ | ✅ green |
+| 3-02-01 | 02 | 1 | PERF-02 | — | Heuristic indexed path == naive loop (same matches, confidence, order) | unit (equivalence) | `bun run test -- tests/unit/correlation-equivalence.test.ts` | ✅ | ✅ green |
+| 3-02-02 | 02 | 1 | PERF-02 | — | Edge cases (empty keywords, single contract/signal, dup keywords, cashtag/hashtag-only, tiny-input fallback) | unit | `bun run test -- tests/unit/correlation-equivalence.test.ts` | ✅ | ✅ green |
+| 3-03-01 | 03 | 2 | PERF-02 | — | Zeroshot indexed path == naive loop | unit (equivalence) | `bun run test -- tests/unit/zeroshot-equivalence.test.ts` | ✅ | ✅ green |
+| 3-03-02 | 03 | 2 | PERF-02 | — | Embedding indexed path == naive loop | unit (equivalence) | `bun run test -- tests/unit/embedding-equivalence.test.ts` | ✅ | ✅ green |
+| 3-03-03 | 03 | 2 | PERF-02 | — | Sentiment indexed path == naive loop | unit (equivalence) | `bun run test -- tests/unit/sentiment-equivalence.test.ts` | ✅ | ✅ green |
+| 3-03-04 | 03 | 2 | PERF-02 | — | NER indexed path == naive loop | unit (equivalence) | `bun run test -- tests/unit/ner-equivalence.test.ts` | ✅ | ✅ green |
+| 3-03-05 | 03 | 2 | PERF-02 | — | LLM indexed path == naive loop | unit (equivalence) | `bun run test -- tests/unit/llm-equivalence.test.ts` | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -57,14 +58,14 @@ created: 2026-08-22
 
 ## Wave 0 Requirements
 
-- [ ] `tests/unit/index.test.ts` — inverted index build/candidates/fallback unit tests
-- [ ] `tests/unit/correlation-equivalence.test.ts` — heuristic equivalence (reuse fixtures from `tests/unit/correlation.test.ts`)
-- [ ] `tests/unit/zeroshot-equivalence.test.ts` — zeroshot equivalence
-- [ ] `tests/unit/embedding-equivalence.test.ts` — embedding equivalence
-- [ ] `tests/unit/sentiment-equivalence.test.ts` — sentiment equivalence
-- [ ] `tests/unit/ner-equivalence.test.ts` — NER equivalence
-- [ ] `tests/unit/llm-equivalence.test.ts` — LLM equivalence
-- [ ] `tests/unit/fixtures.ts` — shared contracts/signals/news fixtures used by all equivalence tests
+- [x] `tests/unit/index.test.ts` — inverted index build/candidates/fallback unit tests
+- [x] `tests/unit/correlation-equivalence.test.ts` — heuristic equivalence (reuse fixtures from `tests/unit/correlation.test.ts`)
+- [x] `tests/unit/zeroshot-equivalence.test.ts` — zeroshot equivalence
+- [x] `tests/unit/embedding-equivalence.test.ts` — embedding equivalence
+- [x] `tests/unit/sentiment-equivalence.test.ts` — sentiment equivalence
+- [x] `tests/unit/ner-equivalence.test.ts` — NER equivalence
+- [x] `tests/unit/llm-equivalence.test.ts` — LLM equivalence
+- [x] `tests/unit/fixtures.ts` — shared contracts/signals/news fixtures used by all equivalence tests
 
 *Existing infrastructure (Vitest, `tests/unit/correlation.test.ts`, `tests/unit/correlation-threshold.test.ts`) covers the framework; only the new equivalence/index test files are Wave 0 gaps.*
 
@@ -82,11 +83,11 @@ created: 2026-08-22
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 5s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 5s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** validated (2026-08-22) — all 10 tasks green, full suite 157/157 pass

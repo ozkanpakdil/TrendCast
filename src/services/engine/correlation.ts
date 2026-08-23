@@ -27,6 +27,7 @@ import type {
 } from '@/types';
 import { keywordSimilarity } from '@/utils/keywords';
 import { extractEntityKeywords, extractEntities } from '@/utils/entities';
+import { InvertedIndex, getIncrementalIndex } from './index';
 
 /** Minimum confidence score to include a match (0–1). */
 const MIN_CONFIDENCE = 0.75;
@@ -106,6 +107,21 @@ const ENTITY_WEIGHT = 0.65;
 const KEYWORD_WEIGHT = 0.35;
 
 /**
+ * Candidate keywords for the inverted-index query.
+ *
+ * The index is built with `includeEntityKeywords: true`, so it carries both
+ * `item.keywords` and entity-derived postings. To preserve entity-only matches
+ * (a signal/news whose *entity* — e.g. a cashtag `$BTC` → entity `btc`, or a
+ * multi-word proper noun — is not present in its own `keywords` array), the
+ * query must also include the item's entity-derived keywords. Otherwise the
+ * indexed path would miss contracts the naive loop matches via
+ * `cachedEntitySimilarity` (superset invariant, must-have truth #4).
+ */
+function candidateKeywords(keywords: string[], text: string): string[] {
+  return [...new Set([...keywords, ...extractEntityKeywords(text)])];
+}
+
+/**
  * Correlate a batch of social signals against a batch of market contracts.
  * Returns all matches above the confidence threshold, sorted by confidence.
  */
@@ -120,10 +136,25 @@ export function correlate(
     `[TrendCast] Heuristic correlate: ${signals.length} signals × ${contracts.length} contracts`,
   );
 
-  for (const signal of signals) {
-    for (const contract of contracts) {
-      const result = correlatePair(signal, contract, cache);
-      if (result) matches.push(result);
+  // Tiny-input fallback (D-03): below the threshold, the index build overhead
+  // exceeds the loop cost, so keep the naive nested loop unchanged.
+  if (contracts.length < InvertedIndex.TINY_INPUT_THRESHOLD) {
+    for (const signal of signals) {
+      for (const contract of contracts) {
+        const result = correlatePair(signal, contract, cache);
+        if (result) matches.push(result);
+      }
+    }
+  } else {
+    // Candidate-filtered path: index contracts once, then resolve each signal's
+    // keyword set to a deduplicated, order-preserving superset of candidates.
+    const index = getIncrementalIndex(contracts, { includeEntityKeywords: true });
+    for (const signal of signals) {
+      for (const i of index.candidates(candidateKeywords(signal.keywords, signal.text))) {
+        const contract = contracts[i];
+        const result = correlatePair(signal, contract, cache);
+        if (result) matches.push(result);
+      }
     }
   }
 
@@ -206,10 +237,24 @@ export function correlateNews(
   const matches: NewsCorrelationMatch[] = [];
   const cache = new EntityCache();
 
-  for (const item of news) {
-    for (const contract of contracts) {
-      const result = correlateNewsPair(item, contract, cache);
-      if (result) matches.push(result);
+  // Tiny-input fallback (D-03): keep the naive loop below the threshold.
+  if (contracts.length < InvertedIndex.TINY_INPUT_THRESHOLD) {
+    for (const item of news) {
+      for (const contract of contracts) {
+        const result = correlateNewsPair(item, contract, cache);
+        if (result) matches.push(result);
+      }
+    }
+  } else {
+    // Candidate-filtered path: index contracts once, resolve each news item's
+    // keyword set to a deduplicated, order-preserving superset of candidates.
+    const index = getIncrementalIndex(contracts, { includeEntityKeywords: true });
+    for (const item of news) {
+      for (const i of index.candidates(candidateKeywords(item.keywords, item.headline))) {
+        const contract = contracts[i];
+        const result = correlateNewsPair(item, contract, cache);
+        if (result) matches.push(result);
+      }
     }
   }
 
@@ -267,10 +312,24 @@ export function correlateNewsSocial(
   const matches: NewsSocialCorrelationMatch[] = [];
   const cache = new EntityCache();
 
-  for (const item of news) {
-    for (const signal of signals) {
-      const result = correlateNewsSocialPair(item, signal, cache);
-      if (result) matches.push(result);
+  // Tiny-input fallback (D-03): keep the naive loop below the threshold.
+  if (signals.length < InvertedIndex.TINY_INPUT_THRESHOLD) {
+    for (const item of news) {
+      for (const signal of signals) {
+        const result = correlateNewsSocialPair(item, signal, cache);
+        if (result) matches.push(result);
+      }
+    }
+  } else {
+    // Candidate-filtered path: index the signals array once, resolve each news
+    // item's keyword set to a deduplicated, order-preserving superset of candidates.
+    const index = getIncrementalIndex(signals, { includeEntityKeywords: true });
+    for (const item of news) {
+      for (const i of index.candidates(candidateKeywords(item.keywords, item.headline))) {
+        const signal = signals[i];
+        const result = correlateNewsSocialPair(item, signal, cache);
+        if (result) matches.push(result);
+      }
     }
   }
 

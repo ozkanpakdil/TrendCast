@@ -1,19 +1,19 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.0
-current_phase: 3
+current_phase: 03
 current_phase_name: Correlation Speedup
-status: planned
-stopped_at: Phase 3 planned (4 plans)
-last_updated: "2026-08-22T22:58:00.000Z"
+status: complete
+stopped_at: Phase 03 complete — all 4 plans executed and verified
+last_updated: "2026-08-22T23:35:00.000Z"
 last_activity: 2026-08-22
-last_activity_desc: Phase 3 Correlation Speedup planned (4 plans, PERF-02)
-state_head: d2f9f1a784888e99ee814588d2314f30bdcdccc8
+last_activity_desc: Phase 03 execution complete (4/4 plans, verified)
+state_head: 68a37aeaa49e41c12d6f189b0b7698463655ce20
 progress:
   total_phases: 6
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 4
-  completed_plans: 0
+  completed_plans: 4
 milestone_name: Speed, Alerts & New Data
 ---
 
@@ -24,16 +24,16 @@ milestone_name: Speed, Alerts & New Data
 See: .planning/PROJECT.md (updated 2026-08-22)
 
 **Core value:** Surface the strongest, most reliable signal of what prediction markets are moving and why — by correlating social hype, news, and market odds — fast enough that the user trusts it as a daily decision aid.
-**Current focus:** Phase 3 — Correlation Speedup
+**Current focus:** Phase 03 — Correlation Speedup (COMPLETE)
 
 ## Current Position
 
-Phase: 3 of 8 (Correlation Speedup)
-Plan: 4 plans (03-01 … 03-04)
-Status: Ready to execute
-Last activity: 2026-08-22 — Phase 3 Correlation Speedup planned (4 plans, PERF-02)
+Phase: 03 (Correlation Speedup) — COMPLETE
+Plan: 4 of 4
+Status: Complete — verified (4/4 must-haves), code-reviewed, security-audited
+Last activity: 2026-08-22 — Phase 03 execution complete
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [██░░░░░░░░] 17%
 
 ## Performance Metrics
 
@@ -56,6 +56,11 @@ Progress: [░░░░░░░░░░] 0%
 - Trend: —
 
 *Updated after each plan completion*
+**Per-Plan Metrics:**
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| Phase 03 P03 | 25 | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -69,6 +74,8 @@ Recent decisions affecting current work:
 - [Phase 5]: Market-driven news reuses the existing `redditCategories` taxonomy with deterministic precedence (politics > finance > tech); read-only derived projection, no new collection.
 - [Phase 7]: TikTok is best-effort with hard timeout + isolation — never degrades other sources; needs phase-specific feasibility research (MEDIUM confidence).
 - [Phase 8]: `getBytesInUse()` is the authoritative budget; WebGPU→WASM fallback chain; stay on @huggingface/transformers 3.7.x (no v4 upgrade).
+- [Phase 03]: Each ML engine builds the shared InvertedIndex once per call and queries it with index.candidates(...), preserving the per-engine cap via .slice(0, cap) after candidates().
+- [Phase 03]: The index is built over the array the inner loop iterates: contracts for signal/news-to-contract passes, signals for news-to-signals passes, news for signal-to-news passes.
 
 ### Pending Todos
 
@@ -93,6 +100,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-08-22T21:25:08.991Z
-Stopped at: Phase 3 context gathered
-Resume file: .planning/phases/03-correlation-speedup/03-CONTEXT.md
+Last session: 2026-08-22T22:17:47.409Z
+Stopped at: Completed 03-03-PLAN.md
+Resume file: None

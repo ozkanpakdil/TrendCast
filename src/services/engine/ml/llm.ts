@@ -45,6 +45,7 @@ import {
   LLM_MAX_CANDIDATES,
 } from './types';
 import { getLLMPipeline } from './transformers';
+import { getIncrementalIndex } from '../index';
 
 /**
  * Estimated vocab size per supported model. The dominant memory cost of a
@@ -248,13 +249,15 @@ export async function correlateLLM(
 
   console.log(`[TrendCast] ML: LLM correlateLLM started — ${signals.length} signals, ${contracts.length} contracts, model="${model}"`);
 
-  // Pre-compute candidate contracts per signal (keyword pre-filter).
+  // Pre-compute candidate contracts per signal (keyword pre-filter via the shared index).
+  const index = getIncrementalIndex(contracts);
   const items: { signal: SocialSignal; candidates: MarketContract[] }[] = [];
   for (let i = 0; i < signals.length; i++) {
     checkCancelled(cancelFlag);
-    const candidates = contracts
-      .filter((c) => c.keywords.some((k) => signals[i].keywords.includes(k)))
-      .slice(0, LLM_MAX_CANDIDATES);
+    const candidates = index
+      .candidates(signals[i].keywords)
+      .slice(0, LLM_MAX_CANDIDATES)
+      .map((ci) => contracts[ci]);
     if (candidates.length === 0) continue;
     items.push({ signal: signals[i], candidates });
   }
@@ -327,11 +330,13 @@ export async function correlateNewsLLM(
   console.log(`[TrendCast] ML: LLM correlateNewsLLM started — ${news.length} news, ${contracts.length} contracts, model="${model}"`);
 
   const scored: { news: NewsItem; candidates: MarketContract[] }[] = [];
+  const index = getIncrementalIndex(contracts);
   for (let i = 0; i < news.length; i++) {
     checkCancelled(cancelFlag);
-    const candidates = contracts
-      .filter((c) => c.keywords.some((k) => news[i].keywords.includes(k)))
-      .slice(0, LLM_MAX_CANDIDATES);
+    const candidates = index
+      .candidates(news[i].keywords)
+      .slice(0, LLM_MAX_CANDIDATES)
+      .map((ci) => contracts[ci]);
     if (candidates.length === 0) continue;
     scored.push({ news: news[i], candidates });
   }
@@ -401,11 +406,14 @@ export async function correlateNewsSocialLLM(
   console.log(`[TrendCast] ML: LLM correlateNewsSocialLLM started — ${signals.length} signals, ${news.length} news, model="${model}"`);
 
   const scored: { signal: SocialSignal; candidates: NewsItem[] }[] = [];
+  // Pre-filter via the shared inverted index over the news array (single tokenization source).
+  const index = getIncrementalIndex(news);
   for (let i = 0; i < signals.length; i++) {
     checkCancelled(cancelFlag);
-    const candidateNews = news
-      .filter((n) => n.keywords.some((k) => signals[i].keywords.includes(k)))
-      .slice(0, LLM_MAX_CANDIDATES);
+    const candidateNews = index
+      .candidates(signals[i].keywords)
+      .slice(0, LLM_MAX_CANDIDATES)
+      .map((ni) => news[ni]);
     if (candidateNews.length === 0) continue;
     scored.push({ signal: signals[i], candidates: candidateNews });
   }

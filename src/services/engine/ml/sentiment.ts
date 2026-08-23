@@ -38,6 +38,7 @@ import {
   getSentimentPipeline,
 } from './transformers';
 import { computeBatchSize } from './math';
+import { getIncrementalIndex } from '../index';
 
 // ── Batched sentiment classifier ─────────────────────────────────
 // Runs the pipeline over chunks of texts in a single forward pass each.
@@ -264,12 +265,15 @@ async function correlateSignalsToContracts(
     model,
   );
 
+  // Pre-filter via the shared inverted index (single tokenization source).
+  const candidateIndex = getIncrementalIndex(contracts);
   for (let i = 0; i < signals.length; i++) {
     checkCancelled(cancelFlag);
     const mlSentiment = signalSentiments[i].score;
     const signal = signals[i];
 
-    for (const contract of contracts) {
+    for (const ci of candidateIndex.candidates(signal.keywords)) {
+      const contract = contracts[ci];
       // Use keyword overlap as candidate filter
       const matchedKeywords = signal.keywords.filter((k) =>
         contract.keywords.includes(k),
@@ -325,12 +329,15 @@ async function correlateNewsToContracts(
     model,
   );
 
+  // Pre-filter via the shared inverted index (single tokenization source).
+  const candidateIndex = getIncrementalIndex(contracts);
   for (let i = 0; i < news.length; i++) {
     checkCancelled(cancelFlag);
     const mlSentiment = newsSentiments[i].score;
     const item = news[i];
 
-    for (const contract of contracts) {
+    for (const ci of candidateIndex.candidates(item.keywords)) {
+      const contract = contracts[ci];
       const matchedKeywords = item.keywords.filter((k) =>
         contract.keywords.includes(k),
       );
@@ -386,12 +393,14 @@ async function correlateNewsToSignals(
     model,
   );
 
+  // Pre-filter via the shared inverted index over the signals array (single tokenization source).
+  const candidateIndex = getIncrementalIndex(signals);
   for (let i = 0; i < news.length; i++) {
     checkCancelled(cancelFlag);
     const newsSentiment = newsSentiments[i].score;
     const item = news[i];
 
-    for (let j = 0; j < signals.length; j++) {
+    for (const j of candidateIndex.candidates(item.keywords)) {
       const matchedKeywords = item.keywords.filter((k) =>
         signals[j].keywords.includes(k),
       );
