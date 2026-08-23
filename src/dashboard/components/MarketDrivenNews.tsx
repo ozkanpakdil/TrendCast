@@ -40,15 +40,15 @@ function MarketDrivenNewsImpl({ view, loading, isDark }: MarketDrivenNewsProps) 
   const muted = isDark ? 'text-slate-500' : 'text-light-muted';
   const card = isDark ? 'bg-slate-900 border-slate-800' : 'bg-light-surface border-light-border';
 
-  if (loading) {
-    return <p className="text-slate-500 text-sm text-center py-8">Loading market news…</p>;
-  }
-
   // Empty state: no snapshot yet, or every category is empty.
   const hasContent = useMemo(() => {
     if (!view) return false;
     return CATEGORY_ORDER.some((cat) => (view.categories[cat]?.length ?? 0) > 0);
   }, [view]);
+
+  if (loading) {
+    return <p className="text-slate-500 text-sm text-center py-8">Loading market news…</p>;
+  }
 
   if (!hasContent) {
     return (
