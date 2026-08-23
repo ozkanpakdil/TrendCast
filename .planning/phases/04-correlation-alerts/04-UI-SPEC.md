@@ -1,10 +1,11 @@
 ---
 phase: 4
 slug: correlation-alerts
-status: draft
+status: approved
 shadcn_initialized: false
 preset: none
 created: 2026-08-23
+reviewed_at: 2026-08-23
 ---
 
 # Phase 4 — UI Design Contract
@@ -76,6 +77,8 @@ Accent reserved for: **active tab indicator** (`text-brand-400 border-brand-400`
 
 **Theme-aware helpers:** Reuse the existing `isDark` pattern from `App.tsx` (`bgClass`, `headerBg`, `tabActive`, `tabInactive`, `sectionTitle`). All new Alerts-tab elements must render correctly in both `dark` and `light` classes.
 
+**Focal point (visual priority):** The **alert list rows** — specifically their **direction badges** (bull/bear/mixed) — are the primary visual anchor of the Alerts tab. The eye lands first on the direction badge + market name of each row. The **"Clear all"** action is secondary and visually de-emphasized: rendered as a muted/destructive text button in the tab header, never accent-colored, so it does not compete with the alert content.
+
 ---
 
 ## Copywriting Contract
@@ -128,11 +131,11 @@ Applicable state considerations resolved: 6 covered, 1 backstop, 0 unresolved
 
 ## Checker Sign-Off
 
-- [ ] Dimension 1 Copywriting: PASS
-- [ ] Dimension 2 Visuals: PASS
-- [ ] Dimension 3 Color: PASS
-- [ ] Dimension 4 Typography: PASS
-- [ ] Dimension 5 Spacing: PASS
-- [ ] Dimension 6 Registry Safety: PASS
+- [x] Dimension 1 Copywriting: PASS
+- [x] Dimension 2 Visuals: PASS (focal point declared — alert list rows + direction badges primary, "Clear all" de-emphasized)
+- [x] Dimension 3 Color: PASS
+- [x] Dimension 4 Typography: PASS
+- [x] Dimension 5 Spacing: PASS
+- [x] Dimension 6 Registry Safety: PASS
 
-**Approval:** pending
+**Approval:** approved (gsd-ui-checker, 2026-08-23)

@@ -121,7 +121,7 @@ Phases execute in numeric order: 3 → 4 → 5 → 6 → 7 → 8
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 3. Correlation Speedup | 4/4 | Complete | 2026-08-22 |
-| 4. Correlation Alerts | 0/TBD | Not started | - |
+| 4. Correlation Alerts | 3/3 | Planned | - |
 | 5. Market-Driven News | 0/TBD | Not started | - |
 | 6. Watchlist & Export | 0/TBD | Not started | - |
 | 7. TikTok Collector | 0/TBD | Not started | - |
