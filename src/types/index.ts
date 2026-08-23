@@ -16,6 +16,8 @@
 
 // ── Prediction Markets ────────────────────────────────────────────
 
+import type { NewsCategory } from '@/config/taxonomy';
+
 /** Supported prediction market platforms. */
 export type MarketPlatform = 'polymarket' | 'kalshi';
 
@@ -121,6 +123,12 @@ export interface NewsItem {
   keywords: string[];
   /** Image URL if available. */
   imageUrl?: string;
+  /**
+   * Category assigned at collection time (Phase 5). Optional so existing
+   * stored records without the field don't crash the typecheck or UI; old
+   * records are backfilled on read via `classifyCategory(headline)`.
+   */
+  category?: NewsCategory;
 }
 
 // ── Correlation ──────────────────────────────────────────────────

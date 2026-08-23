@@ -6,7 +6,7 @@
  */
 
 import { extractKeywords } from '@/utils/keywords';
-import type { MarketContract, NewsItem, SocialSignal } from '@/types';
+import type { MarketContract, NewsCorrelationMatch, NewsItem, SocialSignal } from '@/types';
 
 /** A sample market contract (mirrors the mockContract pattern in correlation.test.ts). */
 export const mockContract: MarketContract = {
@@ -44,6 +44,21 @@ export function newsItem(source: NewsItem['source'], headline: string): NewsItem
     url: `https://example.com/${source}`,
     publishedAt: new Date().toISOString(),
     keywords: extractKeywords(headline),
+  };
+}
+
+/** Build a NewsCorrelationMatch fixture for a contract + news item. */
+export function newsMatch(
+  contract: MarketContract,
+  news: NewsItem,
+  confidence = 0.8,
+): NewsCorrelationMatch {
+  return {
+    contract,
+    news,
+    confidence,
+    matchedKeywords: news.keywords.filter((k) => contract.keywords.includes(k)),
+    correlatedAt: Date.now(),
   };
 }
 

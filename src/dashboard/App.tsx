@@ -34,11 +34,13 @@ import { CorrelationRunHistory } from './components/CorrelationRunHistory';
 import { HistoryChart } from './components/HistoryChart';
 import { Watchlist } from './components/Watchlist';
 import { AlertsTab } from './components/AlertsTab';
+import { MarketDrivenNews } from './components/MarketDrivenNews';
 import { FAQContent } from './components/FAQContent';
 import { Settings } from '../popup/components/Settings';
 import { useSnapshot } from './hooks/useSnapshot';
 import { useCorrelations } from './hooks/useCorrelations';
 import { useAlerts } from './hooks/useAlerts';
+import { useMarketNews } from './hooks/useMarketNews';
 import { DEFAULT_SETTINGS } from '@/types';
 import type { ExtensionSettings, ThemeMode, CorrelationEngine } from '@/types';
 import { CONFIG } from '@/config';
@@ -51,7 +53,7 @@ import { computeCorrelatedCounts } from '@/utils/source-health';
 // Format: "0.1.0+2026-08-14T13:21:00Z" — version + build timestamp.
 const BUILD_VERSION = import.meta.env.BUILD_VERSION ?? 'dev';
 
-type Tab = 'feed' | 'markets' | 'news' | 'correlations' | 'watchlist' | 'alerts' | 'history' | 'community' | 'faq' | 'settings';
+type Tab = 'feed' | 'markets' | 'news' | 'correlations' | 'watchlist' | 'alerts' | 'market-news' | 'history' | 'community' | 'faq' | 'settings';
 
 /** Human-readable label for ML correlation phases. */
 function phaseLabel(phase: string): string {
@@ -87,6 +89,7 @@ export function App() {
   const { snapshot, loading, error: snapshotError, collecting, lastCollectionAt, triggerCollection } = useSnapshot();
   const { correlations, loading: corrLoading, error: corrError, progress: corrProgress, elapsedMs, runCorrelation, cancelCorrelation, runStats, runHistory } = useCorrelations();
   const { alerts, loading: alertsLoading, error: alertsError, clearAlerts } = useAlerts();
+  const { view: marketNewsView, loading: marketNewsLoading } = useMarketNews();
   const [activeTab, setActiveTab] = useState<Tab>('feed');
   const [settings, setSettings] = useState<ExtensionSettings>(DEFAULT_SETTINGS);
   const [theme, setTheme] = useState<ThemeMode>('dark');
@@ -281,6 +284,7 @@ export function App() {
             ['correlations', '🔗 Correlations'],
             ['watchlist', '⭐ Watchlist'],
             ['alerts', '🔔 Alerts'],
+            ['market-news', '📰 Market News'],
             ['history', '📊 History'],
             ['community', '💬 Community'],
             ['faq', '❓ FAQ'],
@@ -654,6 +658,19 @@ export function App() {
                   loading={alertsLoading}
                   error={alertsError}
                   onClear={clearAlerts}
+                  isDark={isDark}
+                />
+              </section>
+            )}
+
+            {activeTab === 'market-news' && (
+              <section>
+                <h2 className={`text-sm font-bold uppercase tracking-wider mb-3 ${sectionTitle}`}>
+                  📰 Market News
+                </h2>
+                <MarketDrivenNews
+                  view={marketNewsView}
+                  loading={marketNewsLoading}
                   isDark={isDark}
                 />
               </section>

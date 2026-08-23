@@ -73,6 +73,14 @@ Plans:
 
 **UI**: yes
 
+**Plans**: 3/3 plans planned
+
+Plans:
+
+- [ ] 05-01-PLAN.md — Category taxonomy + NewsItem category persistence
+- [ ] 05-02-PLAN.md — buildMarketDrivenNews aggregation module + background wiring
+- [ ] 05-03-PLAN.md — Market-driven news dashboard view
+
 ### Phase 6: Watchlist & Export
 
 **Goal**: Users can organize their watchlist (sort/filter/correlation status) and export data covering all sources including new ones
@@ -122,7 +130,7 @@ Phases execute in numeric order: 3 → 4 → 5 → 6 → 7 → 8
 |-------|----------------|--------|-----------|
 | 3. Correlation Speedup | 4/4 | Complete | 2026-08-22 |
 | 4. Correlation Alerts | 3/3 | Planned | - |
-| 5. Market-Driven News | 0/TBD | Not started | - |
+| 5. Market-Driven News | 3/3 | Planned | - |
 | 6. Watchlist & Export | 0/TBD | Not started | - |
 | 7. TikTok Collector | 0/TBD | Not started | - |
 | 8. Storage & ML Hardening | 0/TBD | Not started | - |

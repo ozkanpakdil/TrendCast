@@ -49,6 +49,7 @@ import { correlate, correlateNews, correlateNewsSocial } from '@/services/engine
 import { exportToCsv, exportToJson } from '@/utils/export';
 import { pruneStorageIfNeeded, measureStorageUsage } from '@/utils/storage';
 import { evaluateAlerts, dispatchAlerts, broadcastAlerts, clearAlerts, updateBadge, getAlertHistory } from '@/background/alerts';
+import { buildMarketDrivenNews } from '@/background/correlationNews';
 
 // Vite worker import — bundles ml-worker.ts as a separate chunk.
 // The `?worker` suffix tells Vite to compile this as a Web Worker.
@@ -280,6 +281,32 @@ async function runAlertSweep(): Promise<void> {
     await updateBadge();
   } catch (err) {
     console.error('[TrendCast] Alert sweep failed:', err);
+  }
+}
+
+/**
+ * Rebuild the derived "market-driven news" snapshot (Phase 5) after a
+ * correlation completes. Reads existing markets + news + watchlist + the
+ * stored correlation result, derives a bounded, category-grouped view, and
+ * writes it to `CONFIG.storage.marketNewsView`. Read-only projection — no
+ * new collection.
+ */
+async function rebuildMarketNewsView(): Promise<void> {
+  try {
+    const stored = await browser.storage.local.get(CONFIG.storage.correlations);
+    const result = stored[CONFIG.storage.correlations] as CorrelationResult | undefined;
+    if (!result) return;
+
+    const [watchlist] = await Promise.all([getWatchlist()]);
+    const view = buildMarketDrivenNews(
+      result.newsMatches,
+      watchlist,
+      CONFIG.marketNews.minVolume,
+      CONFIG.marketNews.capPerCategory,
+    );
+    await browser.storage.local.set({ [CONFIG.storage.marketNewsView]: view });
+  } catch (err) {
+    console.error('[TrendCast] rebuildMarketNewsView failed:', err);
   }
 }
 
@@ -628,6 +655,9 @@ async function runCorrelationAsync(
     // any new alerts (badge fallback if notifications are denied).
     await runAlertSweep();
 
+    // Phase 5: rebuild the derived market-driven news snapshot.
+    await rebuildMarketNewsView();
+
     if (result.error) {
       console.error(
         `[TrendCast] CORRELATE_ALL FAILED — engine="${engine}", model="${model}":`,
@@ -766,6 +796,9 @@ async function runCorrelationPrecompute(
   // Phase 4: evaluate the fresh result against the watchlist and dispatch
   // any new alerts (badge fallback if notifications are denied).
   await runAlertSweep();
+
+  // Phase 5: rebuild the derived market-driven news snapshot.
+  await rebuildMarketNewsView();
 
   if (result.error) {
     console.warn(

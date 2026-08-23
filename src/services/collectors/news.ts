@@ -16,6 +16,7 @@
 
 import type { NewsItem, NewsSource, SourceHealth } from '@/types';
 import { CONFIG } from '@/config';
+import { classifyCategory } from '@/config/taxonomy';
 import { extractKeywords } from '@/utils/keywords';
 import { conditionalFetchJson } from '@/utils/conditional-fetch';
 
@@ -149,6 +150,9 @@ async function collectFromSource(source: NewsSource): Promise<CollectResult> {
           publishedAt: item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString(),
           keywords: extractKeywords(fullText),
           imageUrl: imageUrl ?? undefined,
+          // Category assigned at collection time (Phase 5, D-02) so the
+          // market-driven news view and export read a consistent category.
+          category: classifyCategory(headline),
         } satisfies NewsItem;
       })
       .filter((item): item is NewsItem => item !== null),

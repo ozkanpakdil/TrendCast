@@ -165,6 +165,17 @@ export const CONFIG = {
     watchlist: 'trendcast:watchlist',
     alertState: 'trendcast:alert-state',
     alertHistory: 'trendcast:alert-history',
+    marketNewsView: 'trendcast:market-news-view',
+  },
+
+  // ── Market-driven news (Phase 5) ─────────────────────────────
+  // Tunable constants for the derived "market-driven news" view. The view is
+  // a read-only projection over existing markets + news + correlations.
+  marketNews: {
+    // A market is "notable" when its 24h volume is at or above this (D-06).
+    minVolume: 10_000,
+    // Cap the number of markets surfaced per category (D-14).
+    capPerCategory: 20,
   },
 
   // ── Correlation alerts (Phase 4) ─────────────────────────────

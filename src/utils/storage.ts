@@ -29,6 +29,7 @@ export const BUDGET_KEYS = [
   CONFIG.storage.lastCollectionAt,
   CONFIG.storage.alertState,
   CONFIG.storage.alertHistory,
+  CONFIG.storage.marketNewsView,
 ] as const;
 
 /**
