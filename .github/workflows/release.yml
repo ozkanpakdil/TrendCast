@@ -45,12 +45,17 @@ jobs:
         run: |
           cd dist/${{ matrix.target }}
           zip -r "../../trendcast-${{ matrix.target }}-${GITHUB_REF_NAME:-${{ inputs.tag }}}.zip" .
+          if [ "${{ matrix.target }}" = "firefox" ]; then
+            cp "../../trendcast-firefox-${GITHUB_REF_NAME:-${{ inputs.tag }}}.zip" "../../trendcast-firefox-${GITHUB_REF_NAME:-${{ inputs.tag }}}.xpi"
+          fi
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: trendcast-${{ matrix.target }}
-          path: trendcast-${{ matrix.target }}-*.zip
+          path: |
+            trendcast-${{ matrix.target }}-*.zip
+            trendcast-${{ matrix.target }}-*.xpi
           retention-days: 5
 
   release:
@@ -69,4 +74,6 @@ jobs:
           tag_name: ${{ github.ref_name || inputs.tag }}
           name: ${{ github.ref_name || inputs.tag }}
           generate_release_notes: true
-          files: artifacts/**/*.zip
+          files: |
+            artifacts/**/*.zip
+            artifacts/**/*.xpi
