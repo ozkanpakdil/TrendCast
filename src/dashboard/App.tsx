@@ -31,7 +31,6 @@ import { CorrelationPanel } from './components/CorrelationPanel';
 import { CorrelationStatsBar } from './components/CorrelationStatsBar';
 import { SourceHealthIndicator } from './components/SourceHealthIndicator';
 import { SocialSourceFilter } from './components/SocialSourceFilter';
-import { SocialHealthBadge } from './components/SocialHealthBadge';
 import { CorrelationRunHistory } from './components/CorrelationRunHistory';
 import { HistoryChart } from './components/HistoryChart';
 import { Watchlist } from './components/Watchlist';
@@ -375,13 +374,39 @@ export function App() {
           <>
             {activeTab === 'feed' && (
               <section>
-                <div className="mb-3">
-                  <SocialHealthBadge health={socialHealth} isDark={isDark} loading={loading} />
+                <h2 className={`text-sm font-bold uppercase tracking-wider mb-3 ${sectionTitle}`}>
+                  🔥 Hype Feed
+                </h2>
+                <div className="flex gap-4">
+                  {/* Social platform filter sidebar */}
+                  <aside className="w-44 shrink-0">
+                    <SocialSourceFilter
+                      health={socialHealth}
+                      signals={snapshot?.signals ?? []}
+                      selected={socialFilter}
+                      onToggle={(platform) =>
+                        setSocialFilter((prev) =>
+                          prev.includes(platform)
+                            ? prev.filter((p) => p !== platform)
+                            : [...prev, platform],
+                        )
+                      }
+                      isDark={isDark}
+                      loading={loading}
+                    />
+                  </aside>
+                  {/* Filtered hype feed */}
+                  <div className="flex-1 min-w-0">
+                    <HypeFeed
+                      signals={
+                        socialFilter.length > 0
+                          ? (snapshot?.signals ?? []).filter((s) => socialFilter.includes(s.platform))
+                          : (snapshot?.signals ?? [])
+                      }
+                      highlightThreshold={settings.highlightThreshold}
+                    />
+                  </div>
                 </div>
-                <HypeFeed
-                  signals={snapshot?.signals ?? []}
-                  highlightThreshold={settings.highlightThreshold}
-                />
               </section>
             )}
 

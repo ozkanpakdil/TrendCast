@@ -203,6 +203,31 @@ test.describe('Dashboard — Feed Tab (Hype Feed)', () => {
     await expect(firstLink).toHaveAttribute('href', /.+/);
   });
 
+  test('filters the hype feed by social platform', async ({ page }) => {
+    await openDashboard(page);
+    const mainSection = page.locator('main');
+    // Mock has 3 signals: 1 x, 1 reddit, 1 tiktok.
+    const cards = mainSection.locator('.card-hover');
+    await expect(cards).toHaveCount(3);
+    // The platform filter sidebar shows X, Reddit, TikTok badges.
+    const xBadge = mainSection.locator('button', { hasText: 'X' });
+    const redditBadge = mainSection.locator('button', { hasText: 'Reddit' });
+    const tiktokBadge = mainSection.locator('button', { hasText: 'TikTok' });
+    await expect(xBadge).toBeVisible();
+    await expect(redditBadge).toBeVisible();
+    await expect(tiktokBadge).toBeVisible();
+    // Filter to X only — the other platforms' cards disappear.
+    await xBadge.click();
+    await expect(mainSection.locator('.card-hover', { hasText: /reddit/i })).toHaveCount(0);
+    await expect(mainSection.locator('.card-hover', { hasText: /tiktok/i })).toHaveCount(0);
+    await expect(mainSection.locator('.card-hover', { hasText: /x/i })).toHaveCount(1);
+    // Toggle a second platform on — both are now present.
+    await redditBadge.click();
+    await expect(mainSection.locator('.card-hover', { hasText: /x/i })).toHaveCount(1);
+    await expect(mainSection.locator('.card-hover', { hasText: /reddit/i })).toHaveCount(1);
+    await expect(mainSection.locator('.card-hover', { hasText: /tiktok/i })).toHaveCount(0);
+  });
+
   test('bounds DOM to visible rows with a large dataset', async ({ page }) => {
     await openDashboard(page, {
       'trendcast:latest-snapshot': {
@@ -257,10 +282,9 @@ test.describe('Dashboard — Feed Tab (Hype Feed)', () => {
     // must NOT be in the DOM (virtualization bounds it to the visible window).
     await expect(cards.first()).toContainText('Social signal 0');
     await expect(page.locator('main .card-hover', { hasText: 'Social signal 199' })).toHaveCount(0);
-    // Scroll the virtualized feed container to the bottom.
-    await page.locator('main .max-h-\\[70vh\\]').evaluate((el) => {
-      el.scrollTop = el.scrollHeight;
-    });
+    // Scroll the page to the bottom — the feed now grows the page instead of
+    // scrolling inside a fixed-height container.
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
     await page.waitForTimeout(300);
     // Scrolling reveals the last signal (the DOM window moves through the list).
     await expect(page.locator('main .card-hover', { hasText: 'Social signal 199' })).toHaveCount(1);

@@ -11,7 +11,7 @@
  */
 
 import { memo, useMemo, useRef, useState, useEffect, type ReactNode } from 'react';
-import { useVirtualizer } from '@tanstack/react-virtual';
+import { useWindowVirtualizer } from '@tanstack/react-virtual';
 
 /**
  * Map a container width to a column count, matching the Tailwind responsive
@@ -51,7 +51,7 @@ export const VirtualizedGrid = memo(function VirtualizedGrid({ items }: Virtuali
   const parentRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
 
-  // Track the scroll container width so we can compute the column count.
+  // Track the grid container width so we can compute the column count.
   useEffect(() => {
     const el = parentRef.current;
     if (!el) return;
@@ -66,15 +66,18 @@ export const VirtualizedGrid = memo(function VirtualizedGrid({ items }: Virtuali
 
   const rows = useMemo(() => chunk(items, cols), [items, cols]);
 
-  const rowVirtualizer = useVirtualizer({
+  // Virtualize against the window scroll (not an inner scroll container), so
+  // the page grows naturally with the full feed instead of scrolling inside a
+  // fixed-height box. Only the visible rows are mounted.
+  const rowVirtualizer = useWindowVirtualizer({
     count: rows.length,
-    getScrollElement: () => parentRef.current,
     estimateSize: () => 120,
     overscan: 3,
+    scrollMargin: parentRef.current?.offsetTop ?? 0,
   });
 
   return (
-    <div ref={parentRef} className="max-h-[70vh] overflow-y-auto">
+    <div ref={parentRef}>
       <div
         style={{
           height: `${rowVirtualizer.getTotalSize()}px`,
@@ -92,7 +95,7 @@ export const VirtualizedGrid = memo(function VirtualizedGrid({ items }: Virtuali
               top: 0,
               left: 0,
               width: '100%',
-              transform: `translateY(${virtualRow.start}px)`,
+              transform: `translateY(${virtualRow.start - rowVirtualizer.options.scrollMargin}px)`,
             }}
           >
             {rows[virtualRow.index]}
