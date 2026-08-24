@@ -8,15 +8,15 @@ A 100% client-side Manifest V3 browser extension (Chrome + Firefox) that collect
 
 Surface the strongest, most reliable signal of what prediction markets are moving and why — by correlating social hype, news, and market odds — fast enough that the user trusts it as a daily decision aid.
 
-## Current Milestone: v1.1 News Source Fix
+## Current Milestone: v1.1 News Source Fix — COMPLETE
 
 **Goal:** Fix the news tab so Seeking Alpha and Investing.com headlines actually appear for existing users.
 
-**Target features:**
+**Shipped (2026-08-24):**
 - Deep-merge `enabledSources` so newer source flags default to `true` for existing users
-- Verify Seeking Alpha + Investing.com news appears in the news tab
-- Add a settings migration to backfill missing source flags
+- Settings migration to backfill missing source flags on load
 - Regression coverage (unit tests for the merge fix)
+- Cross-source consensus alerts (Phase 10): surface important topics even with an empty watchlist by detecting when the same topic appears across >=3 distinct source types (mixing social + news)
 
 ## Requirements
 
@@ -51,6 +51,7 @@ Surface the strongest, most reliable signal of what prediction markets are movin
 
 - ✓ Seeking Alpha + Investing.com news appears in the news tab for existing users (deep-merge `enabledSources` + migration) — v1.1 (NEWS-01)
 - ✓ Regression coverage for the settings deep-merge fix — v1.1 (NEWS-02)
+- ✓ Cross-source consensus alerts (>=3 distinct source types, social + news mix) — v1.1 (PHASE-10)
 
 ### Out of Scope
 
@@ -63,6 +64,8 @@ Surface the strongest, most reliable signal of what prediction markets are movin
 TrendCast is a mature, working extension. The codebase map (`.planning/codebase/`) documents a clean background-orchestrator + storage-as-state + React-UI architecture. The user is happy with the direction and wants to **harden features and make them faster**.
 
 **v1.0 shipped (2026-08-23):** All 11 milestone requirements satisfied, 298/298 unit tests pass, typecheck clean. Cross-phase integration verified end-to-end (collector → storage → correlation → derived view → dashboard render). Milestone audit passed.
+
+**v1.1 shipped (2026-08-24):** News Source Fix milestone complete. Deep-merge + settings migration fix Seeking Alpha/Investing.com display for existing users (NEWS-01/02/03). Phase 10 added cross-source consensus alerts — topics appearing across >=3 distinct source types (social + news mix) fire alerts even with an empty watchlist. 340/340 unit tests pass, typecheck + lint clean, UAT 2/2 passed, security + Nyquist validation gates passed.
 
 **Known issue (resolved in v1.0):** Seeking Alpha and Investing.com news did not appear in the correlation tab. Root cause diagnosed and fixed (REL-01) — sources are fully wired end-to-end; the fix addressed the correlation threshold / display path.
 
@@ -102,6 +105,9 @@ TrendCast is a mature, working extension. The codebase map (`.planning/codebase/
 | Alerts via `chrome.alarms` + persisted state (not timers) | Survive ephemeral MV3 service worker | ✓ Good — ALERT-01 shipped |
 | Category taxonomy reusing Reddit categories | Consistency across markets + news | ✓ Good — MKT-02 shipped |
 | TikTok as best-effort source with graceful degradation | Never breaks the collection pipeline | ✓ Good — SRC-01 shipped |
+| Cross-source consensus alerts reuse the shared alertHistory + alert infra | Surface important topics even with an empty watchlist; no new storage/notification machinery | ✓ Good — PHASE-10 shipped |
+| Consensus requires >=3 distinct source types AND >=1 social + >=1 news | Avoids false positives from a single source type dominating | ✓ Good — PHASE-10 shipped |
+| Per-topic cooldown keyed by topicId reuses state.lastNotified | Prevents re-alert spam within the window | ✓ Good — PHASE-10 shipped |
 
 ## Evolution
 
@@ -121,4 +127,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-08-23 — Milestone v1.1 started (News Source Fix)*
+*Last updated: 2026-08-24 — Milestone v1.1 complete (News Source Fix + Cross-Source Consensus Alerts)*
