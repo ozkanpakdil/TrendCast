@@ -20,6 +20,7 @@
 
 import { browser } from '@/messaging/browser';
 import { CONFIG } from '@/config';
+import { extractEntityKeywords } from '@/utils/entities';
 import type {
   AlertRecord,
   AlertState,
@@ -27,6 +28,9 @@ import type {
   ExtensionSettings,
   MarketContract,
   NewsItem,
+  NewsSocialCorrelationMatch,
+  NewsSource,
+  SocialPlatform,
   SocialSignal,
   WatchlistEntry,
 } from '@/types';
@@ -186,6 +190,7 @@ export async function evaluateAlerts(
     const topNews = news[0];
     const record: AlertRecord = {
       id: `${contractId}:${now}`,
+      kind: 'watchlist',
       contractId,
       platform: contract.platform,
       question: contract.question,
@@ -207,6 +212,212 @@ export async function evaluateAlerts(
   if (newAlerts.length === 0) return [];
 
   // Persist updated state + capped history (Task 2: slice(-N) ring buffer).
+  const updatedHistory = [...history, ...newAlerts].slice(-CONFIG.alerts.historyCap);
+  await browser.storage.local.set({
+    [CONFIG.storage.alertState]: state,
+    [CONFIG.storage.alertHistory]: updatedHistory,
+  });
+
+  return newAlerts;
+}
+
+// ── Cross-source consensus alerts (Phase 10) ────────────────────
+
+const SOCIAL_PLATFORMS: ReadonlySet<string> = new Set<SocialPlatform>(['x', 'reddit', 'tiktok']);
+const NEWS_SOURCES: ReadonlySet<string> = new Set<NewsSource>([
+  'bbc',
+  'cnn',
+  'yahoo',
+  'googleFinance',
+  'seekingalpha',
+  'investing',
+]);
+
+/** Normalize a keyword for stable topic clustering (lowercase, trimmed). */
+function normalizeKeyword(kw: string): string {
+  return kw.trim().toLowerCase();
+}
+
+/**
+ * Humanize a normalized topic keyword into a display label (D-05).
+ * e.g. "bitcoin" -> "Bitcoin", "$btc" -> "BTC".
+ */
+function humanizeTopic(keyword: string): string {
+  const k = keyword.trim();
+  if (k.startsWith('$')) return k.slice(1).toUpperCase();
+  if (k.length === 0) return 'Topic';
+  return k.charAt(0).toUpperCase() + k.slice(1);
+}
+
+/**
+ * Evaluate a correlation result for cross-source consensus alerts.
+ *
+ * Unlike `evaluateAlerts`, this is NOT watchlist-scoped: it surfaces topics
+ * that appear across >=3 distinct source types (mixing social + news) even
+ * with an empty watchlist (D-06). It reads `result.newsSocialMatches` and
+ * clusters matches by shared entity keywords, then fires a `crossSource`
+ * alert per consensus cluster.
+ *
+ * @returns the newly created `AlertRecord[]` (already persisted).
+ */
+export async function evaluateCrossSourceAlerts(
+  result: CorrelationResult,
+  settings: ExtensionSettings,
+  now: number = Date.now(),
+): Promise<AlertRecord[]> {
+  // D-09: gated only by alertsEnabled — no watchlist dependency.
+  if (!settings.alertsEnabled) return [];
+
+  const matches = result.newsSocialMatches ?? [];
+  if (matches.length === 0) return [];
+
+  const [state, history] = await Promise.all([readAlertState(), readAlertHistory()]);
+
+  // ── Cluster matches by shared topic (D-07) ─────────────────────
+  // Each match contributes the union of its news + signal entity keywords.
+  // Matches sharing >=1 normalized keyword group into a cluster keyed by the
+  // most frequent normalized keyword (stable topicId).
+  const keywordCounts = new Map<string, number>();
+  const matchKeywords: string[][] = [];
+  for (const m of matches) {
+    const kws = new Set<string>();
+    for (const kw of extractEntityKeywords(m.news.headline)) kws.add(normalizeKeyword(kw));
+    for (const kw of extractEntityKeywords(m.signal.text)) kws.add(normalizeKeyword(kw));
+    const list = [...kws];
+    matchKeywords.push(list);
+    for (const kw of list) keywordCounts.set(kw, (keywordCounts.get(kw) ?? 0) + 1);
+  }
+
+  // Union-find over matches sharing >=1 keyword.
+  const parent = matches.map((_, i) => i);
+  const find = (i: number): number => {
+    while (parent[i] !== i) {
+      parent[i] = parent[parent[i]];
+      i = parent[i];
+    }
+    return i;
+  };
+  const union = (a: number, b: number): void => {
+    const ra = find(a);
+    const rb = find(b);
+    if (ra !== rb) parent[ra] = rb;
+  };
+
+  const kwToMatch = new Map<string, number>();
+  for (let i = 0; i < matches.length; i++) {
+    for (const kw of matchKeywords[i]) {
+      const first = kwToMatch.get(kw);
+      if (first !== undefined) union(first, i);
+      else kwToMatch.set(kw, i);
+    }
+  }
+
+  // Group by root.
+  const clusters = new Map<number, NewsSocialCorrelationMatch[]>();
+  for (let i = 0; i < matches.length; i++) {
+    const root = find(i);
+    const list = clusters.get(root) ?? [];
+    list.push(matches[i]);
+    clusters.set(root, list);
+  }
+
+  const newAlerts: AlertRecord[] = [];
+  const globalCooldownMs = CONFIG.alerts.globalCooldownMinutes * 60_000;
+  const perTopicCooldownMs =
+    (settings.alertCooldownMinutes ?? CONFIG.alerts.perMarketCooldownMinutes) * 60_000;
+
+  // Global throttle is evaluated ONCE against the persisted state (before the
+  // loop). It throttles across sweeps, not within one sweep — otherwise the
+  // first consensus topic would suppress every other distinct topic in the
+  // same correlation run (WR-02). `lastGlobalAlertAt` is only advanced after
+  // the loop if at least one alert fired.
+  const globalCooldownActive = now - state.lastGlobalAlertAt < globalCooldownMs;
+
+  for (const cluster of clusters.values()) {
+    // ── Distinct source-type counting (D-02) ─────────────────────
+    const sourceTypes = new Set<string>();
+    let hasSocial = false;
+    let hasNews = false;
+    for (const m of cluster) {
+      const platform = m.signal.platform;
+      if (SOCIAL_PLATFORMS.has(platform)) {
+        sourceTypes.add(platform);
+        hasSocial = true;
+      }
+      const source = m.news.source;
+      if (NEWS_SOURCES.has(source)) {
+        sourceTypes.add(source);
+        hasNews = true;
+      }
+    }
+
+    // D-01: require >= minConsensusSourceTypes AND social+news mix.
+    if (sourceTypes.size < CONFIG.alerts.minConsensusSourceTypes) continue;
+    if (CONFIG.alerts.requireSocialAndNews && !(hasSocial && hasNews)) continue;
+
+    // ── Topic id + label (D-07) ──────────────────────────────────
+    // Most frequent normalized keyword across the cluster.
+    const clusterKws = new Map<string, number>();
+    for (const m of cluster) {
+      for (const kw of extractEntityKeywords(m.news.headline)) {
+        const n = normalizeKeyword(kw);
+        clusterKws.set(n, (clusterKws.get(n) ?? 0) + 1);
+      }
+      for (const kw of extractEntityKeywords(m.signal.text)) {
+        const n = normalizeKeyword(kw);
+        clusterKws.set(n, (clusterKws.get(n) ?? 0) + 1);
+      }
+    }
+    let topicKey = '';
+    let topicCount = 0;
+    for (const [kw, count] of clusterKws) {
+      if (count > topicCount) {
+        topicCount = count;
+        topicKey = kw;
+      }
+    }
+    if (!topicKey) continue;
+    const topicId = topicKey;
+    const topicLabel = humanizeTopic(topicKey);
+
+    // ── Direction from mean sentiment (D-03, any direction fires) ─
+    const meanSentiment =
+      cluster.reduce((sum, m) => sum + m.signal.sentiment, 0) / cluster.length;
+    const direction: AlertRecord['direction'] =
+      meanSentiment > 0.05 ? 'bullish' : meanSentiment < -0.05 ? 'bearish' : 'mixed';
+
+    // ── Cooldowns (D-08) ─────────────────────────────────────────
+    if (globalCooldownActive) continue;
+    const lastNotified = state.lastNotified[topicId] ?? 0;
+    if (now - lastNotified < perTopicCooldownMs) continue;
+
+    // ── Build the record ─────────────────────────────────────────
+    const top = [...cluster].sort((a, b) => b.confidence - a.confidence)[0];
+    const record: AlertRecord = {
+      id: `${topicId}:${now}`,
+      kind: 'crossSource',
+      topicLabel,
+      sourceTypes: [...sourceTypes],
+      direction,
+      sentiment: meanSentiment,
+      yesPrice: 0,
+      topSignalText: top?.signal.text,
+      topSignalUrl: top?.signal.url,
+      topNewsHeadline: top?.news.headline,
+      topNewsUrl: top?.news.url,
+      confidence: top?.confidence ?? 0,
+      alertedAt: now,
+    };
+
+    newAlerts.push(record);
+    state.lastNotified[topicId] = now;
+  }
+
+  if (newAlerts.length === 0) return [];
+
+  // Advance the global throttle only when at least one alert fired this sweep.
+  state.lastGlobalAlertAt = now;
+
   const updatedHistory = [...history, ...newAlerts].slice(-CONFIG.alerts.historyCap);
   await browser.storage.local.set({
     [CONFIG.storage.alertState]: state,
@@ -295,13 +506,13 @@ export async function dispatchAlerts(records: AlertRecord[]): Promise<void> {
   }
 
   for (const record of records) {
-    const id = `trendcast-alert-${record.contractId}-${record.alertedAt}`;
+    const id = `trendcast-alert-${record.contractId ?? record.topicLabel ?? 'cross'}-${record.alertedAt}`;
     const message = record.topSignalText ?? record.topNewsHeadline ?? '';
     try {
       await browser.notifications.create(id, {
         type: 'basic',
         iconUrl: browser.runtime.getURL('icons/icon-128.png'),
-        title: `${record.direction} — ${record.question}`,
+        title: `${record.direction} — ${record.question ?? record.topicLabel ?? 'Cross-source alert'}`,
         message,
       });
     } catch (err) {

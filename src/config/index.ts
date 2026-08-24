@@ -211,6 +211,12 @@ export const CONFIG = {
     yesPriceBand: 0.02,
     // Toolbar badge shows total alerts within this window (hours).
     badgeWindowHours: 24,
+    // Cross-source consensus (Phase 10, D-01): a topic fires a crossSource
+    // alert only when it appears across at least this many distinct source
+    // types, AND (when requireSocialAndNews is true) it mixes at least one
+    // social platform with at least one news source.
+    minConsensusSourceTypes: 3,
+    requireSocialAndNews: true,
   },
 
   // ── Overlay injection ─────────────────────────────────────────

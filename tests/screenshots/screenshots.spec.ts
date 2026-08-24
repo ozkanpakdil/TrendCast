@@ -116,6 +116,51 @@ test.describe('Dashboard screenshots', () => {
     await page.screenshot({ path: `${OUT}/dashboard-watchlist.png`, fullPage: true });
   });
 
+  test('dashboard — alerts tab (cross-source)', async ({ page }) => {
+    // Seed alert history with cross-source consensus alerts that carry
+    // source links, so the screenshot shows the Phase 10 feature end-to-end.
+    const now = Date.now();
+    const crossSourceAlerts = [
+      {
+        id: `bitcoin:${now - 3_600_000}`,
+        kind: 'crossSource',
+        topicLabel: 'Bitcoin',
+        sourceTypes: ['bbc', 'reddit', 'x'],
+        direction: 'bullish',
+        sentiment: 0.72,
+        yesPrice: 0,
+        topSignalText: 'Bitcoin is pumping to new highs 🚀',
+        topSignalUrl: 'https://x.com/crypto_whale/status/123',
+        topNewsHeadline: 'Bitcoin surges past $98,000 amid renewed investor optimism',
+        topNewsUrl: 'https://bbc.com/news/business-123',
+        confidence: 0.9,
+        alertedAt: now - 3_600_000,
+      },
+      {
+        id: `nvidia:${now - 7_200_000}`,
+        kind: 'crossSource',
+        topicLabel: 'Nvidia',
+        sourceTypes: ['yahoo', 'reddit', 'x'],
+        direction: 'bearish',
+        sentiment: -0.55,
+        yesPrice: 0,
+        topSignalText: 'Nvidia pulling back hard after earnings.',
+        topSignalUrl: 'https://reddit.com/r/stocks/comments/nvda',
+        topNewsHeadline: 'Nvidia stock slips as AI demand cools',
+        topNewsUrl: 'https://finance.yahoo.com/news/nvidia-slip',
+        confidence: 0.84,
+        alertedAt: now - 7_200_000,
+      },
+    ];
+    await openDashboard(page, {
+      'trendcast:alert-history': crossSourceAlerts,
+    });
+    await gotoTab(page, 'Alerts');
+    await expect(page.locator('main')).toContainText('Cross-source');
+    await expect(page.locator('a', { hasText: 'Source ↗' }).first()).toBeVisible();
+    await page.screenshot({ path: `${OUT}/dashboard-alerts-cross-source.png`, fullPage: true });
+  });
+
   test('dashboard — history tab', async ({ page }) => {
     await openDashboard(page);
     await gotoTab(page, 'History');

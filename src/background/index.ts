@@ -52,7 +52,7 @@ import { exportToCsv, exportToJson } from '@/utils/export';
 import { pruneStorageIfNeeded, measureStorageUsage } from '@/utils/storage';
 import { backfillWatchlist } from '@/utils/watchlist';
 import { deepMergeSettings, migrateEnabledSources } from '@/utils/settings';
-import { evaluateAlerts, dispatchAlerts, broadcastAlerts, clearAlerts, updateBadge, getAlertHistory } from '@/background/alerts';
+import { evaluateAlerts, evaluateCrossSourceAlerts, dispatchAlerts, broadcastAlerts, clearAlerts, updateBadge, getAlertHistory } from '@/background/alerts';
 import { buildMarketDrivenNews } from '@/background/correlationNews';
 import { mergeMarkets, mergeSignals, mergeNews } from '@/background/merge';
 
@@ -279,8 +279,10 @@ async function runAlertSweep(): Promise<void> {
 
     const [watchlist, settings] = await Promise.all([getWatchlist(), getSettings()]);
     const newAlerts = await evaluateAlerts(result, watchlist, settings);
-    if (newAlerts.length > 0) {
-      await dispatchAlerts(newAlerts);
+    const crossSourceAlerts = await evaluateCrossSourceAlerts(result, settings);
+    const allAlerts = [...newAlerts, ...crossSourceAlerts];
+    if (allAlerts.length > 0) {
+      await dispatchAlerts(allAlerts);
       await broadcastAlerts(await getAlertHistory());
     }
     await updateBadge();

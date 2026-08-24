@@ -72,6 +72,12 @@ const META: Record<string, ScreenshotMeta> = {
       'Markets you have starred for personal tracking. The watchlist persists in chrome.storage.local across sessions.',
     category: 'dashboard',
   },
+  'dashboard-alerts-cross-source.png': {
+    title: 'Cross-Source Consensus Alerts',
+    description:
+      'The Alerts tab showing cross-source consensus alerts. When the same topic appears across at least three distinct source types (mixing social and news), TrendCast surfaces it even with an empty watchlist. Each card shows the topic, direction, source breakdown, and clickable links to the main source and supporting social post.',
+    category: 'dashboard',
+  },
   'dashboard-history.png': {
     title: 'History Charts',
     description:

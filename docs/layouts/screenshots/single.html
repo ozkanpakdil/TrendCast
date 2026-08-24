@@ -42,11 +42,14 @@
     <div class="screenshot-gallery">
       {{ range $dashboard }}
       <div class="screenshot-item">
-        <img src="{{ .path | relURL }}" alt="{{ .title }}" loading="lazy">
+        <a href="{{ .path | relURL }}" target="_blank" rel="noopener" class="screenshot-link" title="Open full-size image">
+          <img src="{{ .path | relURL }}" alt="{{ .title }}" loading="lazy">
+        </a>
         <div class="meta">
           <span class="badge">{{ .category }}</span>
           <h4>{{ .title }}</h4>
           <p>{{ .description }}</p>
+          <a href="{{ .path | relURL }}" target="_blank" rel="noopener" class="screenshot-full">View full size ↗</a>
         </div>
       </div>
       {{ end }}
@@ -59,11 +62,14 @@
     <div class="screenshot-gallery">
       {{ range $popup }}
       <div class="screenshot-item">
-        <img src="{{ .path | relURL }}" alt="{{ .title }}" loading="lazy">
+        <a href="{{ .path | relURL }}" target="_blank" rel="noopener" class="screenshot-link" title="Open full-size image">
+          <img src="{{ .path | relURL }}" alt="{{ .title }}" loading="lazy">
+        </a>
         <div class="meta">
           <span class="badge">{{ .category }}</span>
           <h4>{{ .title }}</h4>
           <p>{{ .description }}</p>
+          <a href="{{ .path | relURL }}" target="_blank" rel="noopener" class="screenshot-full">View full size ↗</a>
         </div>
       </div>
       {{ end }}
@@ -76,11 +82,14 @@
     <div class="screenshot-gallery">
       {{ range $overlay }}
       <div class="screenshot-item">
-        <img src="{{ .path | relURL }}" alt="{{ .title }}" loading="lazy">
+        <a href="{{ .path | relURL }}" target="_blank" rel="noopener" class="screenshot-link" title="Open full-size image">
+          <img src="{{ .path | relURL }}" alt="{{ .title }}" loading="lazy">
+        </a>
         <div class="meta">
           <span class="badge">{{ .category }}</span>
           <h4>{{ .title }}</h4>
           <p>{{ .description }}</p>
+          <a href="{{ .path | relURL }}" target="_blank" rel="noopener" class="screenshot-full">View full size ↗</a>
         </div>
       </div>
       {{ end }}

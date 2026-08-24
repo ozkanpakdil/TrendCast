@@ -78,7 +78,7 @@ export function AlertsTabImpl({ alerts, loading, error, onClear, isDark }: Alert
       <div className="text-center py-8">
         <p className="text-slate-500 text-sm mb-2">No alerts yet</p>
         <p className="text-slate-600 text-xs">
-          Alerts appear here when a watchlisted market shows a new or changed correlation.
+          Alerts appear here when a watchlisted market moves, or when a topic gains consensus across multiple sources.
         </p>
       </div>
     );
@@ -110,6 +110,9 @@ export function AlertsTabImpl({ alerts, loading, error, onClear, isDark }: Alert
         const badge = directionBadges[alert.direction] ?? directionBadges.mixed;
         const body = alert.topSignalText ?? alert.topNewsHeadline ?? '';
         const absTime = new Date(alert.alertedAt).toLocaleString();
+        const isCrossSource = alert.kind === 'crossSource';
+        const title = isCrossSource ? (alert.topicLabel ?? alert.question) : alert.question;
+        const sourceBreakdown = isCrossSource && alert.sourceTypes ? alert.sourceTypes.join(' · ') : '';
         return (
           <div
             key={alert.id}
@@ -121,15 +124,47 @@ export function AlertsTabImpl({ alerts, loading, error, onClear, isDark }: Alert
                   <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${badge.cls}`}>
                     {badge.arrow} {badge.label}
                   </span>
+                  {isCrossSource && (
+                    <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-indigo-900/50 text-indigo-300">
+                      Cross-source
+                    </span>
+                  )}
                   <span className={`text-[10px] ${muted}`} title={absTime}>
                     {relativeTime(alert.alertedAt)}
                   </span>
                 </div>
                 <p className={`text-sm line-clamp-2 ${isDark ? 'text-slate-200' : 'text-light-text'}`}>
-                  {alert.question}
+                  {title}
                 </p>
+                {sourceBreakdown && (
+                  <p className={`text-xs mt-0.5 ${muted}`}>{sourceBreakdown}</p>
+                )}
                 {body && (
                   <p className={`text-xs mt-1 line-clamp-2 ${muted}`}>{body}</p>
+                )}
+                {(alert.topNewsUrl || alert.topSignalUrl) && (
+                  <div className="flex flex-wrap gap-2 mt-1.5">
+                    {alert.topNewsUrl && (
+                      <a
+                        href={alert.topNewsUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className={`text-xs font-medium underline underline-offset-2 ${isDark ? 'text-indigo-300 hover:text-indigo-200' : 'text-brand-600 hover:text-brand-700'}`}
+                      >
+                        Source ↗
+                      </a>
+                    )}
+                    {alert.topSignalUrl && (
+                      <a
+                        href={alert.topSignalUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className={`text-xs font-medium underline underline-offset-2 ${isDark ? 'text-indigo-300 hover:text-indigo-200' : 'text-brand-600 hover:text-brand-700'}`}
+                      >
+                        Social post ↗
+                      </a>
+                    )}
+                  </div>
                 )}
               </div>
             </div>

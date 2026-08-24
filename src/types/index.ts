@@ -400,6 +400,15 @@ export interface WatchlistEntry {
 export type AlertDirection = 'bullish' | 'bearish' | 'mixed';
 
 /**
+ * Discriminator for the two alert kinds (Phase 10, D-04).
+ *
+ * - `watchlist`  — a watchlisted market shows a new or changed correlation.
+ * - `crossSource` — a topic gains consensus across >=3 distinct source types
+ *   (mixing social + news), even with an empty watchlist.
+ */
+export type AlertKind = 'watchlist' | 'crossSource';
+
+/**
  * A single correlation alert record.
  * Persisted to `alertHistory` (capped at ~100) and shown in the
  * dashboard Alerts tab / notification body.
@@ -407,21 +416,31 @@ export type AlertDirection = 'bullish' | 'bearish' | 'mixed';
 export interface AlertRecord {
   /** Stable unique id (e.g. `${contractId}:${alertedAt}`). */
   id: string;
-  /** The watchlisted market contract ID. */
-  contractId: string;
-  platform: MarketPlatform;
-  /** The market question text (cached for display). */
-  question: string;
+  /** Discriminator for watchlist vs cross-source alerts (D-04). */
+  kind: AlertKind;
+  /** The watchlisted market contract ID (watchlist alerts only). */
+  contractId?: string;
+  platform?: MarketPlatform;
+  /** The market question text (cached for display; watchlist alerts only). */
+  question?: string;
+  /** Humanized topic label for cross-source alerts (D-05). */
+  topicLabel?: string;
+  /** Distinct source types that reached consensus (D-05). */
+  sourceTypes?: string[];
   /** Market-level direction derived from sentiment + Yes-price delta. */
   direction: AlertDirection;
-  /** Aggregate signal sentiment (-1..+1) at alert time. */
+  /** Aggregate sentiment (-1..1) at alert time. */
   sentiment: number;
   /** Best Yes price (0–1) at alert time. */
   yesPrice: number;
   /** Text of the top correlated signal (if any). */
   topSignalText?: string;
+  /** Direct link to the top correlated social post (if any). */
+  topSignalUrl?: string;
   /** Headline of the top correlated news item (if any). */
   topNewsHeadline?: string;
+  /** Direct link to the top correlated news item (if any). */
+  topNewsUrl?: string;
   /** Confidence of the top correlated match (0–1). */
   confidence: number;
   /** Epoch ms when the alert fired. */

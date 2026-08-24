@@ -8,9 +8,13 @@
 
 ### News Source Fix
 
-- [ ] **NEWS-01**: User can see Seeking Alpha and Investing.com headlines in the news tab even with pre-existing saved settings (deep-merge `enabledSources` so newer source flags default to `true`)
-- [ ] **NEWS-02**: Existing users' settings are migrated to backfill missing source flags (settings migration)
-- [ ] **NEWS-03**: Regression coverage proves the deep-merge fix (unit tests)
+- [x] **NEWS-01**: User can see Seeking Alpha and Investing.com headlines in the news tab even with pre-existing saved settings (deep-merge `enabledSources` so newer source flags default to `true`)
+- [x] **NEWS-02**: Existing users' settings are migrated to backfill missing source flags (settings migration)
+- [x] **NEWS-03**: Regression coverage proves the deep-merge fix (unit tests)
+
+### Cross-Source Consensus Alerts
+
+- [x] **PHASE-10**: Surface important topics even with an empty watchlist by detecting when the same topic appears across >=3 distinct source types (mixing social + news), reusing the existing `newsSocialMatches` correlation output and the shared alert infrastructure
 
 ## Out of Scope
 
@@ -28,6 +32,7 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| NEWS-01 | Phase 9 | Planned |
-| NEWS-02 | Phase 9 | Planned |
-| NEWS-03 | Phase 9 | Planned |
+| NEWS-01 | Phase 9 | Validated |
+| NEWS-02 | Phase 9 | Validated |
+| NEWS-03 | Phase 9 | Validated |
+| PHASE-10 | Phase 10 | Validated |

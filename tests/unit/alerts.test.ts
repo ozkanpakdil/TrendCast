@@ -303,6 +303,7 @@ describe('evaluateAlerts', () => {
     for (let i = 0; i < CONFIG.alerts.historyCap - 1; i++) {
       existing.push({
         id: `old-${i}`,
+        kind: 'watchlist',
         contractId: 'btc-100k',
         platform: 'polymarket',
         question: 'q',
@@ -353,6 +354,7 @@ describe('BUDGET_KEYS (Task 2)', () => {
 function record(partial: Partial<AlertRecord> = {}): AlertRecord {
   return {
     id: 'btc-100k:1',
+    kind: 'watchlist',
     contractId: 'btc-100k',
     platform: 'polymarket',
     question: 'Will Bitcoin close above $100k?',

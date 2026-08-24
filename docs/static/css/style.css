@@ -196,6 +196,16 @@ body {
   display: block;
   border-bottom: 1px solid var(--border);
 }
+.screenshot-item .screenshot-link {
+  display: block;
+  line-height: 0;
+}
+.screenshot-item .screenshot-link img {
+  transition: opacity 0.15s;
+}
+.screenshot-item .screenshot-link:hover img {
+  opacity: 0.85;
+}
 .screenshot-item .meta {
   padding: 16px;
 }
@@ -208,6 +218,17 @@ body {
   font-size: 0.85rem;
   color: var(--muted);
   line-height: 1.4;
+}
+.screenshot-item .screenshot-full {
+  display: inline-block;
+  margin-top: 10px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--brand);
+  text-decoration: none;
+}
+.screenshot-item .screenshot-full:hover {
+  text-decoration: underline;
 }
 .screenshot-item .badge {
   display: inline-block;
