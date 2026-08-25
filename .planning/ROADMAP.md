@@ -32,7 +32,7 @@
 <summary>🔄 0.1.5 Stock Indicator News Sources (Phases 11-13) — IN PROGRESS</summary>
 
 - [ ] Phase 11: Stock Indicator Source Collection & Health (0/0 plans) — not started
-- [ ] Phase 12: End-to-End Wiring & UI (0/0 plans) — not started
+- [ ] Phase 12: End-to-End Wiring & UI (1/1 plans) — not started
 - [ ] Phase 13: Settings Migration & Regression Tests (0/0 plans) — not started
 
 </details>
@@ -61,8 +61,10 @@ Plans:
   1. User can toggle each new source on/off in the popup settings
   2. New sources appear with correct labels/colors in the dashboard NewsFeed, SourceHealthIndicator, and HistoryChart
   3. New sources are wired end-to-end (config, types, collector, background, dashboard, popup)
-**Plans**: TBD
-**UI hint**: yes
+**Plans**: 1 plan
+
+Plans:
+- [ ] 12-01-PLAN.md — Wire the three new sources into popup settings toggles, NewsFeed labels/colors, and HistoryChart labels
 
 ### Phase 13: Settings Migration & Regression Tests
 **Goal**: Existing users' settings migrate so the new source flags default to `true` without overwriting explicit preferences
@@ -90,5 +92,5 @@ Phases execute in numeric order: 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 �
 | 9. News Source Fix | v1.1 | 4/4 | Complete | 2026-08-24 |
 | 10. Cross-Source Consensus Alerts | v1.1 | 3/3 | Complete | 2026-08-24 |
 | 11. Stock Indicator Source Collection & Health | 0.1.5 | 0/0 | Not started | - |
-| 12. Stock Indicator End-to-End Wiring & UI | 0.1.5 | 0/0 | Not started | - |
+| 12. Stock Indicator End-to-End Wiring & UI | 0.1.5 | 0/1 | Not started | - |
 | 13. Settings Migration & Regression Tests | 0.1.5 | 0/0 | Not started | - |

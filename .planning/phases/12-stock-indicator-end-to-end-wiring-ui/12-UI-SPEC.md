@@ -64,7 +64,7 @@ Source: `NewsFeed.tsx` (tile), `Settings.tsx` (toggle row). No new spacing intro
 | Headline | 11px (`text-[11px]`) | 600 (`font-semibold`) | 1.2 (`leading-tight`) | News tile headline (2-line clamp) |
 | Chip | 11px (`text-[11px]`) | 500 (`font-medium`) | 1.2 | Keyword chips |
 
-Primary weights: **400 (regular)** + **600 (semibold)**. Exception: the uppercase source label uses **700 (bold)** — existing, do not change.
+Primary weights: **400 (regular)** + **600 (semibold)**. Exceptions (pre-existing, do not change): the uppercase source label uses **700 (bold)** and keyword chips use **500 (medium)**. This phase introduces no new typography.
 
 Source: `NewsFeed.tsx`. No new typography introduced by this phase.
 

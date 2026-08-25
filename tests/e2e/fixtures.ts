@@ -370,7 +370,7 @@ export function mockBrowserApiScript(
   var cannedResponses = {
     'TRIGGER_COLLECTION': { ok: true, data: { snapshot: ${JSON.stringify(MOCK_SNAPSHOT)} } },
     'GET_LATEST_SNAPSHOT': { ok: true, data: { snapshot: ${JSON.stringify(MOCK_SNAPSHOT)} } },
-    'GET_HISTORY': { ok: true, data: { history: ${JSON.stringify(MOCK_HISTORY)} } },
+    'GET_HISTORY': { ok: true, data: { history: __store['trendcast:history'] || [] } },
     'GET_WATCHLIST': { ok: true, data: { watchlist: __store['trendcast:watchlist'] || [] } },
     'ADD_TO_WATCHLIST': { ok: true },
     'REMOVE_FROM_WATCHLIST': { ok: true },

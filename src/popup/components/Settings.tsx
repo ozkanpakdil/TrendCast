@@ -205,6 +205,9 @@ export function Settings({ settings, onUpdate }: SettingsProps) {
               ['cnn', '📰 CNN'],
               ['seekingalpha', '📰 Seeking Alpha'],
               ['investing', '📰 Investing.com'],
+              ['usaStocksIndicator', '📰 Stock Indicator'],
+              ['stockScreener', '📰 Breakout'],
+              ['stockScreener2', '📰 VCP'],
             ] as [keyof ExtensionSettings['enabledSources'], string][]
           ).map(([source, label]) => (
             <label

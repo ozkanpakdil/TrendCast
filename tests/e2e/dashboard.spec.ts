@@ -21,7 +21,7 @@
  */
 
 import { test, expect, type Page } from '@playwright/test';
-import { injectBrowserMock } from './fixtures';
+import { injectBrowserMock, MOCK_SNAPSHOT } from './fixtures';
 
 const DASHBOARD_URL = 'http://127.0.0.1:4173/src/dashboard/index.html';
 
@@ -467,6 +467,66 @@ test.describe('Dashboard — News Tab', () => {
     const firstNewsLink = page.locator('main a.card-hover').first();
     await expect(firstNewsLink).toHaveAttribute('href', /example\.com\/news\//);
   });
+
+  test('renders Stock Indicator label and teal tile for a usaStocksIndicator item', async ({ page }) => {
+    await openDashboard(page, {
+      'trendcast:latest-snapshot': {
+        ...MOCK_SNAPSHOT,
+        news: [
+          {
+            id: 'news-usi',
+            source: 'usaStocksIndicator',
+            headline: 'Recent Tech Layoffs Stock Report',
+            url: 'https://ozkanpakdil.github.io/usa-stocks-indicator/posts/layoffs/',
+            publishedAt: new Date().toISOString(),
+            keywords: ['layoffs'],
+          },
+        ],
+      },
+    });
+    await page.getByRole('button', { name: '📰 News', exact: true }).click();
+    await page.waitForTimeout(300);
+    const tile = page.locator('main a.card-hover', { hasText: 'Recent Tech Layoffs Stock Report' });
+    await expect(tile).toContainText('Stock Indicator');
+    await expect(tile).toHaveCSS('background-color', 'rgb(20, 184, 166)');
+    await expect(tile).toHaveCSS('color', 'rgb(255, 255, 255)');
+  });
+
+  test('renders Breakout and VCP labels with orange/fuchsia tiles', async ({ page }) => {
+    await openDashboard(page, {
+      'trendcast:latest-snapshot': {
+        ...MOCK_SNAPSHOT,
+        news: [
+          {
+            id: 'news-ss',
+            source: 'stockScreener',
+            headline: 'Breakout Scanner: NVDA above pivot',
+            url: 'https://ozkanpakdil.github.io/stock-screener/posts/nvda/',
+            publishedAt: new Date().toISOString(),
+            keywords: ['nvda', 'breakout'],
+          },
+          {
+            id: 'news-ss2',
+            source: 'stockScreener2',
+            headline: 'VCP Setup Watchlist Update',
+            url: 'https://ozkanpakdil.github.io/vcp/posts/update/',
+            publishedAt: new Date().toISOString(),
+            keywords: ['vcp', 'setup'],
+          },
+        ],
+      },
+    });
+    await page.getByRole('button', { name: '📰 News', exact: true }).click();
+    await page.waitForTimeout(300);
+    const breakoutTile = page.locator('main a.card-hover', { hasText: 'Breakout Scanner: NVDA above pivot' });
+    await expect(breakoutTile).toContainText('Breakout');
+    await expect(breakoutTile).toHaveCSS('background-color', 'rgb(249, 115, 22)');
+    await expect(breakoutTile).toHaveCSS('color', 'rgb(15, 23, 42)');
+    const vcpTile = page.locator('main a.card-hover', { hasText: 'VCP Setup Watchlist Update' });
+    await expect(vcpTile).toContainText('VCP');
+    await expect(vcpTile).toHaveCSS('background-color', 'rgb(217, 70, 239)');
+    await expect(vcpTile).toHaveCSS('color', 'rgb(255, 255, 255)');
+  });
 });
 
 // ── Correlations Tab ──────────────────────────────────────────────
@@ -803,6 +863,67 @@ test.describe('Dashboard — History Tab', () => {
     // Should show some empty state message
     const mainSection = page.locator('main');
     await expect(mainSection).toBeVisible();
+  });
+
+  test('renders Stock Indicator label in the detail-panel news list', async ({ page }) => {
+    const now = Date.now();
+    await openDashboard(page, {
+      'trendcast:history': [
+        {
+          timestamp: now - 3_600_000,
+          marketCount: 2,
+          signalCount: 3,
+          newsCount: 1,
+          correlationCount: 1,
+          topVirality: [85],
+          avgSentiment: 0.5,
+          topMarkets: [],
+          topSignals: [],
+          topNews: [],
+        },
+        {
+          timestamp: now,
+          marketCount: 2,
+          signalCount: 3,
+          newsCount: 3,
+          correlationCount: 1,
+          topVirality: [85],
+          avgSentiment: 0.5,
+          topMarkets: [],
+          topSignals: [],
+          topNews: [
+            {
+              id: 'news-usi',
+              source: 'usaStocksIndicator',
+              headline: 'Recent Tech Layoffs Stock Report',
+              url: 'https://ozkanpakdil.github.io/usa-stocks-indicator/posts/layoffs/',
+              publishedAt: new Date().toISOString(),
+            },
+            {
+              id: 'news-ss',
+              source: 'stockScreener',
+              headline: 'Breakout Scanner: NVDA above pivot',
+              url: 'https://ozkanpakdil.github.io/stock-screener/posts/nvda/',
+              publishedAt: new Date().toISOString(),
+            },
+            {
+              id: 'news-ss2',
+              source: 'stockScreener2',
+              headline: 'VCP Setup Watchlist Update',
+              url: 'https://ozkanpakdil.github.io/vcp/posts/update/',
+              publishedAt: new Date().toISOString(),
+            },
+          ],
+        },
+      ],
+    });
+    await page.locator('nav button', { hasText: 'History' }).click();
+    await page.waitForTimeout(500);
+    // The detail panel defaults to the LAST entry (no hover), which contains the
+    // new-source topNews items — their labels must render via PLATFORM_LABELS.
+    await expect(page.locator('main')).toContainText('Stock Indicator');
+    await expect(page.locator('main')).toContainText('Breakout');
+    await expect(page.locator('main')).toContainText('VCP');
   });
 });
 

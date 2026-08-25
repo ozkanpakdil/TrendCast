@@ -16,7 +16,7 @@
  */
 
 import { test, expect, type Page } from '@playwright/test';
-import { injectBrowserMock } from './fixtures';
+import { injectBrowserMock, MOCK_SETTINGS } from './fixtures';
 
 const POPUP_URL = 'http://127.0.0.1:4173/src/popup/index.html';
 
@@ -342,6 +342,56 @@ test.describe('Popup — Settings Tab', () => {
     const wasChecked = await firstCheckbox.isChecked();
     await firstCheckbox.click();
     await expect(firstCheckbox).toBeChecked({ checked: !wasChecked });
+  });
+
+  test('shows Stock Indicator toggle checked when enabled', async ({ page }) => {
+    await openPopup(page, {
+      'trendcast:settings': {
+        ...MOCK_SETTINGS,
+        enabledSources: { ...MOCK_SETTINGS.enabledSources, usaStocksIndicator: true },
+      },
+    });
+    await page.locator('nav button', { hasText: 'Settings' }).click();
+    await page.waitForTimeout(300);
+    const toggle = page.locator('main label', { hasText: '📰 Stock Indicator' });
+    await expect(toggle).toBeVisible();
+    await expect(toggle.locator('input[type="checkbox"]')).toBeChecked();
+  });
+
+  test('toggling the Stock Indicator checkbox flips its state', async ({ page }) => {
+    await openPopup(page, {
+      'trendcast:settings': {
+        ...MOCK_SETTINGS,
+        enabledSources: { ...MOCK_SETTINGS.enabledSources, usaStocksIndicator: true },
+      },
+    });
+    await page.locator('nav button', { hasText: 'Settings' }).click();
+    await page.waitForTimeout(300);
+    const checkbox = page.locator('main label', { hasText: '📰 Stock Indicator' }).locator('input[type="checkbox"]');
+    await expect(checkbox).toBeChecked();
+    await checkbox.click();
+    await expect(checkbox).not.toBeChecked();
+  });
+
+  test('shows Breakout and VCP toggles checked when enabled', async ({ page }) => {
+    await openPopup(page, {
+      'trendcast:settings': {
+        ...MOCK_SETTINGS,
+        enabledSources: {
+          ...MOCK_SETTINGS.enabledSources,
+          stockScreener: true,
+          stockScreener2: true,
+        },
+      },
+    });
+    await page.locator('nav button', { hasText: 'Settings' }).click();
+    await page.waitForTimeout(300);
+    const breakout = page.locator('main label', { hasText: '📰 Breakout' });
+    await expect(breakout).toBeVisible();
+    await expect(breakout.locator('input[type="checkbox"]')).toBeChecked();
+    const vcp = page.locator('main label', { hasText: '📰 VCP' });
+    await expect(vcp).toBeVisible();
+    await expect(vcp.locator('input[type="checkbox"]')).toBeChecked();
   });
 });
 

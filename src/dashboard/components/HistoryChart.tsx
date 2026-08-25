@@ -47,6 +47,9 @@ const PLATFORM_LABELS: Record<string, string> = {
   cnn: 'CNN',
   yahoo: 'Yahoo Finance',
   googleFinance: 'Google Finance',
+  usaStocksIndicator: 'Stock Indicator',
+  stockScreener: 'Breakout',
+  stockScreener2: 'VCP',
 };
 
 interface HistoryChartProps {

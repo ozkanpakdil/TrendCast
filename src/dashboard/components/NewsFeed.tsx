@@ -19,6 +19,9 @@ const sourceLabels: Record<string, string> = {
   googleFinance: 'Google',
   seekingalpha: 'Seeking Alpha',
   investing: 'Investing.com',
+  usaStocksIndicator: 'Stock Indicator',
+  stockScreener: 'Breakout',
+  stockScreener2: 'VCP',
 };
 
 /**
@@ -33,6 +36,9 @@ function sourceColor(source: string): string {
     googleFinance: [16, 185, 129], // emerald
     seekingalpha: [245, 158, 11],  // amber
     investing: [14, 165, 233],     // sky
+    usaStocksIndicator: [20, 184, 166], // teal
+    stockScreener: [249, 115, 22],  // orange
+    stockScreener2: [217, 70, 239], // fuchsia
   };
   const [r, g, b] = palette[source] ?? [51, 65, 85]; // slate fallback
   return `rgb(${r},${g},${b})`;
@@ -40,7 +46,9 @@ function sourceColor(source: string): string {
 
 /** Pick readable text color for a tile. */
 function textColor(source: string): string {
-  return source === 'seekingalpha' || source === 'investing' ? '#0f172a' : '#ffffff';
+  return source === 'seekingalpha' || source === 'investing' || source === 'stockScreener'
+    ? '#0f172a'
+    : '#ffffff';
 }
 
 /** Format publish time into a compact string. */
