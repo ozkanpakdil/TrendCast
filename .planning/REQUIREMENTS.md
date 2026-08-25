@@ -1,20 +1,17 @@
 # Requirements
 
 **Project:** TrendCast
-**Milestone:** v1.1 — News Source Fix
-**Date:** 2026-08-23
+**Milestone:** 0.1.5 — Stock Indicator News Sources
+**Date:** 2026-08-25
 
-## v1.1 Requirements
+## 0.1.5 Requirements
 
-### News Source Fix
+### Stock Indicator News Sources
 
-- [x] **NEWS-01**: User can see Seeking Alpha and Investing.com headlines in the news tab even with pre-existing saved settings (deep-merge `enabledSources` so newer source flags default to `true`)
-- [x] **NEWS-02**: Existing users' settings are migrated to backfill missing source flags (settings migration)
-- [x] **NEWS-03**: Regression coverage proves the deep-merge fix (unit tests)
-
-### Cross-Source Consensus Alerts
-
-- [x] **PHASE-10**: Surface important topics even with an empty watchlist by detecting when the same topic appears across >=3 distinct source types (mixing social + news), reusing the existing `newsSocialMatches` correlation output and the shared alert infrastructure
+- [ ] **SRC-03**: User can see headlines from the three stock-indicator RSS feeds (usa-stocks-indicator layoff/award reports, top-us-stock-tickers breakout screener, VCP screener-2) in the news tab
+- [ ] **SRC-04**: User can toggle each new source on/off in the popup settings, and the new sources are wired end-to-end (config, types, collector, background, dashboard labels/colors)
+- [ ] **SRC-05**: Existing users' settings are migrated so the new source flags default to `true` (deep-merge `enabledSources` + settings migration)
+- [ ] **SRC-06**: Per-source health/staleness tracking works for the new sources, and unit tests cover collection, deep-merge, and migration
 
 ## Out of Scope
 
@@ -26,13 +23,13 @@
 - Build own prediction market — out of scope, huge legal surface
 - Monetization / ads — internal tool
 - Over-engineered ML (huge LLMs by default) — regresses the "fast enough to trust daily" value
-- New data sources beyond the existing set — this milestone fixes the existing Seeking Alpha / Investing.com display bug only
+- Scraping the stock-indicator pages directly — the projects already publish RSS feeds; we consume those instead
 
 ## Traceability
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| NEWS-01 | Phase 9 | Validated |
-| NEWS-02 | Phase 9 | Validated |
-| NEWS-03 | Phase 9 | Validated |
-| PHASE-10 | Phase 10 | Validated |
+| SRC-03 | Phase 11 | Active |
+| SRC-04 | Phase 12 | Active |
+| SRC-05 | Phase 13 | Active |
+| SRC-06 | Phase 11 | Active |

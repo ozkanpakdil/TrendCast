@@ -138,3 +138,130 @@ describe('collectNews health map', () => {
     expect(health.cnn?.lastError).toContain('429');
   });
 });
+
+describe('collectNews stock-indicator sources', () => {
+  it('collects usaStocksIndicator items with the correct source and headline', async () => {
+    mockedFetch.mockResolvedValue({
+      status: 'ok',
+      items: [
+        {
+          title: 'Recent Tech Layoffs Stock Report - 2026-08-23',
+          link: 'https://ozkanpakdil.github.io/usa-stocks-indicator/posts/layoffs-2026-08-23/',
+          pubDate: new Date().toISOString(),
+        },
+      ],
+    });
+
+    const { news, health } = await collectNews(['usaStocksIndicator']);
+
+    expect(news).toHaveLength(1);
+    expect(news[0].source).toBe('usaStocksIndicator');
+    expect(news[0].headline).toBe('Recent Tech Layoffs Stock Report - 2026-08-23');
+    expect(health.usaStocksIndicator?.itemCount).toBe(1);
+    expect(health.usaStocksIndicator?.consecutiveFailures).toBe(0);
+  });
+
+  it('yields multiple distinct guid-derived ids for a shared-link screener feed', async () => {
+    // Every item shares the same `link`; only `guid` differs.
+    const sharedLink = 'https://example.com/screener';
+    mockedFetch.mockResolvedValue({
+      status: 'ok',
+      items: [
+        { title: 'US Stock Breakout Screener — 2026-08-25 — 22 hits — top: XPON (155.25)', link: sharedLink, guid: 'screener-2026-08-25-1', pubDate: new Date().toISOString() },
+        { title: 'US Stock Breakout Screener — 2026-08-25 — 22 hits — top: XPON (155.25)', link: sharedLink, guid: 'screener-2026-08-25-2', pubDate: new Date().toISOString() },
+        { title: 'US Stock Breakout Screener — 2026-08-25 — 22 hits — top: XPON (155.25)', link: sharedLink, guid: 'screener-2026-08-25-3', pubDate: new Date().toISOString() },
+      ],
+    });
+
+    const { news } = await collectNews(['stockScreener']);
+
+    expect(news).toHaveLength(3);
+    const ids = news.map((n) => n.id);
+    expect(new Set(ids).size).toBe(3);
+    // Ids are derived from the guid, not the shared link.
+    expect(ids).toContain('stockScreener:screener-2026-08-25-1');
+    expect(ids).toContain('stockScreener:screener-2026-08-25-2');
+    expect(ids).toContain('stockScreener:screener-2026-08-25-3');
+  });
+
+  it('falls back to link when a screener item has no guid', async () => {
+    mockedFetch.mockResolvedValue({
+      status: 'ok',
+      items: [
+        { title: 'VCP Screener-2 — 2026-08-25 — 1478 hits — 4 VCP', link: 'https://example.com/screener2', pubDate: new Date().toISOString() },
+      ],
+    });
+
+    const { news } = await collectNews(['stockScreener2']);
+
+    expect(news).toHaveLength(1);
+    expect(news[0].id).toBe('stockScreener2:https://example.com/screener2');
+  });
+
+  it('preserves titles verbatim (not Google-News-stripped) for the new sources', async () => {
+    // A title with a " - " date suffix must NOT be stripped for the new sources.
+    mockedFetch.mockResolvedValue({
+      status: 'ok',
+      items: [
+        {
+          title: 'USA Government Awards Stock Report - 2026-08-23',
+          link: 'https://example.com/usa-stocks-indicator/awards-2026-08-23/',
+          pubDate: new Date().toISOString(),
+        },
+      ],
+    });
+
+    const { news } = await collectNews(['usaStocksIndicator']);
+
+    expect(news[0].headline).toBe('USA Government Awards Stock Report - 2026-08-23');
+  });
+
+  it('omits summary for the screener sources but keeps it for existing sources', async () => {
+    mockedFetch
+      .mockResolvedValueOnce({
+        status: 'ok',
+        items: [
+          {
+            title: 'US Stock Breakout Screener — 2026-08-25 — 22 hits',
+            link: 'https://example.com/screener',
+            guid: 'screener-1',
+            description: '<table><tr><td>XPON</td></tr></table>',
+            pubDate: new Date().toISOString(),
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        status: 'ok',
+        items: [
+          {
+            title: 'BBC headline',
+            link: 'https://example.com/bbc/1',
+            description: '<p>Some BBC summary</p>',
+            pubDate: new Date().toISOString(),
+          },
+        ],
+      });
+
+    const { news } = await collectNews(['stockScreener', 'bbc']);
+
+    const screener = news.find((n) => n.source === 'stockScreener');
+    const bbc = news.find((n) => n.source === 'bbc');
+    expect(screener?.summary).toBeUndefined();
+    expect(bbc?.summary).toBe('Some BBC summary');
+  });
+
+  it('records health for a new source with itemCount and consecutiveFailures', async () => {
+    mockedFetch.mockResolvedValue({
+      status: 'ok',
+      items: [
+        { title: 'VCP Screener-2 — 2026-08-25 — 1478 hits — 4 VCP', link: 'https://example.com/screener2', guid: 'vcp-1', pubDate: new Date().toISOString() },
+      ],
+    });
+
+    const { health } = await collectNews(['stockScreener2']);
+
+    expect(health.stockScreener2?.itemCount).toBe(1);
+    expect(health.stockScreener2?.consecutiveFailures).toBe(0);
+    expect(health.stockScreener2?.lastError).toBeUndefined();
+  });
+});

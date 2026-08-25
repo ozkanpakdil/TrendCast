@@ -86,8 +86,19 @@ export interface SocialSignal {
 /**
  * News sources that don't require login.
  * BBC and CNN headlines are scraped from their public RSS/feed pages.
+ * The stock-indicator sources (usaStocksIndicator, stockScreener,
+ * stockScreener2) are RSS feeds from the user's own indicator projects.
  */
-export type NewsSource = 'bbc' | 'cnn' | 'yahoo' | 'googleFinance' | 'seekingalpha' | 'investing';
+export type NewsSource =
+  | 'bbc'
+  | 'cnn'
+  | 'yahoo'
+  | 'googleFinance'
+  | 'seekingalpha'
+  | 'investing'
+  | 'usaStocksIndicator'
+  | 'stockScreener'
+  | 'stockScreener2';
 
 /**
  * Per-source fetch outcome recorded at collection time.
@@ -544,6 +555,9 @@ export interface ExtensionSettings {
     googleFinance: boolean;
     seekingalpha: boolean;
     investing: boolean;
+    usaStocksIndicator: boolean;
+    stockScreener: boolean;
+    stockScreener2: boolean;
   };
   /** Minimum virality score to highlight a signal (0–100). */
   highlightThreshold: number;
@@ -590,6 +604,9 @@ export const DEFAULT_SETTINGS: ExtensionSettings = {
     googleFinance: true,
     seekingalpha: true,
     investing: true,
+    usaStocksIndicator: true,
+    stockScreener: true,
+    stockScreener2: true,
   },
   highlightThreshold: 60,
   overrideNewTab: true,

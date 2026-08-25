@@ -38,6 +38,9 @@ const sourceLabels: Record<NewsSource, string> = {
   googleFinance: 'Google',
   seekingalpha: 'Seeking Alpha',
   investing: 'Investing.com',
+  usaStocksIndicator: 'Stock Indicator',
+  stockScreener: 'Breakout',
+  stockScreener2: 'VCP',
 };
 
 /** Domain used to fetch each source's favicon via Google's s2 service. */
@@ -48,6 +51,9 @@ const sourceDomains: Record<NewsSource, string> = {
   googleFinance: 'news.google.com',
   seekingalpha: 'seekingalpha.com',
   investing: 'investing.com',
+  usaStocksIndicator: 'ozkanpakdil.github.io',
+  stockScreener: 'ozkanpakdil.github.io',
+  stockScreener2: 'ozkanpakdil.github.io',
 };
 
 /** Ordered list of sources to render (stable order). */
@@ -58,6 +64,9 @@ const SOURCE_ORDER: NewsSource[] = [
   'googleFinance',
   'seekingalpha',
   'investing',
+  'usaStocksIndicator',
+  'stockScreener',
+  'stockScreener2',
 ];
 
 /** Status word + color classes per health state (never brand-500). */

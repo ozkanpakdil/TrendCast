@@ -122,4 +122,23 @@ describe('migrateEnabledSources (NEWS-02)', () => {
     expect(stored.enabledSources!.seekingalpha).toBeUndefined();
     expect(stored.enabledSources!.investing).toBeUndefined();
   });
+
+  it('backfills the three stock-indicator flags to true when absent', () => {
+    const stored = staleSettings();
+    const out = migrateEnabledSources(stored);
+    expect(out).not.toBeNull();
+    expect(out!.enabledSources!.usaStocksIndicator).toBe(true);
+    expect(out!.enabledSources!.stockScreener).toBe(true);
+    expect(out!.enabledSources!.stockScreener2).toBe(true);
+  });
+
+  it('preserves an explicit stockScreener:false while backfilling the other new flags', () => {
+    const stored = staleSettings();
+    stored.enabledSources = { ...stored.enabledSources!, stockScreener: false };
+    const out = migrateEnabledSources(stored);
+    expect(out).not.toBeNull();
+    expect(out!.enabledSources!.stockScreener).toBe(false);
+    expect(out!.enabledSources!.usaStocksIndicator).toBe(true);
+    expect(out!.enabledSources!.stockScreener2).toBe(true);
+  });
 });

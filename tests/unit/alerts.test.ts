@@ -106,6 +106,7 @@ function settings(partial: Partial<ExtensionSettings> = {}): ExtensionSettings {
     enabledSources: {
       polymarket: true, kalshi: true, x: true, reddit: true, tiktok: false,
       bbc: true, cnn: true, yahoo: true, googleFinance: true, seekingalpha: true, investing: true,
+      usaStocksIndicator: true, stockScreener: true, stockScreener2: true,
     },
     highlightThreshold: 60,
     overrideNewTab: true,

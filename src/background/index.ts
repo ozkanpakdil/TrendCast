@@ -573,14 +573,18 @@ async function runCollection(): Promise<CollectionSnapshot> {
     );
   }
 
-  // News (BBC, CNN, Yahoo Finance, Google News finance, Seeking Alpha, Investing.com)
-  const newsSources: Array<'bbc' | 'cnn' | 'yahoo' | 'googleFinance' | 'seekingalpha' | 'investing'> = [];
+  // News (BBC, CNN, Yahoo Finance, Google News finance, Seeking Alpha, Investing.com,
+  // plus the stock-indicator feeds: usaStocksIndicator, stockScreener, stockScreener2)
+  const newsSources: Array<'bbc' | 'cnn' | 'yahoo' | 'googleFinance' | 'seekingalpha' | 'investing' | 'usaStocksIndicator' | 'stockScreener' | 'stockScreener2'> = [];
   if (enabled.bbc) newsSources.push('bbc');
   if (enabled.cnn) newsSources.push('cnn');
   if (enabled.yahoo) newsSources.push('yahoo');
   if (enabled.googleFinance) newsSources.push('googleFinance');
   if (enabled.seekingalpha) newsSources.push('seekingalpha');
   if (enabled.investing) newsSources.push('investing');
+  if (enabled.usaStocksIndicator) newsSources.push('usaStocksIndicator');
+  if (enabled.stockScreener) newsSources.push('stockScreener');
+  if (enabled.stockScreener2) newsSources.push('stockScreener2');
   let newsHealth: SourceHealth = {};
   if (newsSources.length > 0) {
     const prevSnapshot = await getLatestSnapshot();

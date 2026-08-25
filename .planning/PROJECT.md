@@ -8,15 +8,15 @@ A 100% client-side Manifest V3 browser extension (Chrome + Firefox) that collect
 
 Surface the strongest, most reliable signal of what prediction markets are moving and why — by correlating social hype, news, and market odds — fast enough that the user trusts it as a daily decision aid.
 
-## Current Milestone: v1.1 News Source Fix — COMPLETE
+## Current Milestone: 0.1.5 Stock Indicator News Sources
 
-**Goal:** Fix the news tab so Seeking Alpha and Investing.com headlines actually appear for existing users.
+**Goal:** Add the user's own stock-indicator feeds (usa-stocks-indicator layoff/award reports + top-us-stock-tickers breakout/VCP screeners) as first-class news sources in the collector, dashboard, and settings.
 
-**Shipped (2026-08-24):**
-- Deep-merge `enabledSources` so newer source flags default to `true` for existing users
-- Settings migration to backfill missing source flags on load
-- Regression coverage (unit tests for the merge fix)
-- Cross-source consensus alerts (Phase 10): surface important topics even with an empty watchlist by detecting when the same topic appears across >=3 distinct source types (mixing social + news)
+**Target features:**
+- Collect headlines from the three existing RSS feeds (usa-stocks-indicator index.xml, screener rss.xml, screener2 rss.xml) via the rss2json proxy
+- Wire new sources end-to-end: config, types, collector, background, dashboard labels/colors, popup settings toggles
+- Settings deep-merge + migration so existing users get the new source flags enabled by default
+- Health/staleness tracking + unit test coverage for the new sources
 
 ## Requirements
 
@@ -52,6 +52,10 @@ Surface the strongest, most reliable signal of what prediction markets are movin
 - ✓ Seeking Alpha + Investing.com news appears in the news tab for existing users (deep-merge `enabledSources` + migration) — v1.1 (NEWS-01)
 - ✓ Regression coverage for the settings deep-merge fix — v1.1 (NEWS-02)
 - ✓ Cross-source consensus alerts (>=3 distinct source types, social + news mix) — v1.1 (PHASE-10)
+- Collect headlines from the three stock-indicator RSS feeds (usa-stocks-indicator, screener, screener2) — 0.1.5 (SRC-03)
+- Wire new sources end-to-end (config, types, collector, background, dashboard, popup) — 0.1.5 (SRC-04)
+- Settings deep-merge + migration for the new source flags — 0.1.5 (SRC-05)
+- Health/staleness tracking + unit test coverage for the new sources — 0.1.5 (SRC-06)
 
 ### Out of Scope
 
@@ -127,4 +131,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-08-24 — Milestone v1.1 complete (News Source Fix + Cross-Source Consensus Alerts)*
+*Last updated: 2026-08-25 — Milestone 0.1.5 started (Stock Indicator News Sources)*

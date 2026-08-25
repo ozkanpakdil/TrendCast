@@ -32,8 +32,18 @@ interface Rss2JsonResponse {
     enclosure?: {
       link?: string;
     };
+    /** Feed item GUID. Used to derive dedup-safe ids for feeds whose items share a single `link`. */
+    guid?: string;
   }>;
 }
+
+/**
+ * Sources whose feed items all share a single `link` (e.g. a screener feed
+ * where every hit points to the same page). For these, the item `id` must be
+ * derived from the feed `guid` (falling back to `link`) so `mergeNews`'s
+ * Map-dedup (keyed by `id`) does not collapse every item into one.
+ */
+const GUID_BASED_SOURCES: ReadonlySet<NewsSource> = new Set(['stockScreener', 'stockScreener2']);
 
 /**
  * Collect news headlines from configured sources via rss2json.com.
@@ -126,6 +136,9 @@ async function collectFromSource(source: NewsSource): Promise<CollectResult> {
     googleFinance: CONFIG.scrape.googleFinance,
     seekingalpha: CONFIG.scrape.seekingalpha,
     investing: CONFIG.scrape.investing,
+    usaStocksIndicator: CONFIG.scrape.usaStocksIndicator,
+    stockScreener: CONFIG.scrape.stockScreener,
+    stockScreener2: CONFIG.scrape.stockScreener2,
   };
   const apiUrl = configMap[source].rssUrl;
 
@@ -174,11 +187,23 @@ async function collectFromSource(source: NewsSource): Promise<CollectResult> {
             const fullText = description ? `${headline} ${description}` : headline;
             const imageUrl = item.thumbnail ?? item.enclosure?.link ?? undefined;
 
+            // The two screener feeds share a single `link` across all items, so
+            // derive the id from the feed `guid` (falling back to `link`) to keep
+            // each item distinct through mergeNews's Map-dedup. Existing sources
+            // keep their `link`-based ids to avoid re-dedup churn on stored items.
+            const id = GUID_BASED_SOURCES.has(source)
+              ? (item.guid?.trim() || link)
+              : link;
+
+            // The screener feeds carry large HTML <table> CDATA descriptions that
+            // would bloat storage, so omit `summary` for them (headline only).
+            const summary = GUID_BASED_SOURCES.has(source) ? undefined : description;
+
             return {
-              id: `${source}:${link}`,
+              id: `${source}:${id}`,
               source,
               headline,
-              summary: description,
+              summary,
               url: link,
               publishedAt: item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString(),
               keywords: extractKeywords(fullText),

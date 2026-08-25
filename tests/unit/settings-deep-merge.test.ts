@@ -109,4 +109,53 @@ describe('deepMergeSettings', () => {
     // Unspecified top-level field keeps the default.
     expect(result.maxHistoryEntries).toBe(DEFAULT_SETTINGS.maxHistoryEntries);
   });
+
+  it('backfills the three stock-indicator flags to true for partial stored settings', () => {
+    const stored = {
+      enabledSources: {
+        polymarket: true,
+        kalshi: true,
+        x: true,
+        reddit: true,
+        tiktok: true,
+        bbc: true,
+        cnn: true,
+        yahoo: true,
+        googleFinance: true,
+        seekingalpha: true,
+        investing: true,
+        // usaStocksIndicator, stockScreener, stockScreener2 missing (older saved settings)
+      },
+    } as Partial<typeof DEFAULT_SETTINGS>;
+    const result = deepMergeSettings(DEFAULT_SETTINGS, stored);
+    expect(result.enabledSources.usaStocksIndicator).toBe(true);
+    expect(result.enabledSources.stockScreener).toBe(true);
+    expect(result.enabledSources.stockScreener2).toBe(true);
+  });
+
+  it('preserves an explicit stockScreener: false while backfilling the other new flags', () => {
+    const stored = {
+      enabledSources: {
+        ...DEFAULT_SETTINGS.enabledSources,
+        stockScreener: false,
+      },
+    };
+    const result = deepMergeSettings(DEFAULT_SETTINGS, stored);
+    expect(result.enabledSources.stockScreener).toBe(false);
+    expect(result.enabledSources.usaStocksIndicator).toBe(true);
+    expect(result.enabledSources.stockScreener2).toBe(true);
+  });
+
+  it('preserves an explicit usaStocksIndicator: false while backfilling the rest (mixed explicit-off + default-on)', () => {
+    const stored = {
+      enabledSources: {
+        ...DEFAULT_SETTINGS.enabledSources,
+        usaStocksIndicator: false,
+      },
+    };
+    const result = deepMergeSettings(DEFAULT_SETTINGS, stored);
+    expect(result.enabledSources.usaStocksIndicator).toBe(false);
+    expect(result.enabledSources.stockScreener).toBe(true);
+    expect(result.enabledSources.stockScreener2).toBe(true);
+  });
 });

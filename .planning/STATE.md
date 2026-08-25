@@ -1,20 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.1
-status: Awaiting next milestone
-stopped_at: Phase 10 complete — all phases complete
-last_updated: "2026-08-24T21:50:32.100Z"
-last_activity: 2026-08-24
-last_activity_desc: Milestone v1.1 completed and archived
-state_head: 4f0cbfc1b86220b0127cc4afb15335714a5730c2
+milestone: 0.1.5
+milestone_name: Stock Indicator News Sources
+status: planning
+last_updated: "2026-08-25T19:20:25.109Z"
+last_activity: 2026-08-25
 progress:
-  total_phases: 1
-  completed_phases: 1
-  total_plans: 4
-  completed_plans: 4
-  percent: 100
-milestone_name: News Source Fix
-current_phase: 10
+  total_phases: 3
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -24,14 +20,14 @@ current_phase: 10
 See: .planning/PROJECT.md (updated 2026-08-24)
 
 **Core value:** Surface the strongest, most reliable signal of what prediction markets are moving and why — by correlating social hype, news, and market odds — fast enough that the user trusts it as a daily decision aid.
-**Current focus:** Milestone v1.1 complete — ready for next milestone
+**Current focus:** Milestone 0.1.5 — Stock Indicator News Sources (roadmap defined, planning phases)
 
 ## Current Position
 
-Phase: Milestone v1.1 complete
+Phase: 11 — Stock Indicator Source Collection & Health (first phase of 0.1.5)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-08-24 — Milestone v1.1 completed and archived
+Status: Planning
+Last activity: 2026-08-25 — Milestone 0.1.5 roadmap created (Phases 11-13)
 
 ## Performance Metrics
 
@@ -82,6 +78,7 @@ Recent decisions affecting current work:
 ### Roadmap Evolution
 
 - Phase 10 added: Cross-source consensus alerts
+- Milestone 0.1.5 roadmap created: Phases 11-13 (Stock Indicator News Sources) — Phase 11 collection & health, Phase 12 end-to-end wiring & UI, Phase 13 settings migration & regression tests
 
 ### Pending Todos
 

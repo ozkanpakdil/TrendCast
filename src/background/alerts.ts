@@ -231,6 +231,9 @@ const NEWS_SOURCES: ReadonlySet<string> = new Set<NewsSource>([
   'googleFinance',
   'seekingalpha',
   'investing',
+  'usaStocksIndicator',
+  'stockScreener',
+  'stockScreener2',
 ]);
 
 /** Normalize a keyword for stable topic clustering (lowercase, trimmed). */

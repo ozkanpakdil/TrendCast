@@ -134,6 +134,25 @@ export const CONFIG = {
       // Investing.com homepage as fallback for DOM scraping
       url: 'https://www.investing.com',
     },
+    usaStocksIndicator: {
+      // Public Company Stocks Indicator — weekly layoff/award stock reports
+      // from the user's own Hugo site (PaperMod theme, RSS already enabled).
+      rssUrl: 'https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent('https://ozkanpakdil.github.io/usa-stocks-indicator/index.xml'),
+      // Raw feed URL as the DOM fallback
+      url: 'https://ozkanpakdil.github.io/usa-stocks-indicator/index.xml',
+    },
+    stockScreener: {
+      // US Stock Breakout Screener — daily breakout hits feed.
+      rssUrl: 'https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent('https://ozkanpakdil.github.io/top-us-stock-tickers/data/screener/rss.xml'),
+      // Raw feed URL as the DOM fallback
+      url: 'https://ozkanpakdil.github.io/top-us-stock-tickers/data/screener/rss.xml',
+    },
+    stockScreener2: {
+      // VCP Screener-2 — Volatility Contraction Pattern daily feed.
+      rssUrl: 'https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent('https://ozkanpakdil.github.io/top-us-stock-tickers/data/screener2/rss.xml'),
+      // Raw feed URL as the DOM fallback
+      url: 'https://ozkanpakdil.github.io/top-us-stock-tickers/data/screener2/rss.xml',
+    },
   },
 
   // ── Background collection ─────────────────────────────────────
