@@ -47,38 +47,56 @@
 ## Phase Details
 
 ### Phase 14: Ticker/Cashtag Bridging
+
 **Goal**: Stock-indicator news items correlate with social/news/market signals about the same company — `$AMZN`, bare `AMZN`, and org name `Amazon` resolve to one canonical entity, and keyword-level correlation bridges the forms too
 **Depends on**: Nothing (first phase of milestone)
 **Requirements**: CORR-01, CORR-02, CORR-03, CORR-04
 **Success Criteria** (what must be TRUE):
+
   1. A stock-indicator news item about Amazon and a social signal carrying `$AMZN` produce a correlation match (entity and keyword level), where none existed before
   2. Bare all-caps tickers (`AMZN`) resolve to entities only when they match `KNOWN_TICKERS` — English words (`ALL`, `ON`, `V`) and screener noise (`vcp`, `2026`, `breakout`) never create matches
   3. Screener template tokens (source labels, dates, `vcp`/`breakout` boilerplate) are absent from stock-indicator item keywords
   4. Existing correlation match sets are unchanged for non-bridged data — `correlation-equivalence` and `embedding-equivalence` suites pass without relaxed assertions
   5. Source health shows bridging coverage: count of stock-indicator items that produced a canonical ticker entity vs total
-**Plans**: TBD
+
+**Plans**: 2 plans
+
+Plans:
+**Wave 1**
+
+- [ ] 14-01-PLAN.md — Keyword/entity canonicalization: bare cashtag emission, strip-$ legacy bridge, bare-caps ticker recognition with gates, ticker↔org entity unification, boost-detection rework (CORR-01, CORR-02)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 14-02-PLAN.md — Stock-indicator keyword curation + bridging coverage projection and SourceHealthIndicator display (CORR-03, CORR-04)
 
 ### Phase 15: ML Run Orchestration & Progress
+
 **Goal**: ML correlation progress always reaches a terminal state and reflects reality — progress is scoped per run, the worker is serialized, model downloads are visible, and no path leaves the UI stuck
 **Depends on**: Phase 14 (bridging changes keyword inputs; fix progress on the post-bridging pipeline)
 **Requirements**: MLPROG-01, MLPROG-02
 **Success Criteria** (what must be TRUE):
+
   1. Progress bar always settles: on success, ML error, and cancel, the loading state clears — no stuck bar even when a `precompute-*` run overlaps a `corr-*` run
   2. Progress and result acceptance are scoped by `requestId` — a late/overlapping run's messages never update or settle another run's UI
   3. First-run model download shows a `loading-model` progress phase driven by `progress_callback` events (per-file `initiate`/`download`/`progress`/`done`), instead of silence
   4. ML runs are serialized through the background worker — overlapping requests queue rather than overwrite each other's resolver
   5. A run interrupted by MV3 service-worker death leaves a persisted run-state marker any tab can use to reconstruct/clear stale progress
+
 **Plans**: TBD
 
 ### Phase 16: Correlation Persistence & Analysis Triggers
+
 **Goal**: Correlation results survive restarts with visible freshness, and analysis runs at the right times — cached results show instantly on tab open, fresh analysis runs only when none exists, and collection completion triggers re-analysis
 **Depends on**: Phase 15 (trigger changes need the serialized run queue to be race-safe; existence check needs `computedAt` metadata)
 **Requirements**: TRIG-01, TRIG-02, TRIG-03, TRIG-04
 **Success Criteria** (what must be TRUE):
+
   1. Every terminal run path (success, ML error, cancel) writes `CONFIG.storage.correlations` with `computedAt` + input metadata; results survive tab/session restart
   2. An error result never clobbers a fresh good cached result, and a persisted error result never suppresses future auto-analysis
   3. Opening the dashboard shows cached results instantly with no auto-analyze; analysis auto-runs only when no stored (non-error) analysis exists
   4. Completing collectNow triggers re-analysis via `storage.onChanged` on snapshot keys, and the Correlations header shows `computedAt` + engine so live vs cached is distinguishable
+
 **Plans**: TBD
 
 ## Progress
@@ -88,7 +106,7 @@ Phases execute in numeric order: 14 → 15 → 16
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 14. Ticker/Cashtag Bridging | 0/TBD | Not started | - |
+| 14. Ticker/Cashtag Bridging | 0/2 | Not started | - |
 | 15. ML Run Orchestration & Progress | 0/TBD | Not started | - |
 | 16. Correlation Persistence & Analysis Triggers | 0/TBD | Not started | - |
 
