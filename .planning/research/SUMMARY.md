@@ -1,175 +1,152 @@
 # Project Research Summary
 
-**Project:** TrendCast — Milestone v1.0 (Speed, Alerts & New Data)
-**Domain:** Prediction-market correlation browser extension (Manifest V3, Chrome + Firefox, 100% client-side)
-**Researched:** 2026-08-22
+**Project:** TrendCast
+**Domain:** Browser-extension bugfix/hardening milestone (MV3, 100% client-side) — correlation matching, ML progress UX, analysis scheduling, result persistence
+**Researched:** 2026-08-27
 **Confidence:** HIGH
 
 ## Executive Summary
 
-TrendCast is a 100% client-side MV3 browser extension that correlates social sentiment, news, and prediction-market odds to answer "what's moving and why." Experts build this as a **background-orchestrator + storage-as-state + React-UI** extension: the background service worker orchestrates collection and correlation, `chrome.storage.local` is the source of truth, and the dashboard/popup read snapshots and send typed messages. This milestone adds **speed, alerts, and new data** on top of a proven, working system — the research is unanimous that we must **not re-architect** the existing stack (TypeScript 5.5 strict, React 18, Vite 5 + @crxjs, Tailwind 3, @huggingface/transformers 3.7, Vitest, Playwright, Bun).
+v0.1.6 "fix correlation" is a fix-scoped milestone on a mature codebase: four behaviors the product already promises but doesn't deliver. All four researchers independently converged on the same conclusions — **zero new dependencies**, every fix is a modification of existing modules, and every root cause is pinned to a specific file by direct code inspection. This is not a design problem; it is a precision problem. The existing architecture (background-orchestrator + storage-as-state + React dashboard) is correct and stays untouched; the fixes repair broken hops inside it.
 
-The recommended approach is a **dependency-light hardening milestone**: add **zero new runtime dependencies**. The four flagship capabilities — inverted-index correlation speedup, deduped/throttled/watchlist-scoped correlation alerts, a market-driven news view, and a TikTok collector — are all implementable with the existing stack plus platform APIs (`chrome.notifications`, `chrome.alarms`, `chrome.storage.local`, DOM scraping). The single highest-leverage change is the **inverted keyword→contract index**, which collapses the O(n×m) correlation loop into near-linear candidate filtering and *enables* both faster alerts and a faster market-driven view. The only manifest change is adding the `notifications` permission.
+The root causes, verified against source: **(1) Bridging** — dual canonicalization in `src/utils/entities.ts` (cashtags normalize to bare ticker `amzn`, but `KNOWN_ORGS` aliases canonicalize to org name `amazon`) plus `src/utils/keywords.ts` keeping the `$` prefix on cashtag keywords, plus bare all-caps tickers (`AMZN`) matching no entity pattern at all. Stock-indicator news and `$AMZN` social signals never intersect in either the keyword or entity space. **(2) ML progress** — `createPipelineWithFallback()` in `src/services/engine/ml/transformers.ts` passes no `progress_callback` (model download is silent), `useCorrelations.ts` applies progress unconditionally but rejects results on `requestId` mismatch (`precompute-*` vs `corr-*`), and the single-slot `mlWorker` resolver in `src/background/index.ts` lets overlapping runs overwrite each other — the worker finishes but the dashboard's loading state never settles. **(3) Triggers** — the `corrInitRef` effect in `src/dashboard/App.tsx` auto-runs correlation on every dashboard open. **(4) Persistence** — results already write to `CONFIG.storage.correlations`, but lack `computedAt`/input-count metadata (so "does an analysis exist?" is unanswerable), error results clobber good cached ones, and dual appliers (message listener + storage poll) can double-record runs.
 
-The key risks are all **"looks done but isn't"** failure modes: alert fatigue from un-deduped notifications, silent alert failure from a missing `iconUrl`/permission check, category-taxonomy drift, TikTok breaking the whole collection pipeline, and an inverted index that silently changes correlation results. Every one is preventable with a specific guard (dedup+throttle+watchlist scope, `getPermissionLevel()` + packaged icon, single-source taxonomy, hard timeout + isolation, golden-test equivalence). The research flags TikTok collection as the only MEDIUM-confidence area — it has no public API and needs phase-specific feasibility research.
+The recommended approach: canonicalize all ticker-like tokens to bare lowercase form at extraction **and** comparison time (comparison-time canonicalization rescues already-stored legacy data without a migration); wire `progress_callback` at the single `createPipelineWithFallback` choke point and scope all progress/result handling by `requestId` with a storage-backed run-state record as truth (broadcasts are hints); make the background the sole owner of post-collection re-analysis while the dashboard's only trigger responsibility is the mount-time "no analysis exists" case. The key risks are over-bridging false positives (gate bare-ticker recognition on `KNOWN_TICKERS`), silently breaking the inverted-index superset invariant (the equivalence suites are the guard — never relax their assertions), the "stuck bar" bug class (every terminal path must funnel through one settle), and MV3 service-worker death mid-run (persisted run marker is the recovery path).
 
 ## Key Findings
 
 ### Recommended Stack
 
-The existing stack is **unchanged** — this milestone adds zero new runtime dependencies. The only "installation" change is adding `'notifications'` to the `permissions` array in `src/manifest.config.ts` (triggers a one-time permission prompt, expected for alerts).
+**Zero new runtime dependencies.** All four features are pure-TypeScript fixes in existing modules; adding any library would be overbuilding on a privacy-focused, ~7 MB-budget extension. The only "new" surface is a verified API of an existing dependency.
 
-**Core technologies:**
-- `chrome.notifications` (via `webextension-polyfill`): correlation alerts — the ONLY notification API that works from an MV3 background service worker; cross-browser via the existing polyfill; use `basic`/`list` templates (avoid deprecated `image`).
-- `@huggingface/transformers` 3.7.x `device:'webgpu'` + `dtype`: ML acceleration — extend the existing LLM WebGPU-detection + WASM-fallback pattern (`llm.ts` lines 256–287) to embedding/sentiment/zero-shot/NER pipelines. **Do NOT upgrade to v4.x** (breaking major).
-- Hand-rolled `Map`-based inverted keyword→contract index: correlation speedup — generalize the zero-shot engine's `findCandidateContracts` into a shared `Map<keyword, contractId[]>`; dependency-free, trivially testable.
-- `chrome.storage.local` (keep) + per-key caps + incremental byte estimation: storage hardening — fix `estimateBytes` (re-serializes the whole store via `Blob` on every check); use `getBytesInUse()` as the authoritative budget. Do NOT migrate to IndexedDB at this scale.
-- TikTok DOM scraping (content script): TikTok collection — no official key-free API; the manifest already has `*://tiktok.com/*` host perms; the gap is a missing collector function + barrel export. Best-effort with graceful degradation.
-- Category taxonomy (reuse `redditCategories`): market-driven news view — reuse the existing finance/crypto/economics/sports/entertainment/technology/politics taxonomy; no new dep.
-
-**Deferred stack:** `flexsearch` (only if fuzzy news matching needed), `idb` (only if data exceeds ~10 MB quota), `onnxruntime-web` explicit pin (already transitive). All deferred — not needed this milestone.
+**Core technologies (all installed, unchanged):**
+- TypeScript ^5.5.4 (strict) — all fix logic; `tsc --noEmit` gate in every build
+- React ^18.3.1 — trigger behavior + progress UI; `useRef`/effect changes only, no state library
+- @huggingface/transformers 3.8.1 (installed) — `progress_callback` API **verified against the installed copy** (`node_modules/.../hub.js`): events `{status: 'initiate'|'download'|'progress'|'done', name, file, progress?, loaded?, total?}`; **no `'ready'` status exists** — treat pipeline-promise resolution as load-complete
+- webextension-polyfill 0.12.0 — `browser.storage.local` persistence via existing `CONFIG.storage.correlations` key (already in `BUDGET_KEYS`)
+- Vitest ^2.0.5 + Playwright ^1.62.1 — pure-function tests (`normalizeTicker`, `shouldAutoAnalyze`) + trigger/persistence e2e; **Bun mandatory** (never npm/npx)
 
 ### Expected Features
 
-**Must have (table stakes):**
-- Correlation alerts that don't spam — dedupe + throttle + watchlist-scoping are the *minimum* for usability, not polish.
-- Watchlist-scoped alerting — alert only on watchlisted markets; the highest-value, lowest-fatigue model.
-- Direction-aware alerts (bullish/bearish) — derived from signal sentiment + Yes-price delta.
-- Watchlist sort/filter/correlation status — organize tracked markets and see movement at a glance.
-- Export coverage for new sources — keep export complete as TikTok + market-driven data grow.
+**Must have (table stakes — the milestone's definition of done):**
+- Unified ticker/cashtag canonicalization — `$AMZN`, bare `AMZN`, and org name `Amazon` collapse to one canonical key; stock-indicator news correlates with social/news/markets (the headline fix)
+- Keyword-form bridging — `extractKeywords` emits bare cashtag forms (or comparison normalizes both sides) so keyword-level Jaccard bridges too
+- Terminal-state progress fix — progress scoped by `requestId`; result acceptance no longer deadlocks on `precompute-*` vs `corr-*`; progress clears on success/error/cancel
+- Model-download progress events — `progress_callback` wired into pipeline creation, surfaced as a `loading-model` phase
+- Result persistence with freshness metadata — every terminal path writes `computedAt` (+ input counts); error results don't clobber fresh good results
+- Trigger behavior — no auto-analyze on tab open; run only when no stored analysis; re-analyze when collection completes
+- Keyword noise filtering — screener tokens (`vcp`, `2026`, `breakout`) kept out of stock-indicator item keywords
+- Unit + equivalence tests — bridged matches appear, existing match sets unchanged, trigger logic covered
 
-**Should have (competitive):**
-- **"Market-driven news" view** (flagship differentiator) — flip the correlation: important markets → their news → directional implication. Scoped to 3 categories (finance, politics, tech) for v1.
-- **Correlation alerts with direction** — "market X is moving up and the news is bullish."
-- **TikTok collector** — novel social signal; high value but high fragility.
-- **Inverted-index correlation speedup** — collapses O(n×m) to near-linear; enables alerts + market-driven view.
-- **Category coverage** — organize the market-driven view by category.
+**Should have (cheap differentiators):**
+- Per-file download progress aggregation (falls out of `progress_callback` wiring)
+- Stale-result badge ("results from 14:32") — renders for free once `computedAt` exists
 
-**Defer (v2+):**
-- Full category taxonomy (sports, entertainment, crypto, economics) — expand beyond 3 categories.
-- WebGPU-accelerated ML — only when the user opts into large models.
-- Manual "refresh now" + configurable interval — nice-to-have control.
+**Defer (v1.0.7+/v2):**
+- Bridging diagnostics in source health; full ticker universe beyond `KNOWN_TICKERS`; cross-run embedding-cache persistence
+
+**Anti-features (explicitly rejected by research):** fuzzy/substring ticker matching (false-positive class the entity-confidence system exists to prevent); auto-analyze on every tab open; persisting intermediate progress to storage; loosening `MIN_CONFIDENCE` to force matches.
 
 ### Architecture Approach
 
-Evolve the existing **background-orchestrator + storage-as-state + React-UI** pattern without abandoning it. Split the 883-line `src/background/index.ts` into focused modules (`correlation.ts`, `alerts.ts`, `correlationNews.ts`); add a shared `services/engine/index.ts` inverted index; add `services/collectors/tiktok.ts` following the one-file-per-platform convention; implement the empty `src/content/socials/index.ts` for TikTok DOM scraping; add `MarketDrivenNews.tsx` + `useAlerts.ts` to the dashboard.
-
-**Major components:**
-1. **Inverted keyword→contract index** (`services/engine/index.ts`) — shared candidate pre-filtering for heuristic AND ML correlation paths; single tokenization source.
-2. **Alert engine** (`background/alerts.ts`) — runs after correlation, reads persisted `alertState`, dedupes, dispatches `chrome.notifications`; ephemeral-worker-safe via alarms + storage, not timers.
-3. **Market-driven news aggregator** (`background/correlationNews.ts`) — read-only derived projection over markets + news + correlations; no new collection.
-4. **TikTok collector** (`services/collectors/tiktok.ts` + `content/socials/index.ts`) — content-script-driven DOM scraping reported via `REPORT_SOCIAL_DATA`; thin background normaliser.
-5. **Storage budget** (`utils/storage.ts`) — `getBytesInUse()` as authority + per-key caps + incremental byte deltas.
+The architecture is fixed — this milestone repairs hops inside the existing background-orchestrator + storage-as-state + React-dashboard structure. Four patterns govern the fixes: **(1)** canonicalization at the extraction boundary (plus comparison-time canonicalization for legacy stored rows — no data migration); **(2)** storage-as-state for run lifecycle (persist run-state to `chrome.storage.local`; treat broadcasts as fast-path hints — the established `alertState` precedent); **(3)** single-writer persistence helper (`persistCorrelationResult()` owned by the background; both run paths call it — mirrors the `merge.ts`/`alerts.ts` extraction precedent); **(4)** serialize access to the singleton ML worker (promise-chain queue). Anti-patterns to avoid: fixing bridging in the matcher only (the inverted index still keys on decorated keywords — candidates never surface), migrating stored keywords, trusting broadcasts for UI state, and two owners for "when to analyze."
 
 ### Critical Pitfalls
 
-1. **Correlation alerts fire on every match → notification fatigue + storage bloat** — dedupe by stable key (contract+signal+time-bucket), throttle (global + per-market cooldown), watchlist-scope, cap alert history (~100), direction-aware. Design in from the first alert, not retrofitted.
-2. **Notification permission denied / `iconUrl` missing → silent alert failure** — always pass a packaged `iconUrl` (remote URLs blocked in MV3), check `getPermissionLevel()` and fall back to an in-dashboard badge, declare `notifications` permission, test on BOTH Chrome and Firefox.
-3. **"Market-driven news" category taxonomy drifts → inconsistent classification** — define the taxonomy once in a single module with deterministic precedence (politics > finance > tech), persist category on the NewsItem at collection time, version the taxonomy, scope v1 to 3 categories.
-4. **TikTok collector breaks the whole pipeline → no graceful degradation** — hard timeout (5s), isolate as an optional step, best-effort contract (never degrade BBC/CNN/Polymarket/Kalshi), document ToS risk, manual URL-paste fallback.
-5. **Inverted index returns wrong results (or is never built) → correlation regresses** — single tokenization source shared by index + matcher, incremental index (cache by data version), apply to ALL paths (heuristic AND ML), golden-test equivalence vs the naive loop, keep naive fallback for tiny inputs.
-6. **Per-key storage caps + incremental byte estimation break the budget model** — use `chrome.storage.local.getBytesInUse()` as the authoritative total (cheap + exact), enforce per-key max item count + byte estimate at write time, track running byte deltas, account for UTF-16 serialization, test sustained collection stays under the 7 MB budget.
-7. **ML quantization / WebGPU breaks the WASM fallback (or regresses quality)** — device-detection + fallback chain (WebGPU → WASM), use `get_available_dtypes()` with a `["q4","q8","fp16","fp32"]` chain, golden-test quantized vs fp32 correlation equivalence, keep the worker WASM path working, stay on v3.7.x.
-8. **Watchlist/export improvements break existing data or regress the dashboard** — schema migration (version field + backfill on read), backward-compatible export (append sections, don't change columns), keep export complete for all sources, preserve virtualization (`VirtualizedGrid`), test against old-format stored data.
+1. **One-sided normalization** — normalizing at extraction only leaves days of stored old-format data un-bridged. Normalize at a single choke point **and** at comparison/load time; fixture-test with stored old-format data, not just fresh fixtures.
+2. **Inverted-index superset invariant break** — if normalization reaches the similarity functions but not `candidateKeywords()`/index postings (or vice versa), the fast path silently misses what the naive loop finds. Treat any `correlation-equivalence` failure as a real invariant break; never relax the assertions.
+3. **Over-bridging** — bare-word tickers collide with English (`ALL`, `ON`, `V`) and screener noise (`vcp`, `2026`). Gate bare-caps recognition on `KNOWN_TICKERS` ∩ length ≥ 2, exclude stop words, keep bridged-match confidence below cashtag's 0.95, and prefer boosting over threshold-bypassing.
+4. **Stuck-bar class bugs** — three compounding causes: silent model download (no `progress_callback`), requestId-gated result rejection, and worker death without an error message. Fix: `progress_callback` at the single choke point, requestId-scoped progress **and** results, one `settle()` for every terminal path, and a persisted run-state marker so any tab can reconstruct/clear state.
+5. **Trigger races and error-as-exists** — "analysis exists" checked in React state races the storage load; two trigger paths double-fire; persisted error results permanently suppress auto-analysis. Gate on the *loaded* cached correlations, define "exists" as present **and** `!error` **and** fresh, serialize through one guarded trigger function, and let the background own post-collection re-analysis.
+
+Also load-bearing: MV3 service-worker lifetime (persist a run marker `{requestId, engine, startedAt}` before starting; progress events incidentally keep the SW alive, so wiring download progress fixes UX *and* lifetime), and persistence hygiene (trim before persist, await and check every `set()`, idempotent apply via `lastAppliedRequestId` — fixes the existing double-history bug as a side effect).
 
 ## Implications for Roadmap
 
-Based on research, suggested phase structure:
+**Ordering note (consensus vs. conflict):** The orchestrator's suggested order was F1 → F2 → F3 → F4. ARCHITECTURE.md and FEATURES.md both identify a hard dependency the other way: the F3 trigger "analyze only if no analysis exists" is only answerable once results carry `computedAt` metadata (F4), and F3's triggers are only race-safe once the ML queue exists (F2). PITFALLS.md groups triggers+persistence as one phase. Synthesis: keep the consensus F1-first and F2-second, but place **F4 before F3** — or merge F4+F3 into a single phase if the roadmap prefers three phases. The phase structure below reflects the dependency-correct order.
 
-### Phase 1: Correlation Speedup (Inverted Index)
-**Rationale:** The inverted index is the highest-leverage change and a hard dependency for both alerts and the market-driven view — faster correlation means alerts fire promptly and the view renders quickly. It's a pure optimization with no new deps, so it de-risks everything downstream.
-**Delivers:** O(n×m) → near-linear candidate-filtered correlation across heuristic AND ML paths.
-**Addresses:** Inverted-index correlation speedup (P1).
-**Avoids:** Pitfall 5 (index drift) — golden-test equivalence vs the naive loop; single tokenization source; incremental index.
+### Phase 1: Ticker/Cashtag Bridging (F1)
+**Rationale:** Isolated, highest user value (correlation actually working — the v0.1.5 promise), pure functions with an existing equivalence-test harness as safety net; no dependencies on other phases.
+**Delivers:** `normalizeTicker` canonical form in `keywords.ts` + `entities.ts` (bare lowercase everywhere), bare all-caps ticker recognition gated on `KNOWN_TICKERS`, `$`-strip in `keywordSimilarity` for legacy stored data, cashtag-boost reworked to entity-type/ticker-set checks, stock-indicator keyword curation in `news.ts`.
+**Addresses:** Unified canonicalization, keyword-form bridging, keyword noise filtering.
+**Avoids:** Pitfalls 1–3 (one-sided normalization, index superset break, over-bridging).
 
-### Phase 2: Correlation Alerts
-**Rationale:** The core "surface what's moving" value. Depends on the speedup (Phase 1) and the existing correlation engine. Requires the `notifications` permission + `chrome.alarms` + persisted `alertState`.
-**Delivers:** Deduped, throttled, watchlist-scoped, direction-aware `chrome.notifications` alerts with an in-dashboard fallback.
-**Addresses:** Correlation alerts (P1), watchlist-scoped alerting, direction-aware alerts.
-**Avoids:** Pitfalls 1 (fatigue) and 2 (silent failure) — dedup/throttle/scope from day one; `iconUrl` + `getPermissionLevel()` + packaged icon.
+### Phase 2: ML Run Orchestration + Progress (F2)
+**Rationale:** The stuck-progress bug has three compounding causes that must be fixed together; the queue must exist before trigger changes (Phase 4) so triggers are race-safe. Uses the storage-as-state pattern Phase 3 formalizes.
+**Delivers:** Serialized ML run queue in `background/index.ts`; persisted run-state record (`trendcast:corr-run-state`, throttled writes); `progress_callback` wired in `createPipelineWithFallback` mapped to a `loading-model` phase; requestId-scoped progress + result acceptance in `useCorrelations`; single `settle()` terminal guarantee; run marker for MV3 SW-death recovery.
+**Addresses:** Terminal-state progress fix, model-download progress events.
+**Avoids:** Pitfalls 4–6 and 10 (silent download, no terminal state, late progress messages, SW lifetime).
 
-### Phase 3: Market-Driven News View
-**Rationale:** The flagship differentiator. Depends on the speedup (Phase 1) and the correlation engine's `newsMatches`/`newsSocialMatches` outputs. Reuses the `redditCategories` taxonomy.
-**Delivers:** A read-only derived view: notable markets → correlated news → directional implication, scoped to 3 categories (finance, politics, tech).
-**Addresses:** Market-driven news view (P1), category coverage.
-**Avoids:** Pitfall 3 (taxonomy drift) — single-source taxonomy module with deterministic precedence, category persisted at collection time.
+### Phase 3: Correlation Persistence + Freshness Metadata (F4)
+**Rationale:** Small, isolated, and a hard prerequisite for Phase 4 — the "analyze only if none exists" check is unanswerable without `computedAt`/error metadata. Also fixes existing bugs (error results clobbering good ones, double-recorded run history).
+**Delivers:** `computedAt` + `inputCounts` on `CorrelationResult` (optional fields, backfill on read); single `persistCorrelationResult()` helper (write → broadcast → alert sweep → market-news rebuild) used by both run paths; background-owned run stats; idempotent apply guard; trim-on-persist + quota check.
+**Addresses:** Result persistence with freshness metadata.
+**Avoids:** Pitfall 9 (quota, serialization, double-apply) and the error-result-clobbers-cache failure.
 
-### Phase 4: Watchlist Improvements + Export Coverage
-**Rationale:** Enhances alerts and daily use; keeps export complete as sources grow. Low cost, high daily value.
-**Delivers:** Watchlist sort/filter/correlation-status badges; export extended for TikTok + market-driven categories (backward-compatible).
-**Addresses:** Watchlist improvements (P2), export coverage (P2).
-**Avoids:** Pitfall 8 (schema drift / dashboard regression) — schema migration, backward-compatible export, preserve virtualization.
-
-### Phase 5: TikTok Collector
-**Rationale:** Novel social signal — a differentiator, not a table stake. Ship after the core is stable because it's the most fragile source.
-**Delivers:** Best-effort content-script-driven TikTok discover-page scraping → `SocialSignal`s, isolated with a hard timeout and graceful degradation.
-**Addresses:** TikTok collector (P2).
-**Avoids:** Pitfall 4 (pipeline break) — hard timeout, isolation, best-effort contract, ToS documentation, manual fallback.
-
-### Phase 6: Storage Caps + ML Quantization/WebGPU (Hardening)
-**Rationale:** Bounds the budget and accelerates ML — the two remaining hardening items. Storage caps are a prerequisite for adding more data sources later.
-**Delivers:** Per-key caps + `getBytesInUse()`-authoritative budget; WebGPU→WASM fallback chain for ML pipelines.
-**Addresses:** Storage caps, WebGPU ML acceleration (P3).
-**Avoids:** Pitfalls 6 (budget model) and 7 (quantization/WebGPU fallback).
+### Phase 4: Analysis Trigger Behavior (F3)
+**Rationale:** Last because it *changes when runs happen* — do it once the run machinery is safe (Phase 2's queue) and the existence check is answerable (Phase 3's metadata). Depends on both.
+**Delivers:** `corrInitRef` effect replaced by a gated mount-time check (`shouldAutoAnalyze({hasStoredResult, hasData})` pure function, gated on *loaded* cached correlations, excluding error results); background confirmed as sole owner of post-collection re-analysis (existing precompute path — dashboard adds no second trigger); in-flight guard serializing all trigger paths.
+**Addresses:** Trigger behavior (no auto-analyze on open; on-missing; post-collect).
+**Avoids:** Pitfalls 7–8 (trigger races, error-as-exists, stale-data re-analyze, double-fire).
 
 ### Phase Ordering Rationale
 
-- **Speed first:** The inverted index is a pure optimization with no dependencies and enables both flagship features — it must precede alerts and the market-driven view.
-- **Alerts before market-driven view:** Alerts are the core "surface what's moving" value and are lower complexity than the flagship view; the view's aggregation reuses the same correlation outputs.
-- **Low-cost wins before fragile sources:** Watchlist/export (LOW cost) ship before TikTok (HIGH cost, HIGH fragility) so the milestone delivers stable value before risking the fragile collector.
-- **Hardening last:** Storage caps + ML quantization are the final hardening pass that bounds the budget and quality before the milestone closes.
-- **Pitfall-driven grouping:** Each phase pairs with the specific pitfall it must avoid (fatigue, silent failure, taxonomy drift, pipeline break, index drift, budget, quantization, schema) — the research maps each pitfall to its prevention phase.
+- **F1 first:** isolated, highest user value, zero cross-phase deps; equivalence suites catch regressions immediately.
+- **F2 before F3/F4:** the ML queue makes any residual concurrency (mount-time analyze racing a precompute) safe; the run-state record defines the storage shape the trigger logic reads.
+- **F4 before F3:** "analyze only if no analysis exists" requires `computedAt` + explicit error semantics on stored results; shipping triggers first would re-create the auto-analyze-on-every-open bug via the load race.
+- **Merging option:** Phases 3+4 can merge into one "persistence + triggers" phase (PITFALLS.md's grouping) since the metadata and its consumer are small; keeping them separate gives cleaner verification seams.
+- **No stored-data migration anywhere:** comparison-time canonicalization + backfill-on-read let natural eviction retire legacy rows.
 
 ### Research Flags
 
 Phases likely needing deeper research during planning:
-- **Phase 5 (TikTok collector):** MEDIUM confidence — no public API, hostile to scraping; needs phase-specific feasibility research on DOM selectors, anti-bot behavior, and ToS risk.
-- **Phase 6 (ML quantization/WebGPU):** MEDIUM — WebGPU support is flag-gated in Firefox; needs verification of the WASM fallback chain and golden-test equivalence.
+- **None require a full research-phase.** All four phases are codebase-grounded (HIGH confidence, direct source reads) with pinned edit sites.
+
+Light verification during planning (no research-phase needed):
+- **Phase 2:** confirm `progress_callback` event shape against the installed 3.8.1 copy (STACK.md already verified it — HIGH; note ARCHITECTURE.md's `'ready'`-event claim comes from repo `main` and is contradicted by the installed source — **do not gate UI on a `'ready'` event; treat pipeline-promise resolution as load-complete**). Verify Firefox synthetic-100% cache-hit behavior in e2e under `TARGET=firefox`.
 
 Phases with standard patterns (skip research-phase):
-- **Phase 1 (Correlation speedup):** Well-documented pattern (inverted index); the zero-shot engine already proves it via `findCandidateContracts`.
-- **Phase 2 (Correlation alerts):** `chrome.notifications` + `chrome.alarms` are well-documented platform APIs.
-- **Phase 3 (Market-driven news):** Reuses existing correlation outputs + taxonomy; standard derived-view pattern.
-- **Phase 4 (Watchlist/export):** Standard React dashboard + export extension; established patterns.
-- **Phase 6 (Storage caps):** `getBytesInUse()` is a documented, exact API.
+- **Phase 1:** pure functions + existing equivalence harness.
+- **Phase 3:** existing storage-as-state + `BUDGET_KEYS` patterns.
+- **Phase 4:** pure predicate + existing `useSnapshot` `storage.onChanged` pattern to mirror.
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | Verified against official Chrome/MDN/Hugging Face docs + live npm registry + codebase inspection. |
-| Features | HIGH | Grounded in PROJECT.md requirements, competitor analysis, and codebase concerns. |
-| Architecture | HIGH | Based on existing codebase patterns (zero-shot index, collector convention, worker protocol). |
-| Pitfalls | HIGH | Each pitfall tied to a specific codebase location + official API contract. |
+| Stack | HIGH | Zero-dep verdict verified against installed `node_modules` (transformers 3.8.1 `progress_callback` API read directly); no version changes |
+| Features | HIGH | Every feature mapped to verified edit sites; MVP list is codebase-grounded |
+| Architecture | HIGH | Root causes pinned by direct code reads; fix shapes follow established codebase patterns (`alertState`, `merge.ts` extraction) |
+| Pitfalls | HIGH | Every pitfall verified against actual source; MV3 lifecycle + storage quota claims verified against Chrome docs |
 
-**Overall confidence:** HIGH
+**Overall confidence:** HIGH — unusually so, because this is a fix milestone on a codebase all four researchers read directly, with external API claims verified against installed sources.
 
 ### Gaps to Address
 
-- **TikTok feasibility (MEDIUM):** No public API; the DOM-scraping approach needs phase-specific validation of selectors, anti-bot behavior, and ToS risk. Flag for `/gsd-plan-phase --research-phase` during Phase 5.
-- **WebGPU on Firefox (MEDIUM):** Flag-gated; the WASM fallback chain must be verified on both browsers. Flag for research during Phase 6.
-- **Storage budget calibration:** `estimateBytes` (UTF-8) diverges from `chrome.storage.local` (UTF-16); the budget must be calibrated against real `getBytesInUse()` readings during Phase 6.
-- **Schema migration scope:** Exact fields added to `WatchlistEntry`/`NewsItem` and the migration strategy need definition during Phase 4 planning.
-- **Transformers v4.x upgrade:** Explicitly deferred; a dedicated upgrade milestone should be planned separately, not within this hardening milestone.
+- **Transformers.js `'ready'` event conflict:** STACK.md (installed 3.8.1 source, HIGH) says no `'ready'` status exists; ARCHITECTURE.md (repo `main`, MEDIUM) mentions a terminal `ready` event. Resolve by trusting the installed copy; plan the UI around promise-resolution + run-state, not a `'ready'` event.
+- **Legacy-data canonicalization site:** extraction-time + `keywordSimilarity` strip (ARCHITECTURE) vs. load-time/index-build normalization (PITFALLS perf guidance — never normalize inside the pairwise loop). Settle during Phase 1 planning; both are cheap, but pick one comparison-time location and perf-check against PERF-02.
+- **Post-collection re-analysis ownership:** research converges on background-owned (existing precompute path), dashboard display-only. Confirm during Phase 4 planning and document it — a dashboard-side duplicate trigger is the exact double-run race Phase 2's queue absorbs.
+- **e2e suite known gap:** `tests/e2e/dashboard.spec.ts` asserts 9 tabs vs the app's 11 — may need fixing before Phase 4's trigger e2e assertions.
+- **Embedding cache key:** bridging changes keywords, not embedder input text — verify `embedding-equivalence` stays green; if any embedder input changes, bump the cache key/version.
+- **Quota at production scale:** max-caps (1000×1000) result + persisted metadata vs the ~7 MB budget needs an explicit unit test (PERF-03 authority).
+- **Firefox coverage:** trigger/progress e2e must run under `TARGET=firefox` (message-channel and cache-progress quirks are browser-specific).
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- Chrome `chrome.notifications` API reference — permission, templates, methods, events.
-- MDN Notifications API / `Notification` — `Notification()` not available in service workers; `requestPermission` requires user gesture.
-- Hugging Face Transformers.js WebGPU guide — `device: 'webgpu'` usage and Firefox flag-gating.
-- Chrome "Storage and cookies" — `chrome.storage.local` quota, `unlimitedStorage`, IndexedDB in workers.
-- MDN IndexedDB API — large structured data + indexes, available in workers.
-- npm registry (live) — current versions: `@huggingface/transformers` 4.2.0, `onnxruntime-web` 1.27.0, `webextension-polyfill` 0.12.0, `idb` 8.0.3, `flexsearch` 0.8.212.
-- Codebase verification — `llm.ts` (WebGPU+fallback), `transformers.ts` (pipelines), `zeroshot.ts` (`findCandidateContracts`), `storage.ts` (`estimateBytes`), `manifest.config.ts` (TikTok perms), `config/index.ts` (`redditCategories`), `correlation.ts` (O(n×m)), `ml-worker.ts` (WASM path), `news.ts` (`Promise.allSettled`), `background/index.ts` (ephemeral worker), `Watchlist.tsx`, `export.ts`.
-- Competitor analysis — Polymarket, Kalshi, Manifold, Metaculus, Bloomberg Terminal, Reuters, TradingView, Benzinga, Seeking Alpha.
+- TrendCast source (direct reads by all four researchers): `src/utils/keywords.ts`, `src/utils/entities.ts`, `src/services/engine/correlation.ts`, `src/services/engine/index.ts`, `src/services/engine/ml/{embedding,types,transformers}.ts`, `src/workers/ml-worker.ts`, `src/background/{index,merge,alerts}.ts`, `src/dashboard/App.tsx`, `src/dashboard/hooks/{useCorrelations,useSnapshot}.ts`, `src/services/collectors/news.ts`, `src/config/index.ts`, `src/types/index.ts`, `src/utils/{storage,source-health}.ts`, `src/messaging/index.ts`
+- `node_modules/@huggingface/transformers@3.8.1/src/utils/hub.js` + `src/models.js` — `progress_callback` event lifecycle, Firefox cache-hit synthetic event (installed source of truth)
+- `.planning/PROJECT.md` — milestone context, PERF-02/03 constraints, 360-test suite incl. equivalence suites
+- Chrome developer docs — service-worker lifecycle (30s idle, 5-min cap), `chrome.storage` quotas — developer.chrome.com
 
 ### Secondary (MEDIUM confidence)
-- TikTok collection approach — no official key-free API; realistic client-side paths are DOM scraping and public RSS proxies. Needs phase-specific feasibility research.
+- Transformers.js official docs — pipeline `PretrainedModelOptions.progress_callback`, per-file download events — huggingface.co/docs/transformers.js
+- Transformers.js GitHub source (`main`) — progress wiring (contradicted by installed copy on the `'ready'` event; installed copy wins)
+- Financial NLP entity-resolution convention — canonical ticker space with alias tables, strict cashtag regex, word-boundary guards
 
 ### Tertiary (LOW confidence)
-- None — all findings trace to official docs, codebase inspection, or live registry data.
+- Web-sourced worker progress requestId-scoping and persisted run-state practice (cached research-store keys) — consistent with codebase precedent, no direct verification needed
 
 ---
-*Research completed: 2026-08-22*
+*Research completed: 2026-08-27*
 *Ready for roadmap: yes*
