@@ -46,16 +46,17 @@ Surface the strongest, most reliable signal of what prediction markets are movin
 - ✓ Export data covering new sources — v1.0 (DASH-02)
 - ✓ Seeking Alpha + Investing.com news in correlation tab (root cause diagnosed + fixed) — v1.0 (REL-01)
 - ✓ Per-source health/staleness indicators — v1.0 (REL-02)
-
-### Active
-
 - ✓ Seeking Alpha + Investing.com news appears in the news tab for existing users (deep-merge `enabledSources` + migration) — v1.1 (NEWS-01)
 - ✓ Regression coverage for the settings deep-merge fix — v1.1 (NEWS-02)
 - ✓ Cross-source consensus alerts (>=3 distinct source types, social + news mix) — v1.1 (PHASE-10)
-- Collect headlines from the three stock-indicator RSS feeds (usa-stocks-indicator, screener, screener2) — 0.1.5 (SRC-03)
-- Wire new sources end-to-end (config, types, collector, background, dashboard, popup) — 0.1.5 (SRC-04)
-- Settings deep-merge + migration for the new source flags — 0.1.5 (SRC-05)
-- Health/staleness tracking + unit test coverage for the new sources — 0.1.5 (SRC-06)
+- ✓ Collect headlines from the three stock-indicator RSS feeds (usa-stocks-indicator, screener, screener2) — v0.1.5 (SRC-03)
+- ✓ Wire new sources end-to-end (config, types, collector, background, dashboard, popup) — v0.1.5 (SRC-04)
+- ✓ Settings deep-merge + migration for the new source flags — v0.1.5 (SRC-05)
+- ✓ Health/staleness tracking + unit test coverage for the new sources — v0.1.5 (SRC-06)
+
+### Active
+
+(None yet — next milestone starts with `/gsd-new-milestone`)
 
 ### Out of Scope
 
@@ -70,6 +71,8 @@ TrendCast is a mature, working extension. The codebase map (`.planning/codebase/
 **v1.0 shipped (2026-08-23):** All 11 milestone requirements satisfied, 298/298 unit tests pass, typecheck clean. Cross-phase integration verified end-to-end (collector → storage → correlation → derived view → dashboard render). Milestone audit passed.
 
 **v1.1 shipped (2026-08-24):** News Source Fix milestone complete. Deep-merge + settings migration fix Seeking Alpha/Investing.com display for existing users (NEWS-01/02/03). Phase 10 added cross-source consensus alerts — topics appearing across >=3 distinct source types (social + news mix) fire alerts even with an empty watchlist. 340/340 unit tests pass, typecheck + lint clean, UAT 2/2 passed, security + Nyquist validation gates passed.
+
+**v0.1.5 shipped (2026-08-27):** Stock Indicator News Sources milestone complete. Three personal stock-indicator RSS feeds (usa-stocks-indicator, breakout screener, VCP screener-2) are first-class news sources: collected via rss2json with guid-based dedup-safe ids, health/staleness tracked, wired end-to-end through popup toggles, NewsFeed labels/colors, and HistoryChart. Settings deep-merge + migration backfills the new flags to `true` for existing users without overwriting explicit preferences. 357 unit tests + 137 e2e tests + typecheck all green.
 
 **Known issue (resolved in v1.0):** Seeking Alpha and Investing.com news did not appear in the correlation tab. Root cause diagnosed and fixed (REL-01) — sources are fully wired end-to-end; the fix addressed the correlation threshold / display path.
 
@@ -112,6 +115,9 @@ TrendCast is a mature, working extension. The codebase map (`.planning/codebase/
 | Cross-source consensus alerts reuse the shared alertHistory + alert infra | Surface important topics even with an empty watchlist; no new storage/notification machinery | ✓ Good — PHASE-10 shipped |
 | Consensus requires >=3 distinct source types AND >=1 social + >=1 news | Avoids false positives from a single source type dominating | ✓ Good — PHASE-10 shipped |
 | Per-topic cooldown keyed by topicId reuses state.lastNotified | Prevents re-alert spam within the window | ✓ Good — PHASE-10 shipped |
+| GUID-based ids for screener feeds (`GUID_BASED_SOURCES`) | Screener items share one `link`; guid-derived ids stop `mergeNews` Map-dedup collapsing every item into one | ✓ Good — SRC-03 shipped |
+| Storage I/O extracted into testable functions taking a narrow `SettingsStorage` interface | Integration tests without `vi.mock` of the messaging layer; mirrors the alerts store pattern | ✓ Good — SRC-05 shipped |
+| Deep-merge + migration only backfill missing keys | Never overwrites an explicit user preference | ✓ Good — SRC-05 shipped |
 
 ## Evolution
 
@@ -131,4 +137,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-08-25 — Milestone 0.1.5 started (Stock Indicator News Sources)*
+*Last updated: 2026-08-27 after v0.1.5 milestone*

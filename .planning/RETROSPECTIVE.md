@@ -83,6 +83,43 @@
 
 ---
 
+## Milestone: v0.1.5 — Stock Indicator News Sources
+
+**Shipped:** 2026-08-27
+**Phases:** 3 | **Plans:** 3 | **Tasks:** 3
+
+### What Was Built
+- Three personal stock-indicator RSS feeds (usa-stocks-indicator layoff/award reports, breakout screener, VCP screener-2) added as first-class news sources via the rss2json proxy, with guid-based dedup-safe ids for feeds whose items share a single link (SRC-03).
+- Health/staleness tracking for the new sources in `SourceHealthIndicator`, plus wiring into the background collection cycle and the cross-source alert engine's `NEWS_SOURCES` set (SRC-06).
+- End-to-end UI wiring: popup settings toggles, NewsFeed labels/colors, HistoryChart platform labels — all consistent with existing source conventions (SRC-04).
+- Settings deep-merge + migration backfilling the three new flags to `true` for existing users without overwriting explicit preferences (SRC-05).
+- Storage I/O extracted into testable functions taking a narrow `SettingsStorage` interface, with 6 integration tests proving the real read → deep-merge → migrate → conditional-write path.
+
+### What Worked
+- `GUID_BASED_SOURCES` as a small `ReadonlySet` scoping guid-derived ids to only the feeds that need them — no risk to existing link-based dedup.
+- Extracting storage I/O into narrow-interface functions made the migration path integration-testable without mocking the messaging layer.
+- Single-plan phases (1 plan per phase) kept execution tight: 25 min average per plan.
+
+### What Was Inefficient
+- `summary-extract` returned `one_liner: null` for all three summaries (no one-liner field in frontmatter), so milestone accomplishments had to be assembled manually from summary bodies.
+- `init.manager` returned an empty phases list — readiness had to be verified from ROADMAP.md + SUMMARY.md files directly.
+
+### Patterns Established
+- `GUID_BASED_SOURCES` pattern for feeds where item-level `link` is not unique.
+- Storage I/O functions accept a `SettingsStorage` parameter for direct unit testing with an in-memory mock.
+
+### Key Lessons
+1. Feeds whose items share a single `link` need guid-derived ids or `mergeNews`'s Map-dedup collapses every item into one.
+2. Deep-merge + migration must only backfill missing keys — never overwrite an explicit user preference.
+3. Frontmatter `one_liner` in SUMMARY.md is what `milestone.complete` uses for MILESTONES.md accomplishments — include it going forward.
+
+### Cost Observations
+- Model mix: adaptive profile (opus/sonnet/haiku mix)
+- Sessions: 1 short session
+- Notable: 3 phases × 1 plan each; full regression gate (357 unit + 137 e2e + typecheck) green at close.
+
+---
+
 ## Cross-Milestone Trends
 
 ### Process Evolution
@@ -91,6 +128,7 @@
 |-----------|----------|--------|------------|
 | v1.0 | 1 | 6 | Autonomous execution with subagent verification + integration checking |
 | v1.1 | 1 | 2 | Focused bug-fix + new alerting feature; milestone close needed manual Phase 10 archival |
+| v0.1.5 | 1 | 3 | Single-plan phases; guid-based dedup for shared-link feeds; storage I/O made integration-testable |
 
 ### Cumulative Quality
 
@@ -98,6 +136,7 @@
 |-----------|-------|----------|-------------------|
 | v1.0 | 298 | unit + e2e | 0 new runtime deps |
 | v1.1 | 340 | unit + e2e | 0 new runtime deps |
+| v0.1.5 | 357 unit + 137 e2e | unit + e2e | 0 new runtime deps |
 
 ### Top Lessons (Verified Across Milestones)
 

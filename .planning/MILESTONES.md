@@ -1,5 +1,21 @@
 # Milestones
 
+## v0.1.5 Stock Indicator News Sources (Shipped: 2026-08-27)
+
+**Phases completed:** 3 phases, 3 plans, 3 tasks
+
+**Key accomplishments:**
+
+- Three personal stock-indicator RSS feeds (usa-stocks-indicator layoff/award reports, breakout screener, VCP screener-2) added as first-class news sources via rss2json, with `GUID_BASED_SOURCES` guid-derived ids so feeds whose items share a single `link` aren't collapsed by `mergeNews` dedup (SRC-03).
+- Health/staleness tracking for the new sources in `SourceHealthIndicator`, wired into the background collection cycle and the cross-source alert engine's `NEWS_SOURCES` set (SRC-06).
+- End-to-end UI wiring: popup settings toggles, NewsFeed labels/colors, HistoryChart platform labels — consistent with existing source conventions (SRC-04).
+- Settings deep-merge + migration backfills the three new flags to `true` for existing users without overwriting explicit preferences (SRC-05).
+- Storage I/O extracted into testable functions taking a narrow `SettingsStorage` interface, with 6 integration tests proving the read → deep-merge → migrate → conditional-write path.
+
+**Known verification overrides:** 0 newly acknowledged, 5 carried forward from a prior close (see STATE.md Deferred Items).
+
+---
+
 ## v1.1 News Source Fix (Shipped: 2026-08-24)
 
 **Phases completed:** 2 phases, 7 plans, 4 tasks

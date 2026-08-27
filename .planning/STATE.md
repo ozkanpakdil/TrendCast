@@ -1,33 +1,35 @@
 ---
 gsd_state_version: 1.0
 milestone: 0.1.5
-milestone_name: Stock Indicator News Sources
-status: planning
-last_updated: "2026-08-25T19:20:25.109Z"
-last_activity: 2026-08-25
+status: Awaiting next milestone
+stopped_at: Milestone v1.1 complete — all phases done
+last_updated: "2026-08-27T16:24:48.292Z"
+last_activity: 2026-08-27
+last_activity_desc: Milestone v0.1.5 completed and archived
+state_head: fe7e6b50fd9f6bd31d827c850d308dc52cdeda2c
 progress:
   total_phases: 3
-  completed_phases: 3
+  completed_phases: 0
   total_plans: 3
   completed_plans: 3
-  percent: 100
+milestone_name: Stock Indicator News Sources
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-08-24)
+See: .planning/PROJECT.md (updated 2026-08-27)
 
 **Core value:** Surface the strongest, most reliable signal of what prediction markets are moving and why — by correlating social hype, news, and market odds — fast enough that the user trusts it as a daily decision aid.
-**Current focus:** Milestone 0.1.5 — Stock Indicator News Sources (Phases 11-13 complete)
+**Current focus:** Planning next milestone (v0.1.5 archived)
 
 ## Current Position
 
-Phase: 13 — Settings Migration & Regression Tests (final phase of 0.1.5)
-Plan: 13-01 (complete)
-Status: Complete
-Last activity: 2026-08-25 — Phase 13 executed (settings migration + regression tests)
+Phase: Milestone v0.1.5 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-08-27 — Milestone v0.1.5 completed and archived
 
 ## Performance Metrics
 
@@ -107,8 +109,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-08-24T21:44:55.819Z
-Stopped at: Milestone v1.1 complete — all phases done
+Last session: 2026-08-27T16:24:48.292Z
+Stopped at: Milestone v0.1.5 complete — all phases done, archived
 Resume file: None
 
 ## Operator Next Steps
