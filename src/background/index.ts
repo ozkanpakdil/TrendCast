@@ -51,7 +51,7 @@ import { correlate, correlateNews, correlateNewsSocial } from '@/services/engine
 import { exportToCsv, exportToJson } from '@/utils/export';
 import { pruneStorageIfNeeded, measureStorageUsage } from '@/utils/storage';
 import { backfillWatchlist } from '@/utils/watchlist';
-import { deepMergeSettings, migrateEnabledSources } from '@/utils/settings';
+import { getSettingsFromStorage, migrateEnabledSourcesFromStorage } from '@/utils/settings';
 import { evaluateAlerts, evaluateCrossSourceAlerts, dispatchAlerts, broadcastAlerts, clearAlerts, updateBadge, getAlertHistory } from '@/background/alerts';
 import { buildMarketDrivenNews } from '@/background/correlationNews';
 import { mergeMarkets, mergeSignals, mergeNews } from '@/background/merge';
@@ -898,12 +898,10 @@ async function getLatestSnapshot(): Promise<CollectionSnapshot | null> {
 
 /** Get extension settings (merged with defaults for forward-compat). */
 async function getSettings(): Promise<ExtensionSettings> {
-  const result = await browser.storage.local.get(CONFIG.storage.settings);
-  const stored = result[CONFIG.storage.settings] as Partial<ExtensionSettings> | undefined;
   // Deep-merge so newly-added fields (e.g. seekingalpha/investing source flags)
   // are always present even if the user has older saved settings, while explicit
   // user preferences are preserved.
-  return deepMergeSettings(DEFAULT_SETTINGS, stored);
+  return getSettingsFromStorage(browser.storage.local);
 }
 
 /**
@@ -939,11 +937,7 @@ async function migrateTikTokDefault(): Promise<void> {
  */
 async function migrateEnabledSourcesDefault(): Promise<void> {
   try {
-    const result = await browser.storage.local.get(CONFIG.storage.settings);
-    const stored = result[CONFIG.storage.settings] as Partial<ExtensionSettings> | undefined;
-    const migrated = migrateEnabledSources(stored);
-    if (!migrated) return; // nothing to backfill — skip the write
-    await browser.storage.local.set({ [CONFIG.storage.settings]: migrated });
+    await migrateEnabledSourcesFromStorage(browser.storage.local);
     console.log('[TrendCast] Migration: backfilled missing news source flags');
   } catch (err) {
     console.warn('[TrendCast] News source flags migration failed (non-fatal):', err);

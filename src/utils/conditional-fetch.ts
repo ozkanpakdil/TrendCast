@@ -46,19 +46,26 @@ async function saveCache(cache: FetchCache): Promise<void> {
  *
  * @param url       The URL to fetch.
  * @param init       Extra fetch options (headers merged with conditional headers).
+ * @param force      When true, skip sending conditional headers so the server
+ *                   always returns fresh content (200) instead of a 304. Used by
+ *                   sources whose content changes in place (e.g. daily stock
+ *                   screener tables) where a 304 would skip re-parsing.
  * @returns The Response if the resource changed (status 200), or null if
  *          the server returned 304 Not Modified.
  */
 export async function conditionalFetch(
   url: string,
   init: RequestInit = {},
+  force = false,
 ): Promise<Response | null> {
   const cache = await loadCache();
   const entry = cache[url] ?? {};
 
   const headers = new Headers(init.headers);
-  if (entry.etag) headers.set('If-None-Match', entry.etag);
-  if (entry.lastModified) headers.set('If-Modified-Since', entry.lastModified);
+  if (!force) {
+    if (entry.etag) headers.set('If-None-Match', entry.etag);
+    if (entry.lastModified) headers.set('If-Modified-Since', entry.lastModified);
+  }
   headers.set('Accept', 'application/json');
 
   const controller = new AbortController();
@@ -95,11 +102,12 @@ export async function conditionalFetch(
  * Fetch JSON with conditional request support.
  *
  * @param url   The URL to fetch.
+ * @param force When true, bypass the 304 cache and always fetch fresh content.
  * @returns Parsed JSON if the resource changed, or null if unchanged (304).
  * @throws Error on non-ok, non-304 responses.
  */
-export async function conditionalFetchJson<T>(url: string): Promise<T | null> {
-  const response = await conditionalFetch(url);
+export async function conditionalFetchJson<T>(url: string, force = false): Promise<T | null> {
+  const response = await conditionalFetch(url, {}, force);
   if (response === null) return null; // 304 Not Modified
 
   if (!response.ok) {

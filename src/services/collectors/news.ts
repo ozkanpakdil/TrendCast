@@ -46,6 +46,66 @@ interface Rss2JsonResponse {
 const GUID_BASED_SOURCES: ReadonlySet<NewsSource> = new Set(['stockScreener', 'stockScreener2']);
 
 /**
+ * The three "stock indicator" sources. Unlike BBC/CNN-style news feeds, each
+ * RSS `<item>` here is a daily screener/report whose `<description>` is an
+ * HTML `<table>` listing many individual stocks. We surface each stock as its
+ * own NewsItem (instead of one post per day) so the news tab lists the actual
+ * tickers and the correlation engine can match them against social signals,
+ * Seeking Alpha, Investing.com, and Yahoo Finance.
+ */
+const STOCK_INDICATOR_SOURCES: ReadonlySet<NewsSource> = new Set([
+  'usaStocksIndicator',
+  'stockScreener',
+  'stockScreener2',
+]);
+
+/** Human-readable label used in per-stock headlines. */
+const STOCK_SOURCE_LABELS: Record<NewsSource, string> = {
+  bbc: 'BBC',
+  cnn: 'CNN',
+  yahoo: 'Yahoo',
+  googleFinance: 'Google Finance',
+  seekingalpha: 'Seeking Alpha',
+  investing: 'Investing.com',
+  usaStocksIndicator: 'Stock Indicator',
+  stockScreener: 'Breakout',
+  stockScreener2: 'VCP',
+};
+
+/**
+ * Parse the HTML `<table>` in a stock-indicator feed item's description and
+ * return the distinct stock symbols it lists.
+ *
+ *   - Screener feeds (stockScreener, stockScreener2): each data row's first
+ *     cell is `<td ...><b>SYMBOL</b></td>` (the score cells are `<b>5.00</b>`
+ *     and are excluded because they don't start with a letter).
+ *   - Stock Indicator (usaStocksIndicator): each row links to a Seeking Alpha
+ *     symbol page: `https://seekingalpha.com/symbol/SYMBOL`.
+ */
+function extractStockSymbols(source: NewsSource, description: string): string[] {
+  const symbols = new Set<string>();
+  if (source === 'usaStocksIndicator') {
+    const re = /seekingalpha\.com\/symbol\/([A-Z][A-Z0-9.-]{0,9})/gi;
+    for (const m of description.matchAll(re)) {
+      const sym = m[1].toUpperCase();
+      if (sym) symbols.add(sym);
+    }
+  } else {
+    const re = /<td[^>]*>\s*<b>([A-Z][A-Z0-9]{0,9})<\/b>/g;
+    for (const m of description.matchAll(re)) {
+      const sym = m[1].toUpperCase();
+      if (sym) symbols.add(sym);
+    }
+  }
+  return Array.from(symbols);
+}
+
+/** Extract a `YYYY-MM-DD` date from a feed title, or '' if none. */
+function dateFromTitle(title: string): string {
+  return title.match(/\d{4}-\d{2}-\d{2}/)?.[0] ?? '';
+}
+
+/**
  * Collect news headlines from configured sources via rss2json.com.
  * Supports BBC, CNN, Yahoo Finance, and Google News finance/politics.
  * Returns the combined array of NewsItems plus a per-source health map
@@ -103,6 +163,17 @@ export async function collectNews(
   });
 
   console.log(`[TrendCast] News: ${items.length} items collected`);
+
+  // Per-source breakdown so it's easy to see how many stocks each source yielded.
+  const bySource = new Map<NewsSource, number>();
+  for (const n of items) bySource.set(n.source, (bySource.get(n.source) ?? 0) + 1);
+  if (bySource.size > 0) {
+    const parts = Array.from(bySource.entries())
+      .map(([s, c]) => `${s}=${c}`)
+      .join(', ');
+    console.log(`[TrendCast] News by source: ${parts}`);
+  }
+
   return { news: items, health };
 }
 
@@ -150,7 +221,10 @@ async function collectFromSource(source: NewsSource): Promise<CollectResult> {
       await delay(CONFIG.collection.newsRetryDelayMs);
     }
     try {
-      const data = await conditionalFetchJson<Rss2JsonResponse>(apiUrl);
+      // Stock-indicator sources change in place (daily screener tables), so
+      // bypass the 304 cache and always re-fetch to re-parse the stock list.
+      const force = STOCK_INDICATOR_SOURCES.has(source);
+      const data = await conditionalFetchJson<Rss2JsonResponse>(apiUrl, force);
       if (data === null) {
         // 304 Not Modified — no new headlines. Signal "unchanged" so the health
         // map does NOT count this as a failure.
@@ -165,11 +239,11 @@ async function collectFromSource(source: NewsSource): Promise<CollectResult> {
       return {
         unchanged: false,
         items: data.items
-          .map((item): NewsItem | null => {
+          .flatMap((item): NewsItem[] => {
             const title = item.title?.trim() ?? '';
             const link = item.link?.trim() ?? '';
 
-            if (!title || !link) return null;
+            if (!title || !link) return [];
 
             // Clean description — Google News wraps it in anchor tags.
             const description = item.description
@@ -184,7 +258,6 @@ async function collectFromSource(source: NewsSource): Promise<CollectResult> {
               ? title.replace(/\s+-\s+[^-]+$/, '').trim()
               : title;
 
-            const fullText = description ? `${headline} ${description}` : headline;
             const imageUrl = item.thumbnail ?? item.enclosure?.link ?? undefined;
 
             // The two screener feeds share a single `link` across all items, so
@@ -195,25 +268,69 @@ async function collectFromSource(source: NewsSource): Promise<CollectResult> {
               ? (item.guid?.trim() || link)
               : link;
 
+            const publishedAt = item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString();
+
+            // ── Stock-indicator sources ──────────────────────────────────────
+            // Each feed item is a daily screener/report whose description is an
+            // HTML table of stocks. Surface each stock as its own NewsItem so the
+            // news tab lists the actual tickers and correlation can match them
+            // against social / Seeking Alpha / Investing.com / Yahoo Finance.
+            if (STOCK_INDICATOR_SOURCES.has(source)) {
+              const rawDescription = item.description ?? '';
+              const symbols = extractStockSymbols(source, rawDescription);
+              const date = dateFromTitle(title);
+              const label = STOCK_SOURCE_LABELS[source];
+
+              // Diagnostic: report how many stocks each feed item yielded so we
+              // can confirm the table parsing is working end-to-end.
+              console.log(
+                `[TrendCast] ${label} (${source}): item "${title}" → ${symbols.length} stocks` +
+                (symbols.length > 0 ? ` [${symbols.slice(0, 8).join(', ')}${symbols.length > 8 ? ', …' : ''}]` : ''),
+              );
+
+              if (symbols.length > 0) {
+                return symbols.map((symbol) => {
+                  const stockHeadline = date
+                    ? `${symbol} — ${label} ${date}`
+                    : `${symbol} — ${label}`;
+                  return {
+                    id: `${source}:${id}:${symbol}`,
+                    source,
+                    headline: stockHeadline,
+                    // Omit the large HTML table from storage (headline only).
+                    summary: undefined,
+                    url: link,
+                    publishedAt,
+                    // Ticker in keywords so the correlation engine can match it
+                    // against market contracts and social signals.
+                    keywords: extractKeywords(`${stockHeadline} ${symbol}`),
+                    imageUrl: imageUrl ?? undefined,
+                    category: classifyCategory(stockHeadline),
+                  } satisfies NewsItem;
+                });
+              }
+            }
+
+            const fullText = description ? `${headline} ${description}` : headline;
+
             // The screener feeds carry large HTML <table> CDATA descriptions that
             // would bloat storage, so omit `summary` for them (headline only).
             const summary = GUID_BASED_SOURCES.has(source) ? undefined : description;
 
-            return {
+            return [{
               id: `${source}:${id}`,
               source,
               headline,
               summary,
               url: link,
-              publishedAt: item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString(),
+              publishedAt,
               keywords: extractKeywords(fullText),
               imageUrl: imageUrl ?? undefined,
               // Category assigned at collection time (Phase 5, D-02) so the
               // market-driven news view and export read a consistent category.
               category: classifyCategory(headline),
-            } satisfies NewsItem;
-          })
-          .filter((item): item is NewsItem => item !== null),
+            } satisfies NewsItem];
+          }),
       };
     } catch (err) {
       // Only retry rate-limit (429) responses; other errors fail fast.

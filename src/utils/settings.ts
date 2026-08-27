@@ -15,6 +15,17 @@
 
 import type { ExtensionSettings } from '@/types';
 import { DEFAULT_SETTINGS } from '@/types';
+import { CONFIG } from '@/config';
+
+/**
+ * Minimal storage abstraction satisfied structurally by `browser.storage.local`.
+ * Kept narrow so the storage I/O helpers below are directly unit-testable with
+ * an in-memory mock (no `vi.mock` of the messaging layer required).
+ */
+export interface SettingsStorage {
+  get(keys: string): Promise<Record<string, unknown>>;
+  set(items: Record<string, unknown>): Promise<void>;
+}
 
 /**
  * Deep-merge stored settings over defaults, backfilling missing `enabledSources`
@@ -72,4 +83,33 @@ export function migrateEnabledSources(
   if (!changed) return null;
 
   return { ...stored, enabledSources: backfilled };
+}
+
+/**
+ * Read stored settings from storage and deep-merge them over defaults so
+ * newly-added source flags default to `true` while explicit user preferences
+ * are preserved. Mirrors the background worker's `getSettings()`.
+ */
+export async function getSettingsFromStorage(
+  storage: SettingsStorage,
+): Promise<ExtensionSettings> {
+  const result = await storage.get(CONFIG.storage.settings);
+  const stored = result[CONFIG.storage.settings] as Partial<ExtensionSettings> | undefined;
+  return deepMergeSettings(DEFAULT_SETTINGS, stored);
+}
+
+/**
+ * Backfill any missing `enabledSources` flags into persisted settings so the
+ * deep-merge fix survives restarts. Silent and idempotent — present keys
+ * (explicit user preferences) are never overwritten. Writes back to storage
+ * only when `migrateEnabledSources` returns a non-null result.
+ */
+export async function migrateEnabledSourcesFromStorage(
+  storage: SettingsStorage,
+): Promise<void> {
+  const result = await storage.get(CONFIG.storage.settings);
+  const stored = result[CONFIG.storage.settings] as Partial<ExtensionSettings> | undefined;
+  const migrated = migrateEnabledSources(stored);
+  if (!migrated) return; // nothing to backfill — skip the write
+  await storage.set({ [CONFIG.storage.settings]: migrated });
 }

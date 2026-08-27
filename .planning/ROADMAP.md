@@ -31,9 +31,9 @@
 <details open>
 <summary>🔄 0.1.5 Stock Indicator News Sources (Phases 11-13) — IN PROGRESS</summary>
 
-- [ ] Phase 11: Stock Indicator Source Collection & Health (0/0 plans) — not started
-- [ ] Phase 12: End-to-End Wiring & UI (1/1 plans) — not started
-- [ ] Phase 13: Settings Migration & Regression Tests (0/0 plans) — not started
+- [x] Phase 11: Stock Indicator Source Collection & Health (1/1 plans) — complete
+- [x] Phase 12: End-to-End Wiring & UI (1/1 plans) — complete
+- [x] Phase 13: Settings Migration & Regression Tests (1/1 plans) — complete
 
 </details>
 
@@ -51,7 +51,7 @@
 **Plans**: 1 plan
 
 Plans:
-- [ ] 11-01-PLAN.md — Collect the three stock-indicator feeds (guid-based ids), wire into background/alerts, backfill settings flags
+- [x] 11-01-PLAN.md — Collect the three stock-indicator feeds (guid-based ids), wire into background/alerts, backfill settings flags
 
 ### Phase 12: Stock Indicator End-to-End Wiring & UI
 **Goal**: Users can toggle each new source on/off and see it labeled/colored consistently across the dashboard
@@ -64,7 +64,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 12-01-PLAN.md — Wire the three new sources into popup settings toggles, NewsFeed labels/colors, and HistoryChart labels
+- [x] 12-01-PLAN.md — Wire the three new sources into popup settings toggles, NewsFeed labels/colors, and HistoryChart labels
 
 ### Phase 13: Settings Migration & Regression Tests
 **Goal**: Existing users' settings migrate so the new source flags default to `true` without overwriting explicit preferences
@@ -74,7 +74,10 @@ Plans:
   1. Existing users' settings are migrated so the new source flags default to `true` (deep-merge `enabledSources` + settings migration)
   2. Explicit user preferences are preserved (deep-merge never overwrites a user-set value)
   3. Unit tests cover the deep-merge and migration behavior for the new source flags (settings-deep-merge.test.ts, settings-migration.test.ts)
-**Plans**: TBD
+**Plans**: 1 plan
+
+Plans:
+- [x] 13-01-PLAN.md — Extract storage I/O settings wiring into testable functions, add integration tests, run full regression suite
 
 ## Progress
 
@@ -91,6 +94,6 @@ Phases execute in numeric order: 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 �
 | 8. Storage & ML Hardening | v1.0 | 3/3 | Complete | 2026-08-23 |
 | 9. News Source Fix | v1.1 | 4/4 | Complete | 2026-08-24 |
 | 10. Cross-Source Consensus Alerts | v1.1 | 3/3 | Complete | 2026-08-24 |
-| 11. Stock Indicator Source Collection & Health | 0.1.5 | 0/0 | Not started | - |
-| 12. Stock Indicator End-to-End Wiring & UI | 0.1.5 | 0/1 | Not started | - |
-| 13. Settings Migration & Regression Tests | 0.1.5 | 0/0 | Not started | - |
+| 11. Stock Indicator Source Collection & Health | 0.1.5 | 1/1 | Complete | 2026-08-25 |
+| 12. Stock Indicator End-to-End Wiring & UI | 0.1.5 | 1/1 | Complete | 2026-08-25 |
+| 13. Settings Migration & Regression Tests | 0.1.5 | 1/1 | Complete | 2026-08-25 |

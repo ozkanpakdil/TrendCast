@@ -519,7 +519,8 @@ export function CorrelationPanelImpl({
           secondary: m.signal.text,
           source: m.signal.platform,
           target: m.contract.platform,
-          url: m.contract.url,
+          sourceUrl: getSocialUrl(m.signal),
+          targetUrl: m.contract.url,
         })),
     [matches],
   );
@@ -537,7 +538,8 @@ export function CorrelationPanelImpl({
           secondary: m.news.headline,
           source: m.news.source,
           target: m.contract.platform,
-          url: m.news.url,
+          sourceUrl: m.news.url,
+          targetUrl: m.contract.url,
         })),
     [newsMatches],
   );
@@ -555,7 +557,10 @@ export function CorrelationPanelImpl({
           secondary: m.signal.text,
           source: m.news.source,
           target: m.signal.platform,
-          url: m.signal.url,
+          sourceUrl: m.news.url,
+          // Prefer the signal's own URL; fall back to a reconstructed search
+          // link so every news→social card is clickable.
+          targetUrl: getSocialUrl(m.signal),
         })),
     [newsSocialMatches],
   );
@@ -969,7 +974,10 @@ interface ListItem {
   secondary: string;
   source: string;
   target: string;
-  url?: string;
+  /** Link to the source entity (news article / social post). */
+  sourceUrl?: string;
+  /** Link to the correlated target entity (market contract / social post). */
+  targetUrl?: string;
 }
 
 function CorrelationList({
@@ -1023,6 +1031,30 @@ function CorrelationList({
                     {kw}
                   </span>
                 ))}
+              </div>
+            )}
+            {(item.sourceUrl || item.targetUrl) && (
+              <div className="flex flex-wrap gap-2 mt-2">
+                {item.sourceUrl && (
+                  <a
+                    href={item.sourceUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[10px] px-2 py-1 rounded bg-slate-800 text-brand-400 hover:bg-slate-700 transition-colors"
+                  >
+                    Open {item.source} ↗
+                  </a>
+                )}
+                {item.targetUrl && (
+                  <a
+                    href={item.targetUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[10px] px-2 py-1 rounded bg-slate-800 text-brand-400 hover:bg-slate-700 transition-colors"
+                  >
+                    Open {item.target} ↗
+                  </a>
+                )}
               </div>
             )}
           </div>

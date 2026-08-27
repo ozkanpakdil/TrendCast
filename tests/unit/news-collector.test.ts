@@ -264,4 +264,89 @@ describe('collectNews stock-indicator sources', () => {
     expect(health.stockScreener2?.consecutiveFailures).toBe(0);
     expect(health.stockScreener2?.lastError).toBeUndefined();
   });
+
+  it('expands a screener table into one NewsItem per stock with the ticker in headline and keywords', async () => {
+    mockedFetch.mockResolvedValue({
+      status: 'ok',
+      items: [
+        {
+          title: 'US Stock Breakout Screener — 2026-08-25 — 22 hits — top: XPON (155.25)',
+          link: 'https://example.com/screener',
+          guid: 'screener-2026-08-25',
+          description:
+            '<table><tbody>' +
+            '<tr><td><b>XPON</b></td><td><b>155.25</b></td></tr>' +
+            '<tr><td><b>GENB</b></td><td><b>12.00</b></td></tr>' +
+            '<tr><td><b>OABI</b></td><td><b>11.98</b></td></tr>' +
+            '</tbody></table>',
+          pubDate: new Date().toISOString(),
+        },
+      ],
+    });
+
+    const { news } = await collectNews(['stockScreener']);
+
+    expect(news).toHaveLength(3);
+    const symbols = news.map((n) => n.headline);
+    expect(symbols).toContain('XPON — Breakout 2026-08-25');
+    expect(symbols).toContain('GENB — Breakout 2026-08-25');
+    expect(symbols).toContain('OABI — Breakout 2026-08-25');
+    // Each item's keywords must include its ticker so correlation can match it.
+    const xpon = news.find((n) => n.headline.startsWith('XPON'));
+    expect(xpon?.keywords).toContain('xpon');
+    // Score cells (e.g. <b>155.25</b>) must NOT be treated as symbols.
+    expect(news.some((n) => n.headline.startsWith('155'))).toBe(false);
+    // Ids are unique per stock.
+    expect(new Set(news.map((n) => n.id)).size).toBe(3);
+  });
+
+  it('expands a Stock Indicator report into one NewsItem per Seeking Alpha symbol', async () => {
+    mockedFetch.mockResolvedValue({
+      status: 'ok',
+      items: [
+        {
+          title: 'Recent Tech Layoffs Stock Report - 2026-08-23',
+          link: 'https://ozkanpakdil.github.io/usa-stocks-indicator/posts/layoffs-2026-08-23/',
+          description:
+            '<table><tbody>' +
+            '<tr><td>Amazon</td><td><a href="https://seekingalpha.com/symbol/AMZN">AMZN (NMS)</a></td></tr>' +
+            '<tr><td>eBay</td><td><a href="https://seekingalpha.com/symbol/EBAY">EBAY (NMS)</a></td></tr>' +
+            '<tr><td>ASML</td><td><a href="https://seekingalpha.com/symbol/ASML">ASML (NMS)</a></td></tr>' +
+            '</tbody></table>',
+          pubDate: new Date().toISOString(),
+        },
+      ],
+    });
+
+    const { news } = await collectNews(['usaStocksIndicator']);
+
+    expect(news).toHaveLength(3);
+    const symbols = news.map((n) => n.headline);
+    expect(symbols).toContain('AMZN — Stock Indicator 2026-08-23');
+    expect(symbols).toContain('EBAY — Stock Indicator 2026-08-23');
+    expect(symbols).toContain('ASML — Stock Indicator 2026-08-23');
+    const amzn = news.find((n) => n.headline.startsWith('AMZN'));
+    expect(amzn?.keywords).toContain('amzn');
+    expect(new Set(news.map((n) => n.id)).size).toBe(3);
+  });
+
+  it('falls back to a single item when a stock-indicator feed has no parseable table', async () => {
+    mockedFetch.mockResolvedValue({
+      status: 'ok',
+      items: [
+        {
+          title: 'US Stock Breakout Screener — 2026-08-25 — 22 hits',
+          link: 'https://example.com/screener',
+          guid: 'screener-1',
+          description: '<p>No table here</p>',
+          pubDate: new Date().toISOString(),
+        },
+      ],
+    });
+
+    const { news } = await collectNews(['stockScreener']);
+
+    expect(news).toHaveLength(1);
+    expect(news[0].headline).toBe('US Stock Breakout Screener — 2026-08-25 — 22 hits');
+  });
 });
