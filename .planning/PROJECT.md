@@ -8,15 +8,15 @@ A 100% client-side Manifest V3 browser extension (Chrome + Firefox) that collect
 
 Surface the strongest, most reliable signal of what prediction markets are moving and why — by correlating social hype, news, and market odds — fast enough that the user trusts it as a daily decision aid.
 
-## Current Milestone: 0.1.5 Stock Indicator News Sources
+## Current Milestone: v0.1.6 fix correlation
 
-**Goal:** Add the user's own stock-indicator feeds (usa-stocks-indicator layoff/award reports + top-us-stock-tickers breakout/VCP screeners) as first-class news sources in the collector, dashboard, and settings.
+**Goal:** Make correlation results trustworthy and correctly surfaced — stock indicator sources correlate with social/news, ML progress reflects actual worker state, and analysis runs at the right times with persisted results.
 
 **Target features:**
-- Collect headlines from the three existing RSS feeds (usa-stocks-indicator index.xml, screener rss.xml, screener2 rss.xml) via the rss2json proxy
-- Wire new sources end-to-end: config, types, collector, background, dashboard labels/colors, popup settings toggles
-- Settings deep-merge + migration so existing users get the new source flags enabled by default
-- Health/staleness tracking + unit test coverage for the new sources
+- Ticker/cashtag bridging — stock indicator NewsItems (keywords like `amzn`) match social signals carrying `$AMZN` cashtags
+- ML progress UI fix — embedding model progress reflects actual worker completion instead of appearing stuck
+- Analysis trigger behavior — no auto-analyze on every tab open; only when no analysis exists, otherwise after collectNow
+- Persist correlation results to storage so they survive tab/session restarts
 
 ## Requirements
 
@@ -56,7 +56,7 @@ Surface the strongest, most reliable signal of what prediction markets are movin
 
 ### Active
 
-(None yet — next milestone starts with `/gsd-new-milestone`)
+(None yet — requirements defined next in this milestone)
 
 ### Out of Scope
 
@@ -137,4 +137,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-08-27 after v0.1.5 milestone*
+*Last updated: 2026-08-27 at start of v0.1.6 fix correlation milestone*

@@ -1,18 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: 0.1.5
-status: Awaiting next milestone
-stopped_at: Milestone v1.1 complete — all phases done
-last_updated: "2026-08-27T16:24:48.292Z"
+milestone: v0.1.6
+milestone_name: fix correlation
+status: planning
+last_updated: "2026-08-27T17:29:44.746Z"
 last_activity: 2026-08-27
-last_activity_desc: Milestone v0.1.5 completed and archived
-state_head: fe7e6b50fd9f6bd31d827c850d308dc52cdeda2c
 progress:
-  total_phases: 3
+  total_phases: 0
   completed_phases: 0
-  total_plans: 3
-  completed_plans: 3
-milestone_name: Stock Indicator News Sources
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -26,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-08-27)
 
 ## Current Position
 
-Phase: Milestone v0.1.5 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-08-27 — Milestone v0.1.5 completed and archived
+Status: Defining requirements
+Last activity: 2026-08-27 — Milestone v0.1.6 started
 
 ## Performance Metrics
 
