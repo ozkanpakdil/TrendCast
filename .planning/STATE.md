@@ -6,7 +6,7 @@ status: planning
 last_updated: "2026-08-27T17:29:44.746Z"
 last_activity: 2026-08-27
 progress:
-  total_phases: 0
+  total_phases: 3
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-27)
 
 **Core value:** Surface the strongest, most reliable signal of what prediction markets are moving and why — by correlating social hype, news, and market odds — fast enough that the user trusts it as a daily decision aid.
-**Current focus:** Planning next milestone (v0.1.5 archived)
+**Current focus:** Phase 14 — Ticker/Cashtag Bridging (v0.1.6 fix correlation)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-08-27 — Milestone v0.1.6 started
+Phase: 14 of 16 (Ticker/Cashtag Bridging) — first of 3 phases in v0.1.6
+Plan: 0 of TBD in current phase
+Status: Ready to plan
+Last activity: 2026-08-27 — Roadmap created for v0.1.6 (Phases 14-16)
 
 ## Performance Metrics
 
@@ -77,8 +77,7 @@ Recent decisions affecting current work:
 
 ### Roadmap Evolution
 
-- Phase 10 added: Cross-source consensus alerts
-- Milestone 0.1.5 roadmap created: Phases 11-13 (Stock Indicator News Sources) — Phase 11 collection & health, Phase 12 end-to-end wiring & UI, Phase 13 settings migration & regression tests
+- Milestone 0.1.6 roadmap created: Phases 14-16 (fix correlation) — Phase 14 ticker/cashtag bridging (CORR-01..04), Phase 15 ML run orchestration & progress (MLPROG-01/02), Phase 16 correlation persistence & analysis triggers (TRIG-01..04). F4 (persistence) merged with F3 (triggers) per research dependency analysis; F4-before-F3 ordering satisfied within Phase 16.
 
 ### Pending Todos
 

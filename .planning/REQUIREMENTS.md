@@ -60,12 +60,21 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (none mapped yet — roadmap created next) | — | — |
+| CORR-01 | Phase 14 | Pending |
+| CORR-02 | Phase 14 | Pending |
+| CORR-03 | Phase 14 | Pending |
+| CORR-04 | Phase 14 | Pending |
+| MLPROG-01 | Phase 15 | Pending |
+| MLPROG-02 | Phase 15 | Pending |
+| TRIG-01 | Phase 16 | Pending |
+| TRIG-02 | Phase 16 | Pending |
+| TRIG-03 | Phase 16 | Pending |
+| TRIG-04 | Phase 16 | Pending |
 
 **Coverage:**
 - v0.1.6 requirements: 10 total
-- Mapped to phases: 0
-- Unmapped: 10 ⚠️
+- Mapped to phases: 10
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-08-27*
