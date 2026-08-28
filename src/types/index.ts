@@ -255,12 +255,28 @@ export interface NewsSocialCorrelationMatch {
   correlatedAt: number;
 }
 
+/**
+ * A matched correlation between two news items from different sources
+ * (CORR-06). Same-source pairs are skipped by the engines so a screener
+ * feed never self-matches; the canonical use case is a VCP screener item
+ * bridging to a Seeking Alpha story about the same ticker.
+ */
+export interface NewsNewsCorrelationMatch {
+  newsA: NewsItem;
+  newsB: NewsItem;
+  confidence: number;
+  matchedKeywords: string[];
+  correlatedAt: number;
+}
+
 /** All correlation results from the engine. */
 export interface CorrelationResult {
   requestId?: string;
   matches: CorrelationMatch[];
   newsMatches: NewsCorrelationMatch[];
   newsSocialMatches: NewsSocialCorrelationMatch[];
+  /** CORR-06: news↔news matches (cross-source only). */
+  newsNewsMatches: NewsNewsCorrelationMatch[];
   /**
    * Engine that produced these results.
    * If the requested engine failed, this will be the fallback engine used
@@ -293,6 +309,8 @@ export interface CorrelationRunStats {
   newsMatchCount: number;
   /** Number of news→social matches. */
   newsSocialMatchCount: number;
+  /** Number of news↔news (cross-source) matches. */
+  newsNewsMatchCount: number;
   /** Average confidence across all matches (0–1). */
   avgConfidence: number;
   /** Highest confidence score (0–1). */

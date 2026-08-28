@@ -59,16 +59,16 @@
   4. Existing correlation match sets are unchanged for non-bridged data — `correlation-equivalence` and `embedding-equivalence` suites pass without relaxed assertions
   5. Source health shows bridging coverage: count of stock-indicator items that produced a canonical ticker entity vs total
 
-**Plans**: 2 plans
+**Plans**: 2/2 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 14-01-PLAN.md — Keyword/entity canonicalization: bare cashtag emission, strip-$ legacy bridge, bare-caps ticker recognition with gates, ticker↔org entity unification, boost-detection rework (CORR-01, CORR-02)
+- [x] 14-01-PLAN.md — Keyword/entity canonicalization: bare cashtag emission, strip-$ legacy bridge, bare-caps ticker recognition with gates, ticker↔org entity unification, boost-detection rework (CORR-01, CORR-02)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 14-02-PLAN.md — Stock-indicator keyword curation + bridging coverage projection and SourceHealthIndicator display (CORR-03, CORR-04)
+- [x] 14-02-PLAN.md — Stock-indicator keyword curation + bridging coverage projection and SourceHealthIndicator display (CORR-03, CORR-04)
 
 ### Phase 15: ML Run Orchestration & Progress
 
@@ -106,7 +106,7 @@ Phases execute in numeric order: 14 → 15 → 16
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 14. Ticker/Cashtag Bridging | 0/2 | Not started | - |
+| 14. Ticker/Cashtag Bridging | 2/2 | In Progress|  |
 | 15. ML Run Orchestration & Progress | 0/TBD | Not started | - |
 | 16. Correlation Persistence & Analysis Triggers | 0/TBD | Not started | - |
 

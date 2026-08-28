@@ -25,6 +25,7 @@ function correlationResult(overrides: Partial<CorrelationResult> = {}): Correlat
     matches: [],
     newsMatches: [],
     newsSocialMatches: [],
+    newsNewsMatches: [],
     ...overrides,
   };
 }

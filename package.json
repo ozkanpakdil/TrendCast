@@ -1,7 +1,7 @@
 {
   "name": "trendcast",
   "displayName": "TrendCast Monitoring Markets",
-  "version": "0.1.4",
+  "version": "0.1.6",
   "description": "Track social sentiment across X, Reddit, and TikTok and correlate it in real-time with Polymarket and Kalshi prediction market odds.",
   "license": "MIT",
   "type": "module",

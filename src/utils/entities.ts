@@ -3,6 +3,7 @@
  *
  * Extracts entities from text using pattern matching:
  *   - Cashtags ($TICKER) → financial entities
+ *   - Bare all-caps tickers (AMZN) → financial entities (KNOWN_TICKERS-gated)
  *   - Hashtags (#topic) → topic entities
  *   - Capitalized multi-word phrases → proper noun entities (persons, orgs, places)
  *   - Known tickers / political figures / organizations → curated entity lookups
@@ -43,6 +44,16 @@ const KNOWN_TICKERS = new Set([
   'btc', 'eth', 'sol', 'ada', 'doge', 'xrp', 'dot', 'matic', 'link',
   'uni', 'atom', 'ltc', 'bch', 'avax', 'shib', 'pepe', 'wif',
   'spx', 'qqq', 'spy', 'iwm', 'dia', 'vix',
+  // Large caps / common screener names (CORR-06: VCP ↔ Seeking Alpha
+  // bridging needs bare-caps recognition for these tickers).
+  'pen', 'mmm', 'regn', 'shw', 'kkr', 'mar', 'axp', 'ba', 'cat',
+  'crm', 'csco', 'cvx', 'dell', 'f', 'gm', 'gs', 'ibm', 'jnj',
+  'ko', 'low', 'mcd', 'mrk', 'orcl', 'pfe', 'pg', 't', 'tgt',
+  'uber', 'usb', 'xom', 'abnb', 'adbe', 'avgo', 'bmy',
+  'c', 'cof', 'cost', 'dd', 'emt', 'fdx', 'gis', 'hon', 'hpe',
+  'lly', 'lynx', 'mdlz', 'msci', 'mu', 'nue', 'panw',
+  'qcom', 'rklb', 'sbux', 'sny', 'tmus', 'tmo', 'txn', 'unp',
+  'wbd', 'wdc', 'well', 'zts', 'smci', 'arm', 'smh', 'tsm',
 ]);
 
 const KNOWN_PERSONS = new Map<string, string[]>([
@@ -75,9 +86,9 @@ const KNOWN_PERSONS = new Map<string, string[]>([
 ]);
 
 const KNOWN_ORGS = new Map<string, string[]>([
-  ['apple', ['apple', 'apple inc']],
+  ['apple', ['apple', 'apple inc', 'aapl']],
   ['microsoft', ['microsoft', 'msft', 'microsoft corp']],
-  ['google', ['google', 'alphabet', 'googl', 'gcp']],
+  ['google', ['google', 'alphabet', 'googl', 'goog', 'gcp']],
   ['amazon', ['amazon', 'amzn']],
   ['meta', ['meta', 'facebook', 'fb']],
   ['tesla', ['tesla', 'tsla']],
@@ -97,6 +108,29 @@ const KNOWN_ORGS = new Map<string, string[]>([
   ['nba', ['nba']],
   ['ufc', ['ufc']],
 ]);
+
+/**
+ * Ticker → org canonical mapping, built once from KNOWN_ORGS: for each org
+ * entry, every alias that is itself a KNOWN_TICKERS member maps to the org's
+ * canonical key. This is the single canonicalization table for the
+ * ticker↔org unification (CORR-01) — do not hand-roll a second ticker table.
+ */
+const TICKER_TO_ORG = new Map<string, string>();
+for (const [canonical, aliases] of KNOWN_ORGS) {
+  for (const alias of aliases) {
+    if (KNOWN_TICKERS.has(alias)) TICKER_TO_ORG.set(alias, canonical);
+  }
+}
+
+/**
+ * Whether the (lowercased) token is a known ticker symbol.
+ * Used by the correlation engine's boost detection and the alert engine's
+ * topic-label display so ticker-form keywords no longer depend on the
+ * legacy `$`-prefix string shape.
+ */
+export function isKnownTicker(token: string): boolean {
+  return KNOWN_TICKERS.has(token.toLowerCase());
+}
 
 const KNOWN_LOCATIONS = new Set([
   'usa', 'us', 'u.s.', 'u.s.a.', 'america', 'united states',
@@ -202,16 +236,38 @@ export function extractEntities(text: string): Entity[] {
   const cashtagMatches = text.matchAll(/\$([A-Z]{1,6})\b/g);
   for (const match of cashtagMatches) {
     const ticker = match[1].toLowerCase();
-    const normalized = `$${ticker}`;
+    // Canonical key: the org name when the ticker has a known org, the bare
+    // ticker otherwise (CORR-01 unification). The dedupe key uses the same
+    // normalized value so `$AMZN` and `Amazon` collapse onto one entity.
+    const normalized = TICKER_TO_ORG.get(ticker) ?? ticker;
     if (!seen.has(normalized)) {
       seen.add(normalized);
       entities.push({
         text: match[0],
-        normalized: ticker,
+        normalized,
         type: 'ticker',
         confidence: KNOWN_TICKERS.has(ticker) ? 0.95 : 0.7,
       });
     }
+  }
+
+  // 1b. Bare all-caps tickers: AMZN (KNOWN_TICKERS-gated, CORR-01)
+  // Fixed literal pattern + Set membership only — no feed-derived pattern
+  // sources (ReDoS, ASVS V5). Gates: KNOWN_TICKERS membership AND length ≥ 2
+  // (the regex enforces it; 'v' IS in KNOWN_TICKERS) AND not a stop word.
+  const bareCapsMatches = text.matchAll(/\b([A-Z]{2,6})\b/g);
+  for (const match of bareCapsMatches) {
+    const ticker = match[1].toLowerCase();
+    if (!KNOWN_TICKERS.has(ticker) || STOP_WORDS.has(ticker)) continue;
+    const normalized = TICKER_TO_ORG.get(ticker) ?? ticker;
+    if (seen.has(normalized)) continue;
+    seen.add(normalized);
+    entities.push({
+      text: match[0],
+      normalized,
+      type: 'ticker',
+      confidence: 0.85,
+    });
   }
 
   // 2. Hashtags: #topic

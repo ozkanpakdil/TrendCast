@@ -113,10 +113,13 @@ describe('InvertedIndex.candidates', () => {
     expect(idx.candidates(mockSignal.keywords)).toContain(0);
   });
 
-  it('cashtag-only contract is found by its cashtag keyword', () => {
+  it('cashtag-only contract is found by its bare cashtag keyword', () => {
     const idx = InvertedIndex.build([cashtagOnlyContract]);
-    expect(idx.candidates(['$btc'])).toEqual([0]);
+    expect(idx.candidates(['btc'])).toEqual([0]);
     expect(idx.candidates(cashtagOnlySignal.keywords)).toEqual([0]);
+    // Design boundary: the legacy $-prefixed form is NOT in index postings —
+    // the legacy bridge lives in keywordSimilarity/candidateKeywords, not here.
+    expect(idx.candidates(['$btc'])).toEqual([]);
   });
 
   it('hashtag-only contract is found by its hashtag-derived keyword', () => {

@@ -43,13 +43,13 @@ import { useCorrelations } from './hooks/useCorrelations';
 import { useAlerts } from './hooks/useAlerts';
 import { useMarketNews } from './hooks/useMarketNews';
 import { DEFAULT_SETTINGS } from '@/types';
-import type { ExtensionSettings, ThemeMode, CorrelationEngine, SocialSourceHealth, NewsSource, SocialPlatform, CorrelationMatch, NewsCorrelationMatch, NewsSocialCorrelationMatch } from '@/types';
+import type { ExtensionSettings, ThemeMode, CorrelationEngine, SocialSourceHealth, NewsSource, SocialPlatform, CorrelationMatch, NewsCorrelationMatch, NewsNewsCorrelationMatch, NewsSocialCorrelationMatch } from '@/types';
 import { CONFIG } from '@/config';
 import { browser } from '@/messaging/browser';
 import { sendMessage } from '@/messaging';
 import { downloadExport } from '@/utils/export';
 import { deepMergeSettings } from '@/utils/settings';
-import { computeCorrelatedCounts } from '@/utils/source-health';
+import { computeBridgingCoverage, computeCorrelatedCounts } from '@/utils/source-health';
 
 // Build-time version stamp injected by Vite's define.
 // Format: "0.1.0+2026-08-14T13:21:00Z" — version + build timestamp.
@@ -67,6 +67,7 @@ function phaseLabel(phase: string): string {
     'comparing-signals': 'Comparing signals→markets',
     'comparing-news': 'Comparing news→markets',
     'comparing-news-social': 'Comparing news→social',
+    'comparing-news-news': 'Comparing news↔news',
     'classifying-signals': 'Classifying signal sentiment',
     'classifying-news': 'Classifying news sentiment',
     'classifying-news-social': 'Classifying news→social',
@@ -122,6 +123,18 @@ function filterNewsSocialMatches(
   if (newsFilter.length === 0 && socialFilter.length === 0) return matches;
   return matches.filter(
     (m) => newsFilter.includes(m.news.source) || socialFilter.includes(m.signal.platform),
+  );
+}
+
+/** news↔news: keep when EITHER side's source is selected (it bridges both). */
+function filterNewsNewsMatches(
+  matches: NewsNewsCorrelationMatch[],
+  newsFilter: NewsSource[],
+  socialFilter: SocialPlatform[],
+): NewsNewsCorrelationMatch[] {
+  if (newsFilter.length === 0 && socialFilter.length === 0) return matches;
+  return matches.filter(
+    (m) => newsFilter.includes(m.newsA.source) || newsFilter.includes(m.newsB.source),
   );
 }
 
@@ -427,6 +440,7 @@ export function App() {
                     <SourceHealthIndicator
                       health={snapshot?.sourceHealth ?? {}}
                       correlatedCounts={computeCorrelatedCounts(correlations?.newsMatches ?? [])}
+                      bridgingCoverage={computeBridgingCoverage(snapshot?.news ?? [], correlations?.newsMatches ?? [])}
                       news={snapshot?.news ?? []}
                       selected={newsFilter}
                       onToggle={(source) =>
@@ -742,6 +756,7 @@ export function App() {
                     <SourceHealthIndicator
                       health={snapshot?.sourceHealth ?? {}}
                       correlatedCounts={computeCorrelatedCounts(correlations?.newsMatches ?? [])}
+                      bridgingCoverage={computeBridgingCoverage(snapshot?.news ?? [], correlations?.newsMatches ?? [])}
                       news={snapshot?.news ?? []}
                       selected={newsFilter}
                       onToggle={(source) =>
@@ -782,6 +797,11 @@ export function App() {
                       )}
                       newsSocialMatches={filterNewsSocialMatches(
                         correlations?.newsSocialMatches ?? [],
+                        newsFilter,
+                        socialFilter,
+                      )}
+                      newsNewsMatches={filterNewsNewsMatches(
+                        correlations?.newsNewsMatches ?? [],
                         newsFilter,
                         socialFilter,
                       )}

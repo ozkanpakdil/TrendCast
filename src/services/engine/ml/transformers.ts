@@ -21,6 +21,7 @@ import type {
   SentimentModel,
   ZeroShotModel,
 } from '@/types';
+import { cosineSimilarity, meanPool } from './math';
 
 export type Pipeline = (...args: unknown[]) => Promise<unknown>;
 
@@ -163,6 +164,18 @@ export async function getTransformers(): Promise<TransformersLib> {
  */
 export const DTYPE_FALLBACK_CHAIN = ['q4', 'q8', 'fp16', 'fp32'] as const;
 
+/**
+ * Dtype allow-list for embedding (feature-extraction) pipelines.
+ *
+ * q4 is deliberately excluded: 4-bit quantization measurably distorts
+ * embedding vectors, shifting cosine similarities enough to push marginal
+ * pairs below EMBEDDING_THRESHOLD (0.45) — or, worse, produce degenerate
+ * near-identical vectors (observed: gte-small + q4 on WebGPU matched 100%
+ * of signal→market pairs). q8 (int8) was the pre-Phase-8 behavior and is
+ * also the smaller download (~23 MB vs ~55 MB for q4 on MiniLM).
+ */
+export const EMBEDDING_SUPPORTED_DTYPES = ['q8', 'fp16', 'fp32'] as const;
+
 export type ResolvedDevice = { device?: string; dtype?: string };
 
 /**
@@ -229,20 +242,128 @@ async function createPipelineWithFallback(
   }
 }
 
+// ── Embedding sanity check (WebGPU garbage-output guard) ──────────
+
+/**
+ * Probe texts for the embedding sanity check.
+ *
+ * `related` pair shares strong semantic content; `unrelated` pair shares
+ * none. A healthy MiniLM scores the related pair ≥ 0.5 and the unrelated
+ * pair ≤ 0.4 — a clear margin. Degenerate backends (Firefox WebGPU with
+ * quantized models) collapse all cosines toward ~1.0 or ~0.0, failing the
+ * margin check.
+ */
+const SANITY_RELATED = [
+  'The Federal Reserve cut interest rates by 25 basis points.',
+  'The central bank lowered borrowing costs in its latest policy decision.',
+];
+const SANITY_UNRELATED = [
+  'The Federal Reserve cut interest rates by 25 basis points.',
+  'The recipe requires two cups of flour and three eggs.',
+];
+
+/** Minimum cosine gap between related and unrelated pairs for a healthy backend. */
+const SANITY_MIN_GAP = 0.15;
+
+/**
+ * Verify a freshly created embedding pipeline produces meaningful vectors.
+ *
+ * Firefox's WebGPU execution provider silently returns garbage for
+ * quantized embedding models (session creation succeeds, vectors are junk —
+ * observed: 61% of unrelated pairs above threshold). This probe embeds a
+ * related pair and an unrelated pair and requires the related cosine to
+ * beat the unrelated cosine on WASM CPU — the known-good backend.
+ *
+ * @returns true if the pipeline output is sane, false if degenerate.
+ */
+async function isEmbeddingPipelineSane(pipeline: Pipeline): Promise<boolean> {
+  try {
+    const embed = async (texts: string[]): Promise<number[][]> => {
+      const out = (await pipeline(texts, { pooling: 'mean', normalize: true })) as {
+        data?: number[] | number[][];
+        dims?: number[];
+      };
+      const data = out.data ?? [];
+      if (data.length === 0) return [];
+      // Flat layout: [dims] for a single text, or [batch * dims] pooled.
+      if (typeof data[0] === 'number') {
+        const dims = out.dims?.[out.dims.length - 1] ?? data.length;
+        if (data.length === dims) return [data as number[]];
+        const rows = data.length / dims;
+        return Array.from({ length: rows }, (_, i) =>
+          (data as number[]).slice(i * dims, (i + 1) * dims),
+        );
+      }
+      const first = (data as unknown as number[][][])[0];
+      if (Array.isArray(first?.[0])) {
+        // Token-level [batch][tokens][dims] → mean-pool each item.
+        return (data as unknown as number[][][]).map((item) => meanPool(item));
+      }
+      // Already pooled [batch][dims].
+      return data as number[][];
+    };
+
+    const [a, b] = await embed(SANITY_RELATED);
+    const [c, d] = await embed(SANITY_UNRELATED);
+    if (!a?.length || !b?.length || !c?.length || !d?.length) return false;
+
+    const related = cosineSimilarity(a, b);
+    const unrelated = cosineSimilarity(c, d);
+    const gap = related - unrelated;
+    console.log(
+      `[TrendCast] ML: embedding sanity check — related=${related.toFixed(3)}, ` +
+        `unrelated=${unrelated.toFixed(3)}, gap=${gap.toFixed(3)}`,
+    );
+    return gap >= SANITY_MIN_GAP;
+  } catch (err) {
+    console.warn('[TrendCast] ML: embedding sanity check threw:', err);
+    return false;
+  }
+}
+
 // ── Model cache ──────────────────────────────────────────────────
 
 const pipelineCache = new Map<string, Promise<Pipeline>>();
+
+/** Clear all cached pipelines. Test-only — lets tests start from a cold cache. */
+export function resetPipelineCaches(): void {
+  pipelineCache.clear();
+}
 
 export async function getEmbeddingPipeline(model: EmbeddingModel): Promise<Pipeline> {
   let pipeline = pipelineCache.get(model);
   if (!pipeline) {
     console.log(`[TrendCast] ML: creating embedding pipeline for "${model}"…`);
     const lib = await getTransformers();
-    pipeline = createPipelineWithFallback(lib, 'feature-extraction', model).catch((err) => {
-      console.error(`[TrendCast] ML: embedding pipeline "${model}" failed:`, err);
-      pipelineCache.delete(model);
-      throw err;
-    });
+    pipeline = createPipelineWithFallback(lib, 'feature-extraction', model, [
+      ...EMBEDDING_SUPPORTED_DTYPES,
+    ])
+      .then(async (p) => {
+        // WebGPU can silently produce garbage vectors for quantized
+        // embedding models (Firefox: session creation succeeds, output is
+        // junk). Probe the pipeline; if degenerate, rebuild on WASM CPU.
+        const resolved = resolveDeviceAndDtype([...EMBEDDING_SUPPORTED_DTYPES]);
+        if (resolved.device === 'webgpu' && !(await isEmbeddingPipelineSane(p))) {
+          console.warn(
+            `[TrendCast] ML: WebGPU embedding output is degenerate for "${model}" — ` +
+              'falling back to WASM CPU (known-good backend).',
+          );
+          const wasmPipeline = await lib.pipeline('feature-extraction', model, { quantized: true });
+          if (!(await isEmbeddingPipelineSane(wasmPipeline))) {
+            throw new Error(
+              `Embedding pipeline "${model}" produced degenerate output on both WebGPU and WASM.`,
+            );
+          }
+          console.log(`[TrendCast] ML: WASM embedding pipeline "${model}" passed sanity check.`);
+          return wasmPipeline;
+        }
+        return p;
+      })
+      .catch((err) => {
+        console.error(`[TrendCast] ML: embedding pipeline "${model}" failed:`, err);
+        pipelineCache.delete(model);
+        throw err;
+      });
     pipelineCache.set(model, pipeline);
   }
   return pipeline;

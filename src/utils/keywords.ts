@@ -28,9 +28,9 @@ export function extractKeywords(text: string): string[] {
   const hashtags = text.match(/#[\w]+/g) ?? [];
   hashtags.forEach((tag) => keywords.add(tag.slice(1).toLowerCase()));
 
-  // Extract cashtags: $TICKER
+  // Extract cashtags: $TICKER — emit the bare ticker form (canonical since Phase 14)
   const cashtags = text.match(/\$[A-Z]{2,}/g) ?? [];
-  cashtags.forEach((tag) => keywords.add(tag.toLowerCase()));
+  cashtags.forEach((tag) => keywords.add(tag.toLowerCase().slice(1)));
 
   // Extract plain words (3+ chars, not stop words)
   const words = text.match(/[a-zA-Z]{3,}/g) ?? [];
@@ -49,8 +49,10 @@ export function extractKeywords(text: string): string[] {
  * Returns 0–1 score.
  */
 export function keywordSimilarity(a: string[], b: string[]): number {
-  const setA = new Set(a.map((k) => k.toLowerCase()));
-  const setB = new Set(b.map((k) => k.toLowerCase()));
+  // Normalize both sides once: lowercase, then strip exactly one leading '$'
+  // so legacy stored $-prefixed keywords bridge to bare forms (CORR-02).
+  const setA = new Set(a.map((k) => k.toLowerCase().replace(/^\$/, '')));
+  const setB = new Set(b.map((k) => k.toLowerCase().replace(/^\$/, '')));
   const intersection = new Set([...setA].filter((k) => setB.has(k)));
   const union = new Set([...setA, ...setB]);
   return union.size === 0 ? 0 : intersection.size / union.size;

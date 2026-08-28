@@ -21,12 +21,13 @@ import type {
   CorrelationMatch,
   MarketContract,
   NewsCorrelationMatch,
+  NewsNewsCorrelationMatch,
   NewsSocialCorrelationMatch,
   NewsItem,
   SocialSignal,
 } from '@/types';
 import { keywordSimilarity } from '@/utils/keywords';
-import { extractEntityKeywords, extractEntities } from '@/utils/entities';
+import { extractEntityKeywords, extractEntities, isKnownTicker } from '@/utils/entities';
 import { InvertedIndex, getIncrementalIndex } from './index';
 
 /** Minimum confidence score to include a match (0–1). */
@@ -118,7 +119,12 @@ const KEYWORD_WEIGHT = 0.35;
  * `cachedEntitySimilarity` (superset invariant, must-have truth #4).
  */
 function candidateKeywords(keywords: string[], text: string): string[] {
-  return [...new Set([...keywords, ...extractEntityKeywords(text)])];
+  // Strip exactly one leading '$' from the item's keywords so legacy stored
+  // news keywords (pre-Phase-14 `$`-prefixed forms) resolve against the bare
+  // postings the index now carries (CORR-02 superset invariant). Entity-derived
+  // keywords are already bare and pass through unchanged.
+  const stripped = keywords.map((k) => (k.startsWith('$') ? k.slice(1) : k));
+  return [...new Set([...stripped, ...extractEntityKeywords(text)])];
 }
 
 /**
@@ -181,11 +187,16 @@ function correlatePair(
   const baseSim = entSim * ENTITY_WEIGHT + kwSim * KEYWORD_WEIGHT;
   if (baseSim === 0) return null;
 
-  // Cashtag/hashtag boost
+  // Cashtag/hashtag boost — a keyword counts as a ticker tag when it is a
+  // known ticker (bare form, canonical since Phase 14) OR still carries the
+  // legacy `$` prefix (stored pre-Phase-14 data). The signal side keeps the
+  // `#`-hashtag half unchanged.
   const signalTags = signal.keywords.filter(
-    (k) => k.startsWith('$') || signal.text.includes(`#${k}`),
+    (k) => isKnownTicker(k) || k.startsWith('$') || signal.text.includes(`#${k}`),
   );
-  const contractTags = contract.keywords.filter((k) => k.startsWith('$'));
+  const contractTags = contract.keywords.filter(
+    (k) => isKnownTicker(k) || k.startsWith('$'),
+  );
   const tagOverlap = signalTags.filter((k) => contractTags.includes(k)).length;
   const boost = tagOverlap > 0 ? CASHTAG_BOOST * tagOverlap : 0;
 
@@ -370,6 +381,105 @@ function correlateNewsSocialPair(
   return {
     news,
     signal,
+    confidence,
+    matchedKeywords: allMatched,
+    correlatedAt: Date.now(),
+  };
+}
+
+/**
+ * Correlate news items against each other (CORR-06).
+ *
+ * The fourth engine pass: bridges a thin screener headline ("PEN — VCP
+ * 2026-08-28", keywords `['pen']`) to a rich story about the same ticker
+ * from another source ("More On Earnings Revisions »" on a
+ * `seekingalpha.com/symbol/PEN/…` page). Same-source pairs are skipped so
+ * a screener feed never self-matches, and identical ids are the same item
+ * seen twice.
+ *
+ * A shared known-ticker keyword counts as a shared entity: the ticker IS
+ * the canonical entity (Phase 14 unified space), and for Seeking Alpha
+ * items it often only appears in the URL-derived keyword set, not the
+ * headline text. This both lowers the threshold (entity gate) and adds a
+ * cashtag-equivalent boost so the thin-vs-rich headline pair clears it.
+ */
+export function correlateNewsNews(news: NewsItem[]): NewsNewsCorrelationMatch[] {
+  const matches: NewsNewsCorrelationMatch[] = [];
+  const cache = new EntityCache();
+
+  // Tiny-input fallback (D-03): keep the naive loop below the threshold.
+  if (news.length < InvertedIndex.TINY_INPUT_THRESHOLD) {
+    for (let i = 0; i < news.length; i++) {
+      for (let j = i + 1; j < news.length; j++) {
+        const result = correlateNewsNewsPair(news[i], news[j], cache);
+        if (result) matches.push(result);
+      }
+    }
+  } else {
+    // Candidate-filtered path: index the news array once, resolve each item's
+    // keyword set to a deduplicated, order-preserving superset of candidates.
+    // Only j > i pairs are visited so each pair is scored exactly once.
+    const index = getIncrementalIndex(news, { includeEntityKeywords: true });
+    for (let i = 0; i < news.length; i++) {
+      const item = news[i];
+      for (const j of index.candidates(candidateKeywords(item.keywords, item.headline))) {
+        if (j <= i) continue;
+        const result = correlateNewsNewsPair(item, news[j], cache);
+        if (result) matches.push(result);
+      }
+    }
+  }
+
+  return matches.sort((a, b) => b.confidence - a.confidence);
+}
+
+/** Correlate a single news-news pair (cross-source only). */
+function correlateNewsNewsPair(
+  a: NewsItem,
+  b: NewsItem,
+  cache: EntityCache,
+): NewsNewsCorrelationMatch | null {
+  // CORR-06: cross-source only — a screener feed must never self-match,
+  // and identical ids are the same item seen twice (merge dedup residue).
+  if (a.source === b.source || a.id === b.id) return null;
+
+  // Entity-based similarity (primary)
+  const entSim = cachedEntitySimilarity(a.headline, b.headline, cache);
+
+  // Keyword-based similarity (secondary)
+  const kwSim = keywordSimilarity(a.keywords, b.keywords);
+
+  const baseSim = entSim * ENTITY_WEIGHT + kwSim * KEYWORD_WEIGHT;
+  if (baseSim === 0) return null;
+
+  // Shared-ticker boost — both items carrying the same known ticker is the
+  // news↔news equivalent of the cashtag boost: strong evidence of topical
+  // identity even when one headline is thin (screener) and the other rich.
+  const aTags = a.keywords.filter((k) => isKnownTicker(k));
+  const bTags = b.keywords.filter((k) => isKnownTicker(k));
+  const tagOverlap = aTags.filter((k) => bTags.includes(k)).length;
+  const boost = tagOverlap > 0 ? CASHTAG_BOOST * tagOverlap : 0;
+
+  // News doesn't have virality, so we use a slightly lower threshold boost.
+  const confidence = Math.min(1, baseSim + boost + 0.05);
+
+  // Entity gate: shared extracted entities OR a shared known-ticker keyword
+  // (the ticker often only appears in the URL-derived keyword set).
+  const aEntities = cache.getKeywords(a.headline);
+  const bEntities = cache.getKeywords(b.headline);
+  const hasEntityMatch =
+    aEntities.some((e) => bEntities.includes(e)) || tagOverlap > 0;
+  const threshold = hasEntityMatch ? MIN_CONFIDENCE_ENTITY_MATCH : MIN_CONFIDENCE;
+  if (confidence < threshold) return null;
+
+  // Collect matched keywords from both entity and keyword overlap
+  const matchedKeywords = a.keywords.filter((k) => b.keywords.includes(k));
+  const entityKeywords = aEntities.filter((ek) => bEntities.includes(ek));
+  const allMatched = [...new Set([...matchedKeywords, ...entityKeywords])];
+
+  return {
+    newsA: a,
+    newsB: b,
     confidence,
     matchedKeywords: allMatched,
     correlatedAt: Date.now(),

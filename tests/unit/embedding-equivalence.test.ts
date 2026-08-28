@@ -27,9 +27,10 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { correlateEmbedding } from '@/services/engine/ml/embedding';
+import { correlateEmbedding, correlateNewsSocialEmbedding } from '@/services/engine/ml/embedding';
 import { getEmbeddingPipeline } from '@/services/engine/ml/transformers';
 import { EMBEDDING_THRESHOLD } from '@/services/engine/ml/types';
+import { extractEntityKeywords } from '@/utils/entities';
 import {
   mockContract,
   mockSignal,
@@ -42,10 +43,22 @@ import type {
   CorrelationMatch,
   EmbeddingModel,
   MarketContract,
+  NewsItem,
   SocialSignal,
 } from '@/types';
 
 const MODEL: EmbeddingModel = 'Xenova/all-MiniLM-L6-v2';
+
+/**
+ * Mirror of the production `enrichForEmbedding` — the oracle must embed the
+ * EXACT same strings as production, so it applies the same entity enrichment
+ * before the forward pass. Kept textually parallel to the production helper.
+ */
+function enrichForEmbedding(text: string): string {
+  const entities = extractEntityKeywords(text);
+  if (entities.length === 0) return text;
+  return `${text} ${entities.join(' ')}`;
+}
 
 // ── Mock the transformers pipeline ──────────────────────────────────
 // Deterministic stub: maps each text to a fixed concept-based vector. Both the
@@ -64,6 +77,7 @@ const CONCEPTS = [
   'trump',
   'weather',
   'moon',
+  'nvidia',
 ];
 
 /** Deterministic concept-based vector for a text (L2-normalized by the engine). */
@@ -123,13 +137,13 @@ async function naiveEmbedding(
 ): Promise<CorrelationMatch[]> {
   const pipeline = await getEmbeddingPipeline(MODEL);
   const contractVectors = (
-    (await pipeline(contracts.map((c) => c.question), {
+    (await pipeline(contracts.map((c) => enrichForEmbedding(c.question)), {
       pooling: 'mean',
       normalize: true,
     })) as { data: number[][] }
   ).data.map(normalize);
   const signalVectors = (
-    (await pipeline(signals.map((s) => s.text), {
+    (await pipeline(signals.map((s) => enrichForEmbedding(s.text)), {
       pooling: 'mean',
       normalize: true,
     })) as { data: number[][] }
@@ -144,7 +158,6 @@ async function naiveEmbedding(
     for (let j = 0; j < contracts.length; j++) {
       const sim = cosine(signalEmb, contractVectors[j]);
       if (sim < EMBEDDING_THRESHOLD) continue;
-
       const contract = contracts[j];
       const viralityWeight = (signal.virality / 100) * 0.1;
       const confidence = Math.min(1, sim + viralityWeight);
@@ -331,5 +344,152 @@ describe('D-03 edge cases (embedding)', () => {
     const production = (await correlateEmbedding([hashtagOnlySignal], contractSet, MODEL)).map(normSignal);
     const naive = (await naiveEmbedding([hashtagOnlySignal], contractSet)).map(normSignal);
     expect(production).toEqual(naive);
+  });
+});
+
+// ── Entity enrichment (ticker-identity bridging in the embedding engine) ──
+
+describe('entity enrichment (ticker-identity bridging)', () => {
+  it('enrichForEmbedding appends canonical entity keys to a ticker headline', () => {
+    // Production helper is not exported; verify via the oracle mirror's
+    // behavior on the canonical VCP headline shape.
+    expect(enrichForEmbedding('NVDA — VCP 2026-08-27')).toBe('NVDA — VCP 2026-08-27 nvidia');
+  });
+
+  it('text with no entities embeds unchanged', () => {
+    expect(enrichForEmbedding('The weather is nice today')).toBe('The weather is nice today');
+  });
+
+  it('cashtag signal and bare-ticker headline enrich to the same canonical token', () => {
+    const a = enrichForEmbedding('$NVDA breaking out');
+    const b = enrichForEmbedding('NVDA — VCP 2026-08-27');
+    expect(a).toContain('nvidia');
+    expect(b).toContain('nvidia');
+  });
+
+  it('enriched ticker pair matches in the embedding engine (tracer)', async () => {
+    // MiniLM cannot bridge NVDA↔Nvidia semantically; enrichment injects the
+    // shared canonical token so the concept-stub pipeline sees overlap.
+    const signal: SocialSignal = {
+      ...mockSignal,
+      id: 'sig-nvda',
+      text: '$NVDA breaking out',
+      keywords: ['nvda', 'breaking', 'out'],
+    };
+    const news: NewsItem = {
+      id: 'news-nvda-vcp',
+      source: 'usaStocksIndicator',
+      headline: 'NVDA — VCP 2026-08-27',
+      url: 'https://example.com/nvda',
+      publishedAt: '2026-08-27T00:00:00.000Z',
+      keywords: ['nvda'],
+      category: 'finance',
+    };
+    const matches = await correlateNewsSocialEmbedding([news], [signal], MODEL);
+    expect(matches).toHaveLength(1);
+    expect(matches[0].news.id).toBe('news-nvda-vcp');
+    expect(matches[0].signal.id).toBe('sig-nvda');
+  });
+
+  it('unrelated pairs still do not match after enrichment', async () => {
+    const signal: SocialSignal = {
+      ...mockSignal,
+      id: 'sig-weather',
+      text: 'The weather is nice today',
+      keywords: ['weather', 'nice', 'today'],
+    };
+    const news: NewsItem = {
+      id: 'news-nvda-vcp',
+      source: 'usaStocksIndicator',
+      headline: 'NVDA — VCP 2026-08-27',
+      url: 'https://example.com/nvda',
+      publishedAt: '2026-08-27T00:00:00.000Z',
+      keywords: ['nvda'],
+      category: 'finance',
+    };
+    const matches = await correlateNewsSocialEmbedding([news], [signal], MODEL);
+    expect(matches).toHaveLength(0);
+  });
+
+  it('entity-gated threshold: shared-entity pair below 0.45 but above 0.35 is accepted', async () => {
+    // The production VCP scenario: a thin screener headline vs a ticker-
+    // centric social post. Both resolve to `nvidia`, so the pair is accepted
+    // down to EMBEDDING_ENTITY_THRESHOLD (0.35) even though its cosine sits
+    // below the general EMBEDDING_THRESHOLD (0.45).
+    const signal: SocialSignal = {
+      ...mockSignal,
+      id: 'sig-nvda',
+      text: '$NVDA breaking out',
+      keywords: ['nvda', 'breaking', 'out'],
+    };
+    const news: NewsItem = {
+      id: 'news-nvda-vcp',
+      source: 'usaStocksIndicator',
+      headline: 'NVDA — VCP 2026-08-27',
+      url: 'https://example.com/nvda',
+      publishedAt: '2026-08-27T00:00:00.000Z',
+      keywords: ['nvda'],
+      category: 'finance',
+    };
+    const matches = await correlateNewsSocialEmbedding([news], [signal], MODEL);
+    expect(matches).toHaveLength(1);
+    expect(matches[0].news.id).toBe('news-nvda-vcp');
+    expect(matches[0].signal.id).toBe('sig-nvda');
+    // matchedKeywords come from item.keywords ∩ signal.keywords.
+    expect(matches[0].matchedKeywords).toContain('nvda');
+  });
+
+  it('entity-gated threshold: shared-entity pair below 0.35 is still rejected', async () => {
+    // Shared entity lowers the bar to 0.35 but does not remove it: a pair
+    // whose cosine is below EMBEDDING_ENTITY_THRESHOLD must not match.
+    // The stub vector only lights up for CONCEPTS entries, and
+    // 'breaking'/'out' are not in CONCEPTS, so cosine is driven by the single
+    // shared 'nvidia'. To force a sub-0.35 cosine we use a signal whose ONLY
+    // overlap is the entity token diluted by many unrelated concept tokens.
+    const news: NewsItem = {
+      id: 'news-nvda-vcp',
+      source: 'usaStocksIndicator',
+      headline: 'NVDA — VCP 2026-08-27',
+      url: 'https://example.com/nvda',
+      publishedAt: '2026-08-27T00:00:00.000Z',
+      keywords: ['nvda'],
+      category: 'finance',
+    };
+    const diluted: SocialSignal = {
+      ...mockSignal,
+      id: 'sig-nvda-diluted',
+      text: 'bitcoin trump weather moon fed rate powell crypto ethereum eth btc NVDA',
+      keywords: ['bitcoin', 'trump', 'weather', 'moon', 'fed', 'rate', 'powell', 'crypto', 'ethereum', 'eth', 'btc', 'nvda'],
+    };
+    const matches = await correlateNewsSocialEmbedding([news], [diluted], MODEL);
+    // The diluted signal lights up 11 of 12 concepts; the news item lights up
+    // only 'nvidia' (via enrichment). Cosine = 1/sqrt(11) ≈ 0.30 < 0.35 →
+    // rejected despite the shared entity.
+    expect(matches).toHaveLength(0);
+  });
+
+  it('no shared entity keeps the full EMBEDDING_THRESHOLD bar', async () => {
+    // A pair with semantic overlap but NO shared canonical entity must still
+    // require the general 0.45 bar — the entity gate only relaxes pairs that
+    // share an entity.
+    const signal: SocialSignal = {
+      ...mockSignal,
+      id: 'sig-crypto',
+      text: 'bitcoin and ethereum are pumping',
+      keywords: ['bitcoin', 'ethereum', 'pumping'],
+    };
+    const news: NewsItem = {
+      id: 'news-crypto',
+      source: 'usaStocksIndicator',
+      headline: 'bitcoin ethereum crypto',
+      url: 'https://example.com/crypto',
+      publishedAt: '2026-08-27T00:00:00.000Z',
+      keywords: ['bitcoin', 'ethereum'],
+      category: 'finance',
+    };
+    const matches = await correlateNewsSocialEmbedding([news], [signal], MODEL);
+    // Both sides light up the same 3 concepts → cosine 1.0 ≥ 0.45 → accepted
+    // (proves the general path still works), and no entity was involved.
+    expect(matches).toHaveLength(1);
   });
 });

@@ -15,7 +15,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { keywordSimilarity } from '@/utils/keywords';
-import { extractEntityKeywords, extractEntities } from '@/utils/entities';
+import { extractEntityKeywords, extractEntities, isKnownTicker } from '@/utils/entities';
 import {
   correlate,
   correlateNews,
@@ -104,10 +104,15 @@ function naiveCorrelatePair(
   const baseSim = entSim * ENTITY_WEIGHT + kwSim * KEYWORD_WEIGHT;
   if (baseSim === 0) return null;
 
+  // Mirrors the production boost detection: a keyword counts as a ticker tag
+  // when it is a known ticker (bare form) OR still carries the legacy `$`
+  // prefix. The `#`-hashtag half is unchanged. (Oracle lockstep, Pitfall 4.)
   const signalTags = signal.keywords.filter(
-    (k) => k.startsWith('$') || signal.text.includes(`#${k}`),
+    (k) => isKnownTicker(k) || k.startsWith('$') || signal.text.includes(`#${k}`),
   );
-  const contractTags = contract.keywords.filter((k) => k.startsWith('$'));
+  const contractTags = contract.keywords.filter(
+    (k) => isKnownTicker(k) || k.startsWith('$'),
+  );
   const tagOverlap = signalTags.filter((k) => contractTags.includes(k)).length;
   const boost = tagOverlap > 0 ? CASHTAG_BOOST * tagOverlap : 0;
 

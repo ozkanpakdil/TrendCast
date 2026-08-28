@@ -9,10 +9,10 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Correlation Correctness
 
-- [ ] **CORR-01**: User sees stock-indicator news correlate with social/news/markets — cashtag `$AMZN`, bare ticker `AMZN`, and org name `Amazon` resolve to one canonical entity (unified ticker-canonical alias space in `entities.ts`/`keywords.ts`)
-- [ ] **CORR-02**: User's keyword-level correlation bridges forms — `extractKeywords` emits bare form for cashtags (or correlation normalizes both sides) so keyword Jaccard intersects between stock-indicator news and social signals
-- [ ] **CORR-03**: User's correlations stay clean — screener template tokens (`vcp`, `2026`, `breakout`, source labels/dates) are filtered from stock-indicator item keywords so they never create false bridges
-- [ ] **CORR-04**: User can observe bridging health — source health shows count of stock-indicator items that produced a canonical ticker entity vs total (extends `SourceHealth` projection)
+- [x] **CORR-01**: User sees stock-indicator news correlate with social/news/markets — cashtag `$AMZN`, bare ticker `AMZN`, and org name `Amazon` resolve to one canonical entity (unified ticker-canonical alias space in `entities.ts`/`keywords.ts`)
+- [x] **CORR-02**: User's keyword-level correlation bridges forms — `extractKeywords` emits bare form for cashtags (or correlation normalizes both sides) so keyword Jaccard intersects between stock-indicator news and social signals
+- [x] **CORR-03**: User's correlations stay clean — screener template tokens (`vcp`, `2026`, `breakout`, source labels/dates) are filtered from stock-indicator item keywords so they never create false bridges
+- [x] **CORR-04**: User can observe bridging health — source health shows count of stock-indicator items that produced a canonical ticker entity vs total (extends `SourceHealth` projection)
 
 ### ML Progress UX
 
@@ -33,6 +33,7 @@ Deferred to future release. Tracked but not in current roadmap.
 ### Correlation Correctness
 
 - **CORR-05**: Per-file download progress aggregation polish (aggregate `loaded`/`total` across files into one labeled bar) — trigger: first-run download UX still unclear after MLPROG-02
+- **CORR-06**: User sees news↔news correlations — a fourth engine pass compares news items against each other (e.g. VCP screener `stockScreener2` ↔ Seeking Alpha stock-indicator items about the same company), using the phase-14 unified entity space + enriched embeddings so "NVDA — VCP 2026-08-27" and "NVDA — Stock Indicator 2026-08-23" match. Currently impossible by construction: the engine runs only signal→market, news→market, and news→social passes. Defer rationale: phase 14 delivered the entity/keyword/embedding bridging prerequisites; the pass itself needs its own dedup/threshold design (same-source self-matches, cross-source duplicate headlines) and a UI surface decision (newsMatches vs a new matches category) — filed after phase 14 close-out per user decision
 
 ### ML Progress UX
 
@@ -60,10 +61,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CORR-01 | Phase 14 | Pending |
-| CORR-02 | Phase 14 | Pending |
-| CORR-03 | Phase 14 | Pending |
-| CORR-04 | Phase 14 | Pending |
+| CORR-01 | Phase 14 | Complete |
+| CORR-02 | Phase 14 | Complete |
+| CORR-03 | Phase 14 | Complete |
+| CORR-04 | Phase 14 | Complete |
+| CORR-05 | Deferred (v0.1.7+) | Pending |
+| CORR-06 | Deferred (v0.1.7+) | Pending |
 | MLPROG-01 | Phase 15 | Pending |
 | MLPROG-02 | Phase 15 | Pending |
 | TRIG-01 | Phase 16 | Pending |
@@ -72,6 +75,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TRIG-04 | Phase 16 | Pending |
 
 **Coverage:**
+
 - v0.1.6 requirements: 10 total
 - Mapped to phases: 10
 - Unmapped: 0 ✓

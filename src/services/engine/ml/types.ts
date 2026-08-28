@@ -11,6 +11,7 @@ export type CorrelationPhase =
   | 'comparing-signals'
   | 'comparing-news'
   | 'comparing-news-social'
+  | 'comparing-news-news'
   | 'classifying-signals'
   | 'classifying-news'
   | 'classifying-news-social'
@@ -53,6 +54,19 @@ export function checkCancelled(flag: CancelFlag | undefined): void {
 // ── Thresholds ───────────────────────────────────────────────────
 
 export const EMBEDDING_THRESHOLD = 0.45;
+
+/**
+ * Lower embedding threshold for pairs that share a canonical entity
+ * (CORR-01 unified keys — e.g. "$NVDA breaking out" and "NVDA — VCP
+ * 2026-08-27" both resolve to `nvidia`). Mirrors the heuristic engine's
+ * MIN_CONFIDENCE_ENTITY_MATCH: a shared named entity is strong evidence of
+ * topical identity, so thin screener headlines (mostly date/label tokens)
+ * can bridge to ticker-centric social posts even though their raw cosine
+ * sits between 0.35 and the general 0.45 bar. Pairs without a shared
+ * entity still require the full EMBEDDING_THRESHOLD.
+ */
+export const EMBEDDING_ENTITY_THRESHOLD = 0.35;
+
 export const SENTIMENT_THRESHOLD = 0.35;
 
 /** Minimum entailment score for zero-shot classification matches. */

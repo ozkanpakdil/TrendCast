@@ -20,7 +20,7 @@
 
 import { browser } from '@/messaging/browser';
 import { CONFIG } from '@/config';
-import { extractEntityKeywords } from '@/utils/entities';
+import { extractEntityKeywords, isKnownTicker } from '@/utils/entities';
 import type {
   AlertRecord,
   AlertState,
@@ -243,11 +243,12 @@ function normalizeKeyword(kw: string): string {
 
 /**
  * Humanize a normalized topic keyword into a display label (D-05).
- * e.g. "bitcoin" -> "Bitcoin", "$btc" -> "BTC".
+ * e.g. "bitcoin" -> "Bitcoin", "$btc" -> "BTC", "btc" -> "BTC".
  */
 function humanizeTopic(keyword: string): string {
   const k = keyword.trim();
   if (k.startsWith('$')) return k.slice(1).toUpperCase();
+  if (isKnownTicker(k)) return k.toUpperCase();
   if (k.length === 0) return 'Topic';
   return k.charAt(0).toUpperCase() + k.slice(1);
 }

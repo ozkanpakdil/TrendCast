@@ -9,6 +9,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { collectNews } from '@/services/collectors/news';
+import { extractKeywords } from '@/utils/keywords';
 import type { NewsSource, SourceHealth } from '@/types';
 
 // Mock the collector's only external dependency (rss2json fetch).
@@ -248,6 +249,9 @@ describe('collectNews stock-indicator sources', () => {
     const bbc = news.find((n) => n.source === 'bbc');
     expect(screener?.summary).toBeUndefined();
     expect(bbc?.summary).toBe('Some BBC summary');
+    // CORR-03 scoping: curation applies ONLY to stock-indicator sources —
+    // the BBC item still carries raw extractKeywords output.
+    expect(bbc?.keywords).toEqual(extractKeywords('BBC headline Some BBC summary'));
   });
 
   it('records health for a new source with itemCount and consecutiveFailures', async () => {
@@ -291,9 +295,9 @@ describe('collectNews stock-indicator sources', () => {
     expect(symbols).toContain('XPON — Breakout 2026-08-25');
     expect(symbols).toContain('GENB — Breakout 2026-08-25');
     expect(symbols).toContain('OABI — Breakout 2026-08-25');
-    // Each item's keywords must include its ticker so correlation can match it.
+    // CORR-03: screener items are also curated to the bare ticker.
     const xpon = news.find((n) => n.headline.startsWith('XPON'));
-    expect(xpon?.keywords).toContain('xpon');
+    expect(xpon?.keywords).toEqual(['xpon']);
     // Score cells (e.g. <b>155.25</b>) must NOT be treated as symbols.
     expect(news.some((n) => n.headline.startsWith('155'))).toBe(false);
     // Ids are unique per stock.
@@ -325,8 +329,22 @@ describe('collectNews stock-indicator sources', () => {
     expect(symbols).toContain('AMZN — Stock Indicator 2026-08-23');
     expect(symbols).toContain('EBAY — Stock Indicator 2026-08-23');
     expect(symbols).toContain('ASML — Stock Indicator 2026-08-23');
+    // CORR-03: keywords are curated to the bare lowercase ticker — label
+    // tokens (stock/indicator) and the date must not dilute the set.
     const amzn = news.find((n) => n.headline.startsWith('AMZN'));
-    expect(amzn?.keywords).toContain('amzn');
+    expect(amzn?.keywords).toEqual(['amzn']);
+    const ebay = news.find((n) => n.headline.startsWith('EBAY'));
+    expect(ebay?.keywords).toEqual(['ebay']);
+    const asml = news.find((n) => n.headline.startsWith('ASML'));
+    expect(asml?.keywords).toEqual(['asml']);
+    // No label or date tokens in any stock-indicator item's keywords.
+    for (const n of news) {
+      expect(n.keywords).not.toContain('stock');
+      expect(n.keywords).not.toContain('indicator');
+      expect(n.keywords).not.toContain('breakout');
+      expect(n.keywords).not.toContain('vcp');
+      expect(n.keywords).not.toContain('2026');
+    }
     expect(new Set(news.map((n) => n.id)).size).toBe(3);
   });
 

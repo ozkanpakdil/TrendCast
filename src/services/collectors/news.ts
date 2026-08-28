@@ -106,6 +106,23 @@ function dateFromTitle(title: string): string {
 }
 
 /**
+ * Extract Seeking Alpha symbol-page tickers from a headline/summary
+ * (CORR-06). SA feed items link to `seekingalpha.com/symbol/PEN/...` pages;
+ * their headlines are often generic ("More On Earnings Revisions »"), so the
+ * ticker must be pulled from the URL and added to the keyword set — otherwise
+ * the item can never bridge to a VCP screener item about the same stock.
+ */
+function extractSeekingAlphaSymbols(text: string): string[] {
+  const symbols: string[] = [];
+  const re = /seekingalpha\.com\/symbol\/([A-Z][A-Z0-9.-]{0,9})/gi;
+  for (const m of text.matchAll(re)) {
+    const sym = m[1].replace(/[.-]+$/, '').toLowerCase();
+    if (sym && !symbols.includes(sym)) symbols.push(sym);
+  }
+  return symbols;
+}
+
+/**
  * Collect news headlines from configured sources via rss2json.com.
  * Supports BBC, CNN, Yahoo Finance, and Google News finance/politics.
  * Returns the combined array of NewsItems plus a per-source health map
@@ -301,9 +318,12 @@ async function collectFromSource(source: NewsSource): Promise<CollectResult> {
                     summary: undefined,
                     url: link,
                     publishedAt,
-                    // Ticker in keywords so the correlation engine can match it
-                    // against market contracts and social signals.
-                    keywords: extractKeywords(`${stockHeadline} ${symbol}`),
+                    // Keywords are curated to the bare lowercase ticker only
+                    // (CORR-03): screener-label tokens (stock/indicator/breakout/
+                    // vcp) and date tokens would dilute keyword Jaccard against
+                    // signals whose keyword set is ticker-centric. Org-name
+                    // bridging is handled by the unified entity space (Phase 14).
+                    keywords: [symbol.toLowerCase()],
                     imageUrl: imageUrl ?? undefined,
                     category: classifyCategory(stockHeadline),
                   } satisfies NewsItem;
@@ -317,6 +337,15 @@ async function collectFromSource(source: NewsSource): Promise<CollectResult> {
             // would bloat storage, so omit `summary` for them (headline only).
             const summary = GUID_BASED_SOURCES.has(source) ? undefined : description;
 
+            // CORR-06: Seeking Alpha items often have generic headlines ("More On
+            // Earnings Revisions »") while the ticker only appears in the symbol-
+            // page URL. Pull it into the keyword set so the item can bridge to a
+            // VCP screener item about the same stock in the news↔news pass.
+            const saSymbols = source === 'seekingalpha'
+              ? extractSeekingAlphaSymbols(`${link} ${fullText}`)
+              : [];
+            const keywords = [...new Set([...extractKeywords(fullText), ...saSymbols])];
+
             return [{
               id: `${source}:${id}`,
               source,
@@ -324,7 +353,7 @@ async function collectFromSource(source: NewsSource): Promise<CollectResult> {
               summary,
               url: link,
               publishedAt,
-              keywords: extractKeywords(fullText),
+              keywords,
               imageUrl: imageUrl ?? undefined,
               // Category assigned at collection time (Phase 5, D-02) so the
               // market-driven news view and export read a consistent category.

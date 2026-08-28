@@ -16,7 +16,8 @@ describe('extractKeywords', () => {
 
   it('extracts cashtags', () => {
     const result = extractKeywords('$BTC to $100k soon');
-    expect(result).toContain('$btc');
+    expect(result).toContain('btc');
+    expect(result.some((k) => k.startsWith('$'))).toBe(false);
   });
 
   it('filters stop words', () => {

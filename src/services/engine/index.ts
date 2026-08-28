@@ -99,7 +99,11 @@ export class InvertedIndex {
       const list = this.map.get(k);
       if (list) for (const i of list) seen.add(i);
     }
-    return [...seen];
+    // Contract order (ascending index) — the order the naive loop visits
+    // items. Postings are unioned in keyword-iteration order, so sort to
+    // honor the documented invariant (ties in downstream confidence scoring
+    // otherwise break differently on the two engine paths).
+    return [...seen].sort((a, b) => a - b);
   }
 
   /** Whether a keyword is indexed. */

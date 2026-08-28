@@ -47,7 +47,7 @@ import type {
 import { DEFAULT_SETTINGS } from '@/types';
 import { mergeSocialHealth } from '@/utils/source-health';
 import { collectPolymarketMarkets, collectKalshiMarkets, collectRedditSignals, collectXTrends, collectTikTokTrends, collectNews } from '@/services/collectors';
-import { correlate, correlateNews, correlateNewsSocial } from '@/services/engine/correlation';
+import { correlate, correlateNews, correlateNewsSocial, correlateNewsNews } from '@/services/engine/correlation';
 import { exportToCsv, exportToJson } from '@/utils/export';
 import { pruneStorageIfNeeded, measureStorageUsage } from '@/utils/storage';
 import { backfillWatchlist } from '@/utils/watchlist';
@@ -192,22 +192,22 @@ async function runMLCorrelation(
     const ml = await import('@/services/engine/ml');
     if (engine === 'embedding') {
       const all = await ml.correlateAllEmbedding(signals, markets, news, model as never, onProgress as never);
-      return { matches: all.matches, newsMatches: all.newsMatches, newsSocialMatches: all.newsSocialMatches, engine };
+      return { matches: all.matches, newsMatches: all.newsMatches, newsSocialMatches: all.newsSocialMatches, newsNewsMatches: all.newsNewsMatches, engine };
     } else if (engine === 'sentiment') {
       const all = await ml.correlateAllSentiment(signals, markets, news, model as never, onProgress as never);
-      return { matches: all.matches, newsMatches: all.newsMatches, newsSocialMatches: all.newsSocialMatches, engine };
+      return { matches: all.matches, newsMatches: all.newsMatches, newsSocialMatches: all.newsSocialMatches, newsNewsMatches: [], engine };
     } else if (engine === 'zeroshot') {
       const all = await ml.correlateAllZeroShot(signals, markets, news, model as never, onProgress as never);
-      return { matches: all.matches, newsMatches: all.newsMatches, newsSocialMatches: all.newsSocialMatches, engine };
+      return { matches: all.matches, newsMatches: all.newsMatches, newsSocialMatches: all.newsSocialMatches, newsNewsMatches: [], engine };
     } else if (engine === 'ner') {
       const all = await ml.correlateAllNER(signals, markets, news, model as never, onProgress as never);
-      return { matches: all.matches, newsMatches: all.newsMatches, newsSocialMatches: all.newsSocialMatches, engine };
+      return { matches: all.matches, newsMatches: all.newsMatches, newsSocialMatches: all.newsSocialMatches, newsNewsMatches: [], engine };
     } else {
       // llm
       const matches = await ml.correlateLLM(signals, markets, model as never, onProgress as never);
       const newsMatches = await ml.correlateNewsLLM(news, markets, model as never, onProgress as never);
       const newsSocialMatches = await ml.correlateNewsSocialLLM(news, signals, model as never, onProgress as never);
-      return { matches, newsMatches, newsSocialMatches, engine };
+      return { matches, newsMatches, newsSocialMatches, newsNewsMatches: [], engine };
     }
   }
 
@@ -711,7 +711,7 @@ async function runCorrelationAsync(
     } else {
       console.log(
         `[TrendCast] CORRELATE_ALL OK — engine="${engine}", model="${model}":`,
-        `${result.matches.length} signal→market, ${result.newsMatches.length} news→market, ${result.newsSocialMatches.length} news→social`,
+        `${result.matches.length} signal→market, ${result.newsMatches.length} news→market, ${result.newsSocialMatches.length} news→social, ${result.newsNewsMatches.length} news↔news`,
       );
     }
   } catch (err) {
@@ -720,6 +720,7 @@ async function runCorrelationAsync(
       matches: [],
       newsMatches: [],
       newsSocialMatches: [],
+      newsNewsMatches: [],
       engine,
       error: err instanceof Error ? err.message : String(err),
     };
@@ -731,6 +732,11 @@ async function runCorrelationAsync(
   }
 }
 
+/** Wall-clock timestamp (HH:MM:SS.mmm) for log lines. */
+function logTime(): string {
+  return new Date().toISOString().slice(11, 23);
+}
+
 async function runCorrelationWithEngine(
   markets: MarketContract[],
   signals: SocialSignal[],
@@ -739,16 +745,25 @@ async function runCorrelationWithEngine(
   model: string,
   requestId?: string,
 ): Promise<CorrelationResult> {
+  const runStart = performance.now();
   console.log(
-    `[TrendCast] runCorrelationWithEngine: engine="${engine}", model="${model}",`,
+    `[TrendCast ${logTime()}] runCorrelationWithEngine: engine="${engine}", model="${model}",`,
     `inputs: ${markets.length} markets, ${signals.length} signals, ${news.length} news`,
   );
 
   if (engine === 'embedding' || engine === 'sentiment' || engine === 'zeroshot' || engine === 'ner' || engine === 'llm') {
     try {
       // Progress callback — forwards progress to the dashboard via runtime message
+      let lastProgressAt = runStart;
       const onProgress = (info: { phase: string; current: number; total: number; engine: string; model: string }) => {
-        console.debug(`[TrendCast] Progress: ${info.phase} ${info.current}/${info.total} (${info.engine}/${info.model})`);
+        const now = performance.now();
+        const sinceLast = (now - lastProgressAt) / 1000;
+        const elapsed = (now - runStart) / 1000;
+        lastProgressAt = now;
+        console.debug(
+          `[TrendCast ${logTime()}] Progress: ${info.phase} ${info.current}/${info.total} ` +
+          `(${info.engine}/${info.model}) +${sinceLast.toFixed(1)}s, elapsed ${elapsed.toFixed(1)}s`,
+        );
         // Broadcast progress to any listening dashboard/popup tabs
         browser.runtime.sendMessage({
           type: 'CORRELATION_PROGRESS',
@@ -769,15 +784,17 @@ async function runCorrelationWithEngine(
       const result = await runMLCorrelation(
         markets, signals, news, engine, model, requestId ?? `corr-${Date.now()}`, onProgress,
       );
-      console.log(`[TrendCast] ${engine}: signal→market = ${result.matches.length}`);
-      console.log(`[TrendCast] ${engine}: news→market = ${result.newsMatches.length}`);
-      console.log(`[TrendCast] ${engine}: news→social = ${result.newsSocialMatches.length}`);
+      const totalSecs = ((performance.now() - runStart) / 1000).toFixed(1);
+      console.log(`[TrendCast ${logTime()}] ${engine}: signal→market = ${result.matches.length} (total ${totalSecs}s)`);
+      console.log(`[TrendCast ${logTime()}] ${engine}: news→market = ${result.newsMatches.length} (total ${totalSecs}s)`);
+      console.log(`[TrendCast ${logTime()}] ${engine}: news→social = ${result.newsSocialMatches.length} (total ${totalSecs}s)`);
+      console.log(`[TrendCast ${logTime()}] ${engine}: news↔news = ${result.newsNewsMatches.length} (total ${totalSecs}s)`);
       return result;
     } catch (err) {
       const errorMsg = formatMLError(err, engine, model);
       console.error(`[TrendCast] ${engine} engine FAILED — model="${model}":`, err);
       console.error(`[TrendCast] ${engine} engine error message:`, errorMsg);
-      return { matches: [], newsMatches: [], newsSocialMatches: [], engine, error: errorMsg };
+      return { matches: [], newsMatches: [], newsSocialMatches: [], newsNewsMatches: [], engine, error: errorMsg };
     }
   }
 
@@ -789,7 +806,9 @@ async function runCorrelationWithEngine(
   console.log(`[TrendCast] Heuristic: news→market = ${newsMatches.length}`);
   const newsSocialMatches = correlateNewsSocial(news, signals);
   console.log(`[TrendCast] Heuristic: news→social = ${newsSocialMatches.length}`);
-  return { matches, newsMatches, newsSocialMatches, engine };
+  const newsNewsMatches = correlateNewsNews(news);
+  console.log(`[TrendCast] Heuristic: news↔news = ${newsNewsMatches.length}`);
+  return { matches, newsMatches, newsSocialMatches, newsNewsMatches, engine };
 }
 
 /**
@@ -851,7 +870,7 @@ async function runCorrelationPrecompute(
     );
   } else {
     console.log(
-      `[TrendCast] Pre-computed (${engine}) ${result.matches.length} signal→market, ${result.newsMatches.length} news→market, ${result.newsSocialMatches.length} news→social`,
+      `[TrendCast] Pre-computed (${engine}) ${result.matches.length} signal→market, ${result.newsMatches.length} news→market, ${result.newsSocialMatches.length} news→social, ${result.newsNewsMatches.length} news↔news`,
     );
   }
 }

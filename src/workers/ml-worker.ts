@@ -23,6 +23,7 @@ import type {
   MarketContract,
   NewsCorrelationMatch,
   NewsItem,
+  NewsNewsCorrelationMatch,
   NewsSocialCorrelationMatch,
   SocialSignal,
 } from '@/types';
@@ -156,6 +157,7 @@ async function handleCorrelate(msg: WorkerRequest): Promise<void> {
     let matches: CorrelationMatch[] = [];
     let newsMatches: NewsCorrelationMatch[] = [];
     let newsSocialMatches: NewsSocialCorrelationMatch[] = [];
+    let newsNewsMatches: NewsNewsCorrelationMatch[] = [];
 
     if (engine === 'embedding') {
       console.log(`[TrendCast ML Worker] Starting embedding correlation: model="${model}"`);
@@ -163,6 +165,7 @@ async function handleCorrelate(msg: WorkerRequest): Promise<void> {
       matches = all.matches;
       newsMatches = all.newsMatches;
       newsSocialMatches = all.newsSocialMatches;
+      newsNewsMatches = all.newsNewsMatches;
     } else if (engine === 'sentiment') {
       console.log(`[TrendCast ML Worker] Starting sentiment correlation: model="${model}"`);
       const all = await correlateAllSentiment(signals, markets, news, model as never, onProgress, cancelFlag);
@@ -193,11 +196,12 @@ async function handleCorrelate(msg: WorkerRequest): Promise<void> {
       matches,
       newsMatches,
       newsSocialMatches,
+      newsNewsMatches,
       engine,
     };
 
     console.log(
-      `[TrendCast ML Worker] Done: ${matches.length} signal→market, ${newsMatches.length} news→market, ${newsSocialMatches.length} news→social`,
+      `[TrendCast ML Worker] Done: ${matches.length} signal→market, ${newsMatches.length} news→market, ${newsSocialMatches.length} news→social, ${newsNewsMatches.length} news↔news`,
     );
 
     postMessageToHost({

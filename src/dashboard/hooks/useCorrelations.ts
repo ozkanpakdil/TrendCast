@@ -43,11 +43,13 @@ function computeRunStats(
     ...result.matches.map((m) => m.confidence),
     ...result.newsMatches.map((m) => m.confidence),
     ...result.newsSocialMatches.map((m) => m.confidence),
+    ...(result.newsNewsMatches?.map((m) => m.confidence) ?? []),
   ];
 
   const matchCount = result.matches.length;
   const newsMatchCount = result.newsMatches.length;
   const newsSocialMatchCount = result.newsSocialMatches.length;
+  const newsNewsMatchCount = result.newsNewsMatches?.length ?? 0;
   const total = allConfidences.length;
 
   const avgConfidence = total > 0 ? allConfidences.reduce((a, b) => a + b, 0) / total : 0;
@@ -64,6 +66,7 @@ function computeRunStats(
     matchCount,
     newsMatchCount,
     newsSocialMatchCount,
+    newsNewsMatchCount,
     avgConfidence,
     maxConfidence,
     confidenceSpread,

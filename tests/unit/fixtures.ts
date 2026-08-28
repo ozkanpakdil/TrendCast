@@ -64,7 +64,7 @@ export function newsMatch(
 
 // ── Golden fixtures (D-02) ────────────────────────────────────────
 
-/** Cashtag-only contract: its only keyword is the cashtag `$btc`. */
+/** Cashtag-only contract: its only keyword is the bare ticker form `btc` (canonical since Phase 14). */
 export const cashtagOnlyContract: MarketContract = {
   id: 'cashtag-btc',
   platform: 'polymarket',
@@ -74,16 +74,16 @@ export const cashtagOnlyContract: MarketContract = {
     { label: 'No', price: 0.4 },
   ],
   endDate: '2025-12-31T23:59:59Z',
-  keywords: ['$btc'],
+  keywords: ['btc'],
   lastUpdated: Date.now(),
 };
 
-/** Cashtag-only signal: its only keyword is the cashtag `$btc`. */
+/** Cashtag-only signal: its only keyword is the bare ticker form `btc` (canonical since Phase 14). */
 export const cashtagOnlySignal: SocialSignal = {
   ...mockSignal,
   id: 'sig-cashtag',
   text: '$BTC to the moon',
-  keywords: ['$btc'],
+  keywords: ['btc'],
 };
 
 /** Hashtag-only contract: its only keyword is `bitcoin` (from `#bitcoin`). */

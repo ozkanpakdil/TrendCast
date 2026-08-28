@@ -19,6 +19,8 @@ import { CONFIG } from '@/config';
 interface SourceHealthIndicatorProps {
   health: SourceHealth;
   correlatedCounts: Partial<Record<NewsSource, number>>;
+  /** Per-source bridging coverage (CORR-04): items bridged / total collected. */
+  bridgingCoverage?: Partial<Record<NewsSource, { total: number; bridged: number }>>;
   /** Accumulated news items — used to show the real per-source fetched count. */
   news: NewsItem[];
   /** Currently selected (filtered) sources. */
@@ -85,6 +87,7 @@ function faviconUrl(domain: string): string {
 function SourceHealthIndicatorImpl({
   health,
   correlatedCounts,
+  bridgingCoverage,
   news,
   selected,
   onToggle,
@@ -149,6 +152,11 @@ function SourceHealthIndicatorImpl({
         const correlated = correlatedCounts[source] ?? 0;
         const fails = entry?.consecutiveFailures ?? 0;
         const active = selected.includes(source);
+        // CORR-04: bridging coverage segment — defined 0/0 when absent or
+        // empty so the tooltip never interpolates NaN/undefined.
+        const coverage = bridgingCoverage?.[source];
+        const bridged = coverage && coverage.total > 0 ? coverage.bridged : 0;
+        const bridgedTotal = coverage && coverage.total > 0 ? coverage.total : 0;
 
         return (
           <button
@@ -156,7 +164,7 @@ function SourceHealthIndicatorImpl({
             type="button"
             onClick={() => onToggle(source)}
             aria-pressed={active}
-            title={`${sourceLabels[source]}: ${meta.label} — fetched ${fetched} · correlated ${correlated}${fails > 0 ? ` · ${fails} fail${fails === 1 ? '' : 's'}` : ''}${active ? ' (click to remove filter)' : ' (click to filter)'}`}
+            title={`${sourceLabels[source]}: ${meta.label} — fetched ${fetched} · correlated ${correlated} · bridged ${bridged}/${bridgedTotal}${fails > 0 ? ` · ${fails} fail${fails === 1 ? '' : 's'}` : ''}${active ? ' (click to remove filter)' : ' (click to filter)'}`}
             className={`flex items-center gap-1.5 px-1.5 py-0.5 rounded text-[11px] leading-tight transition-colors cursor-pointer ${
               active
                 ? isDark

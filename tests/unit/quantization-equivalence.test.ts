@@ -13,11 +13,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   DTYPE_FALLBACK_CHAIN,
+  EMBEDDING_SUPPORTED_DTYPES,
   getEmbeddingPipeline,
   getLLMPipeline,
   getNERPipeline,
   getSentimentPipeline,
   getZeroShotPipeline,
+  resetPipelineCaches,
   resolveDeviceAndDtype,
 } from '@/services/engine/ml/transformers';
 import type { Pipeline } from '@/services/engine/ml/transformers';
@@ -29,8 +31,21 @@ import type { Pipeline } from '@/services/engine/ml/transformers';
 
 const pipelineCalls: Array<{ task: string; model: string; options: unknown }> = [];
 let failWebGPU = false;
+// When true, the fake pipeline returns degenerate (identical) vectors so the
+// embedding sanity check fails — simulating Firefox's WebGPU garbage output.
+let degenerateEmbeddings = false;
 
 const fakePipeline: Pipeline = async () => ({ ok: true });
+
+/**
+ * Sane embedding stub: deterministic concept vectors where the sanity probe's
+ * related pair overlaps and the unrelated pair doesn't.
+ */
+const SANE_VECTORS: Record<string, number[]> = {
+  'The Federal Reserve cut interest rates by 25 basis points.': [1, 1, 0, 0],
+  'The central bank lowered borrowing costs in its latest policy decision.': [1, 1, 0, 0],
+  'The recipe requires two cups of flour and three eggs.': [0, 0, 1, 1],
+};
 
 const fakeLib = {
   pipeline: vi.fn(async (task: string, model: string, options?: unknown) => {
@@ -38,6 +53,21 @@ const fakeLib = {
     const opts = (options ?? {}) as { device?: string };
     if (failWebGPU && opts.device === 'webgpu') {
       throw new Error('WebGPU device failed');
+    }
+    if (task === 'feature-extraction') {
+      return async (texts: string[]) => {
+        // Degenerate output only on the WebGPU pipeline — the WASM retry
+        // returns sane vectors (mirrors the real Firefox failure mode).
+        const isDegenerate = degenerateEmbeddings && opts.device === 'webgpu';
+        if (isDegenerate) {
+          // All texts → identical vector: cosines collapse, sanity check fails.
+          return { data: texts.map(() => [1, 1, 1, 1]), dims: [texts.length, 4] };
+        }
+        return {
+          data: texts.map((t) => SANE_VECTORS[t] ?? [0, 0, 0, 1]),
+          dims: [texts.length, 4],
+        };
+      };
     }
     return fakePipeline;
   }),
@@ -64,6 +94,8 @@ function setWebGPU(available: boolean): void {
 beforeEach(() => {
   pipelineCalls.length = 0;
   failWebGPU = false;
+  degenerateEmbeddings = false;
+  resetPipelineCaches();
   setWebGPU(false);
 });
 
@@ -85,6 +117,11 @@ describe('resolveDeviceAndDtype (D-04)', () => {
     expect(resolved.dtype).toBe('fp16');
   });
 
+  it('embedding allow-list excludes q4 and starts at q8', () => {
+    expect(EMBEDDING_SUPPORTED_DTYPES).toEqual(['q8', 'fp16', 'fp32']);
+    expect(EMBEDDING_SUPPORTED_DTYPES).not.toContain('q4');
+  });
+
   it('returns empty (WASM CPU) when WebGPU is unavailable', () => {
     setWebGPU(false);
     expect(resolveDeviceAndDtype()).toEqual({});
@@ -104,13 +141,31 @@ describe('resolveDeviceAndDtype (D-04)', () => {
 // ── All five pipelines use the shared helper + fallback (D-04) ─────
 
 describe('pipeline device/dtype + WebGPU→WASM fallback (D-04)', () => {
-  it('embedding pipeline uses webgpu/q4 when available', async () => {
+  it('embedding pipeline uses webgpu/q8 when available (q4 excluded — degrades cosine similarity)', async () => {
     setWebGPU(true);
     await getEmbeddingPipeline('Xenova/bge-small-en-v1.5');
     const call = pipelineCalls[0];
     expect(call.task).toBe('feature-extraction');
     expect((call.options as { device?: string }).device).toBe('webgpu');
-    expect((call.options as { dtype?: string }).dtype).toBe('q4');
+    expect((call.options as { dtype?: string }).dtype).toBe('q8');
+  });
+
+  it('embedding pipeline falls back to WASM when WebGPU output is degenerate', async () => {
+    setWebGPU(true);
+    degenerateEmbeddings = true;
+    await getEmbeddingPipeline('Xenova/bge-small-en-v1.5');
+    // Call 1: WebGPU attempt. Call 2: WASM retry after sanity check failed.
+    expect(pipelineCalls.length).toBe(2);
+    expect((pipelineCalls[0].options as { device?: string }).device).toBe('webgpu');
+    expect((pipelineCalls[1].options as { device?: string }).device).toBeUndefined();
+  });
+
+  it('embedding pipeline keeps WebGPU when sanity check passes', async () => {
+    setWebGPU(true);
+    await getEmbeddingPipeline('Xenova/bge-small-en-v1.5');
+    // Only the WebGPU call — no WASM retry.
+    expect(pipelineCalls.length).toBe(1);
+    expect((pipelineCalls[0].options as { device?: string }).device).toBe('webgpu');
   });
 
   it('sentiment pipeline uses webgpu/q4 when available', async () => {

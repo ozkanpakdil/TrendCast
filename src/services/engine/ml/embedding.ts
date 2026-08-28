@@ -13,6 +13,26 @@
  * N separate ONNX forward passes (very slow for ~1000+ contracts). We now
  * batch all texts up front and reuse a shared embedding store across the
  * three correlation passes so contract embeddings are computed exactly once.
+ *
+ * ── Entity enrichment ────────────────────────────────────────────
+ * Raw strings under-express ticker identity: MiniLM does not reliably know
+ * that the ticker `NVDA` means Nvidia, so a stock-indicator headline like
+ * "NVDA — VCP 2026-08-27" embeds far from a "$NVDA breaking out" signal
+ * even though they describe the same company. Every embedded text is
+ * therefore enriched with its canonical entity keywords (CORR-01 unified
+ * keys, e.g. nvda→nvidia) before the forward pass, injecting the shared
+ * token into BOTH sides so cosine similarity can see the ticker identity
+ * the raw strings don't express. Texts with no entities embed unchanged.
+ *
+ * ── Entity-gated threshold (news→social) ─────────────────────────
+ * Enrichment alone cannot rescue screener headlines: "NVDA — VCP
+ * 2026-08-27" is mostly date/label tokens, so even enriched its cosine
+ * against "$NVDA breaking out" lands in the 0.35–0.45 band — below the
+ * general bar. The news→social pass therefore lowers the acceptance
+ * threshold to EMBEDDING_ENTITY_THRESHOLD (0.35) when both sides share a
+ * canonical entity — the embedding analogue of the heuristic engine's
+ * MIN_CONFIDENCE_ENTITY_MATCH. Pairs with no shared entity keep the full
+ * EMBEDDING_THRESHOLD (0.45) bar.
  */
 
 import type {
@@ -21,14 +41,17 @@ import type {
   MarketContract,
   NewsCorrelationMatch,
   NewsItem,
+  NewsNewsCorrelationMatch,
   NewsSocialCorrelationMatch,
   SocialSignal,
 } from '@/types';
+import { extractEntityKeywords, isKnownTicker } from '@/utils/entities';
 import {
   type CancelFlag,
   type CorrelationPhase,
   type ProgressCallback,
   checkCancelled,
+  EMBEDDING_ENTITY_THRESHOLD,
   EMBEDDING_THRESHOLD,
 } from './types';
 import {
@@ -36,7 +59,38 @@ import {
   type Pipeline,
   getEmbeddingPipeline,
 } from './transformers';
-import { computeBatchSize, cosineSimilarity, meanPool, normalize } from './math';
+import { cosineSimilarity, meanPool, normalize } from './math';
+
+/**
+ * Fixed batch size for embedding forward passes.
+ *
+ * The embedding models (MiniLM/BGE/GTE small) are tiny encoders — the
+ * dominant cost of a pipeline call is fixed per-call overhead (tokenize +
+ * tensor plumbing + backend dispatch), not per-text compute. Large batches
+ * amortize that overhead: 100 texts in batches of 32 = 4 forward passes,
+ * vs 100 single-text passes before the nested-chunking fix (~25x fewer).
+ * Peak memory for a batch of 32 short texts is a few MB.
+ */
+const EMBED_BATCH_SIZE = 32;
+
+/**
+ * Enrich a text with its canonical entity keywords before embedding.
+ *
+ * Appends the CORR-01 unified entity keys (e.g. "NVDA — VCP 2026-08-27" →
+ * "… nvidia") so both sides of a pair carry the same canonical token when
+ * they reference the same ticker/org. Purely additive — texts with no
+ * entities embed unchanged, so non-financial content is unaffected.
+ *
+ * Item keywords are deliberately NOT appended: collectors derive keywords
+ * from the text itself, so text entities already cover them, and raw ticker
+ * tokens ("nvda") add nothing MiniLM can use — the canonical org key is the
+ * token it actually knows.
+ */
+function enrichForEmbedding(text: string): string {
+  const entities = extractEntityKeywords(text);
+  if (entities.length === 0) return text;
+  return `${text} ${entities.join(' ')}`;
+}
 
 // ── Batched embedder ─────────────────────────────────────────────
 // Runs the pipeline over chunks of texts in a single forward pass each.
@@ -57,21 +111,22 @@ class BatchEmbedder {
   }
 
   /**
-   * Embed a batch of texts. Returns one L2-normalized vector per text.
+   * Embed a batch of texts in a SINGLE forward pass. Returns one
+   * L2-normalized vector per text.
+   *
+   * Callers (EmbeddingIndex.embed) already chunk their input; this method
+   * must not re-chunk. The previous implementation called
+   * computeBatchSize(texts.length) here, which turned a caller chunk of 10
+   * into 10 single-text pipeline calls — a ~25x slowdown from per-call
+   * overhead (observed: 26s per 10 contracts on WebGPU).
    * Handles pooled (1D per item), token-level (2D per item), and flat
    * `[batch * dims]` tensor layouts.
    */
   async embedBatch(texts: string[]): Promise<number[][]> {
     const pipeline = await this.getPipeline();
+    const rawData = await this.runChunk(pipeline, texts);
     const vectors: number[][] = [];
-    const batchSize = computeBatchSize(texts.length);
-
-    for (let start = 0; start < texts.length; start += batchSize) {
-      const chunk = texts.slice(start, start + batchSize);
-      const rawData = await this.runChunk(pipeline, chunk);
-      this.pushVectors(vectors, rawData, chunk.length);
-    }
-
+    this.pushVectors(vectors, rawData, texts.length);
     return vectors;
   }
 
@@ -168,10 +223,12 @@ class EmbeddingIndex {
 
     if (missing.length > 0) {
       // Report progress as each batch finishes so the bar moves smoothly.
+      // Fixed batch size (not computeBatchSize): the per-call overhead of a
+      // pipeline invocation dominates for small encoders, so we want the
+      // fewest possible forward passes.
       let done = 0;
-      const batchSize = computeBatchSize(missing.length);
-      for (let start = 0; start < missing.length; start += batchSize) {
-        const chunk = missing.slice(start, start + batchSize);
+      for (let start = 0; start < missing.length; start += EMBED_BATCH_SIZE) {
+        const chunk = missing.slice(start, start + EMBED_BATCH_SIZE);
         const vectors = await this.embedder.embedBatch(chunk);
         for (let k = 0; k < chunk.length; k++) {
           this.cache.set(chunk[k], vectors[k]);
@@ -189,6 +246,39 @@ class EmbeddingIndex {
 }
 
 // ── Public correlation passes ────────────────────────────────────
+
+/**
+ * Diagnostic: log the top-K closest pairs across two embedded sets,
+ * regardless of threshold. Makes "why no matches?" answerable from the
+ * console: if the top scores cluster just below EMBEDDING_THRESHOLD the
+ * data is near-miss; if they're ~0.2 the data genuinely has no overlap.
+ */
+function logTopPairs(
+  label: string,
+  aTexts: string[],
+  aVecs: number[][],
+  bTexts: string[],
+  bVecs: number[][],
+  topK = 5,
+): void {
+  try {
+    const pairs: Array<{ sim: number; a: string; b: string }> = [];
+    for (let i = 0; i < aVecs.length; i++) {
+      for (let j = 0; j < bVecs.length; j++) {
+        pairs.push({ sim: cosineSimilarity(aVecs[i], bVecs[j]), a: aTexts[i], b: bTexts[j] });
+      }
+    }
+    pairs.sort((x, y) => y.sim - x.sim);
+    console.log(`[TrendCast] Embedding top-${topK} ${label} pairs (threshold ${EMBEDDING_THRESHOLD}):`);
+    for (const p of pairs.slice(0, topK)) {
+      console.log(
+        `[TrendCast]   ${p.sim.toFixed(3)} | ${p.a.slice(0, 60)} ↔ ${p.b.slice(0, 60)}`,
+      );
+    }
+  } catch {
+    // Diagnostics must never break correlation.
+  }
+}
 
 /**
  * Correlate social signals against market contracts using embedding
@@ -237,7 +327,7 @@ export async function correlateNewsSocialEmbedding(
 }
 
 /**
- * Run all three embedding correlation passes with a single shared
+ * Run all four embedding correlation passes with a single shared
  * embedding index. Contract embeddings are computed exactly once and
  * reused across the signal→market and news→market passes. This is the
  * fast path used by the ML worker.
@@ -253,14 +343,16 @@ export async function correlateAllEmbedding(
   matches: CorrelationMatch[];
   newsMatches: NewsCorrelationMatch[];
   newsSocialMatches: NewsSocialCorrelationMatch[];
+  newsNewsMatches: NewsNewsCorrelationMatch[];
 }> {
   const index = new EmbeddingIndex(model);
 
   const matches = await correlateSignalsToContracts(index, signals, contracts, model, onProgress, cancelFlag);
   const newsMatches = await correlateNewsToContracts(index, news, contracts, model, onProgress, cancelFlag);
   const newsSocialMatches = await correlateNewsToSignals(index, news, signals, model, onProgress, cancelFlag);
+  const newsNewsMatches = await correlateNewsToNews(index, news, model, onProgress, cancelFlag);
 
-  return { matches, newsMatches, newsSocialMatches };
+  return { matches, newsMatches, newsSocialMatches, newsNewsMatches };
 }
 
 // ── Internal implementations (share an index) ────────────────────
@@ -277,7 +369,7 @@ async function correlateSignalsToContracts(
 
   onProgress?.({ phase: 'embedding-contracts', current: 0, total: contracts.length, engine: 'embedding', model });
   const contractEmbeddings = await index.embed(
-    contracts.map((c) => c.question),
+    contracts.map((c) => enrichForEmbedding(c.question)),
     onProgress,
     'embedding-contracts',
     model,
@@ -285,7 +377,7 @@ async function correlateSignalsToContracts(
 
   onProgress?.({ phase: 'embedding-signals', current: 0, total: signals.length, engine: 'embedding', model });
   const signalEmbeddings = await index.embed(
-    signals.map((s) => s.text),
+    signals.map((s) => enrichForEmbedding(s.text)),
     onProgress,
     'embedding-signals',
     model,
@@ -316,6 +408,17 @@ async function correlateSignalsToContracts(
     }
   }
 
+  // Diagnostic: log the top-5 closest signal→contract pairs regardless of
+  // threshold, so a "no matches" result can be distinguished between "data
+  // has no semantic overlap" and "scores cluster just below the threshold".
+  logTopPairs(
+    'signal→market',
+    signals.map((s) => s.text),
+    signalEmbeddings,
+    contracts.map((c) => c.question),
+    contractEmbeddings,
+  );
+
   return matches.sort((a, b) => b.confidence - a.confidence);
 }
 
@@ -331,7 +434,7 @@ async function correlateNewsToContracts(
 
   onProgress?.({ phase: 'embedding-contracts', current: 0, total: contracts.length, engine: 'embedding', model });
   const contractEmbeddings = await index.embed(
-    contracts.map((c) => c.question),
+    contracts.map((c) => enrichForEmbedding(c.question)),
     onProgress,
     'embedding-contracts',
     model,
@@ -339,7 +442,7 @@ async function correlateNewsToContracts(
 
   onProgress?.({ phase: 'embedding-news', current: 0, total: news.length, engine: 'embedding', model });
   const newsEmbeddings = await index.embed(
-    news.map((n) => n.headline),
+    news.map((n) => enrichForEmbedding(n.headline)),
     onProgress,
     'embedding-news',
     model,
@@ -367,6 +470,15 @@ async function correlateNewsToContracts(
     }
   }
 
+  // Diagnostic: top-5 news→contract pairs regardless of threshold.
+  logTopPairs(
+    'news→market',
+    news.map((n) => n.headline),
+    newsEmbeddings,
+    contracts.map((c) => c.question),
+    contractEmbeddings,
+  );
+
   return matches.sort((a, b) => b.confidence - a.confidence);
 }
 
@@ -382,7 +494,7 @@ async function correlateNewsToSignals(
 
   onProgress?.({ phase: 'embedding-news', current: 0, total: news.length, engine: 'embedding', model });
   const newsEmbeddings = await index.embed(
-    news.map((n) => n.headline),
+    news.map((n) => enrichForEmbedding(n.headline)),
     onProgress,
     'embedding-news',
     model,
@@ -390,11 +502,16 @@ async function correlateNewsToSignals(
 
   onProgress?.({ phase: 'embedding-signals', current: 0, total: signals.length, engine: 'embedding', model });
   const signalEmbeddings = await index.embed(
-    signals.map((s) => s.text),
+    signals.map((s) => enrichForEmbedding(s.text)),
     onProgress,
     'embedding-signals',
     model,
   );
+
+  // Precompute canonical entity sets once — regex extraction is expensive
+  // and the O(n·m) pair loop must not re-run it per pair.
+  const newsEntitySets = news.map((n) => new Set(extractEntityKeywords(n.headline)));
+  const signalEntitySets = signals.map((s) => new Set(extractEntityKeywords(s.text)));
 
   for (let i = 0; i < news.length; i++) {
     checkCancelled(cancelFlag);
@@ -403,7 +520,26 @@ async function correlateNewsToSignals(
 
     for (let j = 0; j < signals.length; j++) {
       const sim = cosineSimilarity(newsEmb, signalEmbeddings[j]);
-      if (sim < EMBEDDING_THRESHOLD) continue;
+
+      // Entity-gated threshold (embedding analogue of the heuristic engine's
+      // MIN_CONFIDENCE_ENTITY_MATCH): when both sides reference the same
+      // canonical entity (e.g. "NVDA — VCP 2026-08-27" and "$NVDA breaking
+      // out" both resolve to `nvidia`), accept the pair down to
+      // EMBEDDING_ENTITY_THRESHOLD. Thin screener headlines share only the
+      // ticker token with social posts, so their raw cosine lands in the
+      // 0.35–0.45 band; the shared entity is the evidence the pair describes
+      // the same company. Pairs with no shared entity keep the full bar.
+      let hasEntityMatch = false;
+      for (const entity of newsEntitySets[i]) {
+        if (signalEntitySets[j].has(entity)) {
+          hasEntityMatch = true;
+          break;
+        }
+      }
+      const threshold = hasEntityMatch
+        ? EMBEDDING_ENTITY_THRESHOLD
+        : EMBEDDING_THRESHOLD;
+      if (sim < threshold) continue;
 
       const signal = signals[j];
       const viralityWeight = (signal.virality / 100) * 0.1;
@@ -420,6 +556,104 @@ async function correlateNewsToSignals(
       });
     }
   }
+
+  // Diagnostic: top-5 news→signal pairs regardless of threshold, so a
+  // "no matches for source X" result can be distinguished between "no
+  // semantic overlap" and "scores cluster just below the threshold".
+  logTopPairs(
+    'news→social',
+    news.map((n) => n.headline),
+    newsEmbeddings,
+    signals.map((s) => s.text),
+    signalEmbeddings,
+  );
+
+  return matches.sort((a, b) => b.confidence - a.confidence);
+}
+
+/**
+ * Correlate news items against each other (CORR-06) using embedding
+ * cosine similarity. Cross-source only — same-source pairs are skipped
+ * so a screener feed never self-matches.
+ */
+async function correlateNewsToNews(
+  index: EmbeddingIndex,
+  news: NewsItem[],
+  model: EmbeddingModel,
+  onProgress?: ProgressCallback,
+  cancelFlag?: CancelFlag,
+): Promise<NewsNewsCorrelationMatch[]> {
+  const matches: NewsNewsCorrelationMatch[] = [];
+
+  onProgress?.({ phase: 'embedding-news', current: 0, total: news.length, engine: 'embedding', model });
+  const newsEmbeddings = await index.embed(
+    news.map((n) => enrichForEmbedding(n.headline)),
+    onProgress,
+    'embedding-news',
+    model,
+  );
+
+  // Precompute canonical entity sets once — regex extraction is expensive
+  // and the O(n²) pair loop must not re-run it per pair.
+  const newsEntitySets = news.map((n) => new Set(extractEntityKeywords(n.headline)));
+
+  for (let i = 0; i < news.length; i++) {
+    checkCancelled(cancelFlag);
+    const itemA = news[i];
+
+    for (let j = i + 1; j < news.length; j++) {
+      const itemB = news[j];
+      // CORR-06: cross-source only — a screener feed must never self-match,
+      // and identical ids are the same item seen twice.
+      if (itemA.source === itemB.source || itemA.id === itemB.id) continue;
+
+      const sim = cosineSimilarity(newsEmbeddings[i], newsEmbeddings[j]);
+
+      // Entity-gated threshold (same rationale as news→social): a shared
+      // canonical entity — extracted entity OR shared known-ticker keyword,
+      // since the ticker often only appears in the URL-derived keyword set —
+      // accepts the pair down to EMBEDDING_ENTITY_THRESHOLD; otherwise the
+      // full EMBEDDING_THRESHOLD bar applies.
+      let hasEntityMatch = false;
+      for (const entity of newsEntitySets[i]) {
+        if (newsEntitySets[j].has(entity)) {
+          hasEntityMatch = true;
+          break;
+        }
+      }
+      if (!hasEntityMatch) {
+        for (const k of itemA.keywords) {
+          if (isKnownTicker(k) && itemB.keywords.includes(k)) {
+            hasEntityMatch = true;
+            break;
+          }
+        }
+      }
+      const threshold = hasEntityMatch
+        ? EMBEDDING_ENTITY_THRESHOLD
+        : EMBEDDING_THRESHOLD;
+      if (sim < threshold) continue;
+
+      matches.push({
+        newsA: itemA,
+        newsB: itemB,
+        confidence: Math.min(1, sim + 0.05),
+        matchedKeywords: itemA.keywords.filter((k) =>
+          itemB.keywords.includes(k),
+        ),
+        correlatedAt: Date.now(),
+      });
+    }
+  }
+
+  // Diagnostic: top-5 news↔news pairs regardless of threshold.
+  logTopPairs(
+    'news↔news',
+    news.map((n) => n.headline),
+    newsEmbeddings,
+    news.map((n) => n.headline),
+    newsEmbeddings,
+  );
 
   return matches.sort((a, b) => b.confidence - a.confidence);
 }

@@ -83,6 +83,29 @@ export function computeFetchedCounts(
 }
 
 /**
+ * Compute per-source bridging coverage (CORR-04): the fraction of a
+ * source's collected items that produced at least one correlation match.
+ *
+ * Pure projection over data already in memory — no storage I/O, no React
+ * imports, no SourceHealthEntry schema change. A match whose news id is
+ * not present in the news array is ignored (no phantom source entries);
+ * duplicate matches for the same item count it once (Set semantics).
+ */
+export function computeBridgingCoverage(
+  news: NewsItem[],
+  newsMatches: NewsCorrelationMatch[],
+): Partial<Record<NewsSource, { total: number; bridged: number }>> {
+  const bridgedIds = new Set(newsMatches.map((m) => m.news.id));
+  const coverage: Partial<Record<NewsSource, { total: number; bridged: number }>> = {};
+  for (const item of news) {
+    const entry = (coverage[item.source] ??= { total: 0, bridged: 0 });
+    entry.total += 1;
+    if (bridgedIds.has(item.id)) entry.bridged += 1;
+  }
+  return coverage;
+}
+
+/**
  * Pure merge helper for the social-health map (Phase 7, D-02).
  * Returns a new map with only the given platform's entry updated;
  * all other platforms are preserved. No storage I/O — unit-testable.

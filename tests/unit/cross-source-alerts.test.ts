@@ -98,6 +98,7 @@ function result(partial: Partial<CorrelationResult> = {}): CorrelationResult {
     matches: [],
     newsMatches: [],
     newsSocialMatches: [],
+    newsNewsMatches: [],
     ...partial,
   };
 }

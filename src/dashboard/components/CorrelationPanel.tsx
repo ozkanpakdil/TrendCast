@@ -18,6 +18,7 @@ import { useState, useRef, useEffect, useMemo, useCallback, memo } from 'react';
 import type {
   CorrelationMatch,
   NewsCorrelationMatch,
+  NewsNewsCorrelationMatch,
   NewsSocialCorrelationMatch,
   MarketContract,
   NewsItem,
@@ -28,6 +29,7 @@ interface CorrelationPanelProps {
   matches: CorrelationMatch[];
   newsMatches: NewsCorrelationMatch[];
   newsSocialMatches: NewsSocialCorrelationMatch[];
+  newsNewsMatches: NewsNewsCorrelationMatch[];
 }
 
 // ── Graph types ─────────────────────────────────────────────────
@@ -55,7 +57,7 @@ interface GraphEdge {
   target: string;
   confidence: number;
   keywords: string[];
-  edgeType: 'social-market' | 'news-market' | 'news-social';
+  edgeType: 'social-market' | 'news-market' | 'news-social' | 'news-news';
   direction: 'forward' | 'reverse'; // forward = source came first
 }
 
@@ -90,12 +92,14 @@ const EDGE_COLORS: Record<string, string> = {
   'social-market': '#6366f1',
   'news-market': '#f59e0b',
   'news-social': '#ec4899',
+  'news-news': '#eab308',
 };
 
 const EDGE_LABELS: Record<string, string> = {
   'social-market': 'Social → Market',
   'news-market': 'News → Market',
   'news-social': 'News → Social',
+  'news-news': 'News ↔ News',
 };
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -147,6 +151,7 @@ export function CorrelationPanelImpl({
   matches,
   newsMatches,
   newsSocialMatches,
+  newsNewsMatches,
 }: CorrelationPanelProps) {
   const [showGraph, setShowGraph] = useState(true);
   const [filter, setFilter] = useState<NodeType | 'all'>('all');
@@ -208,6 +213,7 @@ export function CorrelationPanelImpl({
     const sortedSocial = [...matches].sort((a, b) => b.confidence - a.confidence).slice(0, 30);
     const sortedNews = [...newsMatches].sort((a, b) => b.confidence - a.confidence).slice(0, 30);
     const sortedNewsSocial = [...newsSocialMatches].sort((a, b) => b.confidence - a.confidence).slice(0, 30);
+    const sortedNewsNews = [...newsNewsMatches].sort((a, b) => b.confidence - a.confidence).slice(0, 30);
 
     // Social → Market edges (direction: social signal → market contract)
     for (const m of sortedSocial) {
@@ -298,6 +304,34 @@ export function CorrelationPanelImpl({
       });
     }
 
+    // News ↔ News edges (CORR-06) — undirected, no temporal direction
+    for (const m of sortedNewsNews) {
+      const aNode = getNode(
+        `n:${m.newsA.id}`,
+        'news',
+        m.newsA.headline.slice(0, 50),
+        m.newsA.url,
+        m.newsA,
+        0.5,
+      );
+      const bNode = getNode(
+        `n:${m.newsB.id}`,
+        'news',
+        m.newsB.headline.slice(0, 50),
+        m.newsB.url,
+        m.newsB,
+        0.5,
+      );
+      edgeList.push({
+        source: aNode.id,
+        target: bNode.id,
+        confidence: m.confidence,
+        keywords: m.matchedKeywords,
+        edgeType: 'news-news',
+        direction: 'forward',
+      });
+    }
+
     // Limit graph size
     let nodeList = Array.from(nodeMap.values());
     let finalEdges = edgeList;
@@ -316,7 +350,7 @@ export function CorrelationPanelImpl({
     }
 
     return { nodes: nodeList, edges: finalEdges };
-  }, [matches, newsMatches, newsSocialMatches]);
+  }, [matches, newsMatches, newsSocialMatches, newsNewsMatches]);
 
   // Run force simulation in chunked rAF frames to keep UI responsive.
   // Instead of running all 100 steps synchronously in one rAF (which blocks
@@ -563,6 +597,25 @@ export function CorrelationPanelImpl({
           targetUrl: getSocialUrl(m.signal),
         })),
     [newsSocialMatches],
+  );
+
+  const newsNewsListItems = useMemo(
+    () =>
+      [...newsNewsMatches]
+        .sort((a, b) => b.confidence - a.confidence)
+        .slice(0, 15)
+        .map((m) => ({
+          id: `nn-${m.newsA.id}-${m.newsB.id}`,
+          confidence: m.confidence,
+          keywords: m.matchedKeywords,
+          primary: m.newsA.headline,
+          secondary: m.newsB.headline,
+          source: m.newsA.source,
+          target: m.newsB.source,
+          sourceUrl: m.newsA.url,
+          targetUrl: m.newsB.url,
+        })),
+    [newsNewsMatches],
   );
 
   // ── Render ────────────────────────────────────────────────────
@@ -955,6 +1008,12 @@ export function CorrelationPanelImpl({
             title="📰→👽 News → Social"
             count={newsSocialMatches.length}
             items={newsSocialListItems}
+          />
+
+          <CorrelationList
+            title="📰↔📰 News ↔ News"
+            count={newsNewsMatches.length}
+            items={newsNewsListItems}
           />
         </div>
       )}

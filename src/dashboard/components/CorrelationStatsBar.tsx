@@ -16,7 +16,8 @@ interface CorrelationStatsBarProps {
 function CorrelationStatsBarImpl({ stats, isDark }: CorrelationStatsBarProps) {
   if (!stats) return null;
 
-  const totalMatches = stats.matchCount + stats.newsMatchCount + stats.newsSocialMatchCount;
+  const totalMatches =
+    stats.matchCount + stats.newsMatchCount + stats.newsSocialMatchCount + (stats.newsNewsMatchCount ?? 0);
   const cardClass = isDark
     ? 'bg-slate-900/80 border-slate-700 text-slate-300'
     : 'bg-slate-50 border-light-border text-light-text';

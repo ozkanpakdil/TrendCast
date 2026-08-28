@@ -11,6 +11,7 @@ import {
   computeHealth,
   computeCorrelatedCounts,
   computeFetchedCounts,
+  computeBridgingCoverage,
 } from '@/utils/source-health';
 import type { NewsCorrelationMatch, NewsItem, NewsSource, SourceHealthEntry } from '@/types';
 
@@ -173,5 +174,90 @@ describe('computeFetchedCounts', () => {
     expect(counts.bbc).toBe(2);
     expect(counts.seekingalpha).toBe(1);
     expect(counts.cnn).toBeUndefined();
+  });
+});
+
+describe('computeBridgingCoverage', () => {
+  function item(source: NewsSource, id: string): NewsItem {
+    return {
+      id,
+      source,
+      headline: 'h',
+      url: `https://example.com/${source}/${id}`,
+      publishedAt: new Date(NOW).toISOString(),
+      keywords: [],
+    };
+  }
+
+  function match(source: NewsSource, newsId: string): NewsCorrelationMatch {
+    return {
+      contract: {
+        id: 'c',
+        platform: 'polymarket',
+        question: 'q',
+        outcomes: [],
+        endDate: new Date(NOW + 86_400_000).toISOString(),
+        keywords: ['btc'],
+        lastUpdated: NOW,
+      },
+      news: {
+        id: newsId,
+        source,
+        headline: 'h',
+        url: `https://example.com/${source}/${newsId}`,
+        publishedAt: new Date(NOW).toISOString(),
+        keywords: [],
+      },
+      confidence: 0.8,
+      matchedKeywords: ['btc'],
+      correlatedAt: NOW,
+    };
+  }
+
+  it('returns an empty object for empty news and empty matches', () => {
+    expect(computeBridgingCoverage([], [])).toEqual({});
+  });
+
+  it('yields { total: N, bridged: 0 } per source when nothing matched', () => {
+    const coverage = computeBridgingCoverage(
+      [item('bbc', 'bbc:1'), item('bbc', 'bbc:2'), item('cnn', 'cnn:1')],
+      [],
+    );
+    expect(coverage.bbc).toEqual({ total: 2, bridged: 0 });
+    expect(coverage.cnn).toEqual({ total: 1, bridged: 0 });
+  });
+
+  it('counts bridged and unbridged items per source correctly', () => {
+    const coverage = computeBridgingCoverage(
+      [item('bbc', 'bbc:1'), item('bbc', 'bbc:2'), item('cnn', 'cnn:1')],
+      [match('bbc', 'bbc:1')],
+    );
+    expect(coverage.bbc).toEqual({ total: 2, bridged: 1 });
+    expect(coverage.cnn).toEqual({ total: 1, bridged: 0 });
+  });
+
+  it('ignores matches whose news id is not in the news array (no phantom entries)', () => {
+    const coverage = computeBridgingCoverage(
+      [item('bbc', 'bbc:1')],
+      [match('cnn', 'cnn:phantom')],
+    );
+    expect(coverage.bbc).toEqual({ total: 1, bridged: 0 });
+    expect(coverage.cnn).toBeUndefined();
+  });
+
+  it('counts duplicate matches for one item once (Set semantics)', () => {
+    const coverage = computeBridgingCoverage(
+      [item('bbc', 'bbc:1')],
+      [match('bbc', 'bbc:1'), match('bbc', 'bbc:1'), match('bbc', 'bbc:1')],
+    );
+    expect(coverage.bbc).toEqual({ total: 1, bridged: 1 });
+  });
+
+  it('handles the single-element boundary: one item bridged', () => {
+    const coverage = computeBridgingCoverage(
+      [item('seekingalpha', 'sa:1')],
+      [match('seekingalpha', 'sa:1')],
+    );
+    expect(coverage.seekingalpha).toEqual({ total: 1, bridged: 1 });
   });
 });
