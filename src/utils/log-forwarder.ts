@@ -14,9 +14,16 @@
  * Usage:
  *   import '@/utils/log-forwarder';   // side-effect: patches console
  *
+ * RPC: the connection is bidirectional. The server can send
+ *   { type: "rpc", id: "...", method: "collectNow", params: {} }
+ * and this module dispatches to handlers registered via
+ * `registerRpcHandler(method, fn)` (see src/background/index.ts), replying
+ * with { type: "rpc-result", id, method, result } or
+ * { type: "rpc-error", id, method, error }.
+ *
  * Server (run in a terminal):
  *   bun run scripts/log-server.ts
- *   # listens on ws://localhost:18080 and prints incoming log lines
+ *   # listens on ws://localhost:18080, prints logs, accepts commands
  */
 
 const WS_URL = 'ws://localhost:18080';
@@ -24,6 +31,20 @@ const WS_URL = 'ws://localhost:18080';
 // Only enable in debug builds. `import.meta.env.DEBUG_LOG_FORWARD` is
 // replaced at build time by Vite's `define` (see vite.config.ts).
 const ENABLED = import.meta.env.DEBUG_LOG_FORWARD === true;
+
+/** An RPC handler: receives params, returns the result (or throws). */
+export type RpcHandler = (params: Record<string, unknown>) => Promise<unknown> | unknown;
+
+const rpcHandlers = new Map<string, RpcHandler>();
+
+/**
+ * Register a handler for an RPC method. Called from the background worker
+ * at startup. No-op in production builds (the whole module is stripped).
+ */
+export function registerRpcHandler(method: string, handler: RpcHandler): void {
+  if (!ENABLED) return;
+  rpcHandlers.set(method, handler);
+}
 
 let ws: WebSocket | null = null;
 let queue: string[] = [];
@@ -46,6 +67,12 @@ function connect(): void {
     }
   });
 
+  ws.addEventListener('message', (event: MessageEvent) => {
+    // Incoming frames are RPC requests from the server. Logs flow out;
+    // commands flow in.
+    void handleIncoming(event.data);
+  });
+
   ws.addEventListener('close', () => {
     ws = null;
     // Retry periodically so the forwarder survives server restarts.
@@ -61,6 +88,47 @@ function connect(): void {
       /* ignore */
     }
   });
+}
+
+async function handleIncoming(data: unknown): Promise<void> {
+  if (typeof data !== 'string') return;
+  let msg: { type?: string; id?: string; method?: string; params?: Record<string, unknown> };
+  try {
+    msg = JSON.parse(data);
+  } catch {
+    return; // Not JSON — ignore.
+  }
+  if (msg.type !== 'rpc' || !msg.id || !msg.method) return;
+  await dispatchRpc(msg.id, msg.method, msg.params ?? {});
+}
+
+async function dispatchRpc(id: string, method: string, params: Record<string, unknown>): Promise<void> {
+  const handler = rpcHandlers.get(method);
+  if (!handler) {
+    sendRaw(JSON.stringify({ type: 'rpc-error', id, method, error: `Unknown RPC method: ${method}` }));
+    return;
+  }
+  try {
+    const result = await handler(params);
+    sendRaw(JSON.stringify({ type: 'rpc-result', id, method, result: result ?? null }));
+  } catch (err) {
+    sendRaw(JSON.stringify({
+      type: 'rpc-error',
+      id,
+      method,
+      error: err instanceof Error ? err.message : String(err),
+    }));
+  }
+}
+
+function sendRaw(text: string): void {
+  if (!ENABLED) return;
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(text);
+  } else {
+    // RPC replies are dropped if the socket is down (the caller sees a
+    // timeout on the server side); log lines are buffered instead.
+  }
 }
 
 function send(level: string, args: unknown[]): void {

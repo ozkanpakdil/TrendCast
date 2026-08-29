@@ -200,7 +200,62 @@ bun run typecheck      # TypeScript type checking
 bun run lint           # ESLint
 ```
 
-## 📸 Screenshots & Documentation
+## � Debug Log Streaming & RPC (development only)
+
+Debug builds (`bun run build:debug` / `build:debug:firefox`) include a
+log forwarder that streams every `[TrendCast]` console line from the
+background worker to a local WebSocket server — and accepts commands
+back. Production builds strip this entirely (dead-code eliminated).
+
+```bash
+# Terminal 1 — start the log/RPC server
+bun run log-server
+
+# Terminal 2 — reload the extension, then interact:
+#   ping          → liveness check
+#   getVersion    → build version + user agent
+#   getSnapshot   → latest collection summary (markets/signals/news counts)
+#   collectNow    → trigger a full collection cycle (streams logs while it runs)
+#   correlate     → run correlation with the default engine
+#   getSettings   → current extension settings
+#   getStorageUsage → storage usage breakdown
+#   benchmark     → run correlation per engine and score them (0–100)
+#   benchmarkResults → print the last benchmark report as a table
+#   help / quit
+```
+
+The `benchmark` command runs the full correlation pipeline once per
+engine (`heuristic embedding sentiment zeroshot ner` by default) against
+the current collected data and scores each run:
+
+```
+score = 40% coverage + 30% precision + 15% spread + 15% speed
+```
+
+- **coverage** — how many of the 4 correlation passes (signal→market,
+  news→market, news→social, news↔news) produced any matches
+- **precision** — mean confidence of the top-10 matches per pass,
+  normalised against each pass's threshold
+- **spread** — confidence spread of the top-10: a good engine
+  discriminates instead of scoring everything the same
+- **speed** — log-scaled duration vs the fastest engine in the run
+
+Use it to decide which engines/models are worth keeping — anything
+scoring near zero (no matches, or all matches at threshold) is a
+candidate for removal.
+
+The server listens on `ws://localhost:18080`. The extension buffers up to
+500 log lines and flushes them on connect, so the server can be started
+at any time. If the extension isn't connected, open the popup or dashboard
+once — the MV3 background worker is ephemeral and wakes on any event.
+
+> ⚠️ **Why this exists:** the `[TrendCast]` collection/correlation logs
+> come from the background service worker — a separate JS context from
+> any page. Pasting a `console.log` override into the dashboard DevTools
+> console does NOT capture worker logs. The forwarder patches `console.*`
+> inside the worker itself. It is debug-only and never ships.
+
+## �📸 Screenshots & Documentation
 
 The full documentation site is hosted on GitHub Pages at
 [https://ozkanpakdil.github.io/TrendCast](https://ozkanpakdil.github.io/TrendCast)

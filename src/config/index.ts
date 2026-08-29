@@ -187,6 +187,9 @@ export const CONFIG = {
     collectedNews: 'trendcast:collected-news',
     correlations: 'trendcast:correlations',
     correlationRunHistory: 'trendcast:corr-run-history',
+    // Debug-only: results of RPC-triggered engine/model benchmarks
+    // (see registerRpcHandler('benchmark') in background/index.ts).
+    modelBenchmark: 'trendcast:model-benchmark',
     lastCollectionAt: 'trendcast:last-collection',
     history: 'trendcast:history',
     watchlist: 'trendcast:watchlist',
