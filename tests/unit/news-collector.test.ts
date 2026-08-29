@@ -348,6 +348,75 @@ describe('collectNews stock-indicator sources', () => {
     expect(new Set(news.map((n) => n.id)).size).toBe(3);
   });
 
+  it('adds Seeking Alpha URL symbols to keywords at collection time (CORR-06)', async () => {
+    mockedFetch.mockResolvedValue({
+      status: 'ok',
+      items: [
+        {
+          // Generic headline — the ticker only appears in the symbol-page URL.
+          title: 'More On Earnings Revisions »',
+          link: 'https://seekingalpha.com/symbol/PEN/earnings-revisions',
+          description: 'Earnings estimates revised higher.',
+          pubDate: new Date().toISOString(),
+        },
+      ],
+    });
+
+    const { news } = await collectNews(['seekingalpha']);
+
+    expect(news).toHaveLength(1);
+    // The URL-derived ticker joins the headline/description keywords so the
+    // item can bridge to a VCP screener item about the same stock.
+    expect(news[0].keywords).toContain('pen');
+    expect(news[0].keywords).toContain('earnings');
+    expect(news[0].keywords).toContain('revisions');
+  });
+
+  it('extracts title-embedded tickers when the SA link is a Google News redirect (CORR-06)', async () => {
+    // The configured SA feed is proxied through Google News RSS, which rewrites
+    // every link to a news.google.com/rss/articles/... redirect — so the URL
+    // carries no ticker. The ticker instead appears in the title as a
+    // parenthetical marker: `(NASDAQ:PEN)`.
+    mockedFetch.mockResolvedValue({
+      status: 'ok',
+      items: [
+        {
+          title: 'PennyMac Financial: A Deep Dive (NASDAQ:PEN) - Seeking Alpha',
+          link: 'https://news.google.com/rss/articles/CBMi...?oc=5',
+          description: 'Earnings estimates revised higher.',
+          pubDate: new Date().toISOString(),
+        },
+      ],
+    });
+
+    const { news } = await collectNews(['seekingalpha']);
+
+    expect(news).toHaveLength(1);
+    // The title-embedded ticker joins the keyword set so the item can bridge
+    // to a VCP screener item about the same stock.
+    expect(news[0].keywords).toContain('pen');
+    expect(news[0].keywords).toContain('earnings');
+  });
+
+  it('does not extract URL symbols for non-Seeking-Alpha sources', async () => {
+    mockedFetch.mockResolvedValue({
+      status: 'ok',
+      items: [
+        {
+          title: 'Market wrap',
+          link: 'https://seekingalpha.com/symbol/PEN/earnings-revisions',
+          pubDate: new Date().toISOString(),
+        },
+      ],
+    });
+
+    const { news } = await collectNews(['bbc']);
+
+    // URL symbol extraction is SA-source-only: a BBC item linking to an SA
+    // symbol page must not gain the ticker keyword.
+    expect(news[0].keywords).not.toContain('pen');
+  });
+
   it('falls back to a single item when a stock-indicator feed has no parseable table', async () => {
     mockedFetch.mockResolvedValue({
       status: 'ok',

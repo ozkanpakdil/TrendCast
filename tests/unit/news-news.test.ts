@@ -12,10 +12,13 @@
  *   - Indexed path (≥ TINY_INPUT_THRESHOLD) and naive tiny-input path agree.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { correlateNewsNews } from '@/services/engine/correlation';
+import { correlateAllEmbedding } from '@/services/engine/ml/embedding';
 import { newsItem } from './fixtures';
-import type { NewsItem } from '@/types';
+import type { EmbeddingModel, NewsItem } from '@/types';
+
+const MODEL: EmbeddingModel = 'Xenova/all-MiniLM-L6-v2';
 
 /** VCP screener item: bare ticker keyword only (CORR-03 curation). */
 const vcpPen: NewsItem = {
@@ -90,5 +93,89 @@ describe('correlateNewsNews (CORR-06)', () => {
     for (let i = 1; i < matches.length; i++) {
       expect(matches[i - 1].confidence).toBeGreaterThanOrEqual(matches[i].confidence);
     }
+  });
+});
+
+// ── Embedding engine (CORR-06 4th pass) ───────────────────────────────
+
+// Deterministic concept-stub pipeline (same pattern as
+// embedding-equivalence.test.ts): each text maps to a fixed concept vector
+// so the test runs without loading a real ONNX model.
+const CONCEPTS = [
+  'fed', 'rate', 'powell', 'bitcoin', 'btc', 'crypto', 'ethereum',
+  'eth', 'trump', 'weather', 'moon', 'nvidia',
+];
+
+function embedVector(text: string): number[] {
+  const lower = text.toLowerCase();
+  return CONCEPTS.map((c) => (lower.includes(c) ? 1 : 0));
+}
+
+vi.mock('@/services/engine/ml/transformers', () => ({
+  getEmbeddingPipeline: vi.fn(async () => {
+    return async (texts: string[]) => ({ data: texts.map(embedVector) });
+  }),
+}));
+
+describe('correlateAllEmbedding news↔news pass (CORR-06)', () => {
+  it('matches a VCP screener item to a same-ticker SA story (entity-gated)', async () => {
+    const vcpNvda: NewsItem = {
+      ...newsItem('stockScreener2', 'NVDA — VCP 2026-08-27'),
+      keywords: ['nvda'],
+    };
+    const saNvda: NewsItem = {
+      ...newsItem('seekingalpha', 'Nvidia earnings beat expectations'),
+      url: 'https://seekingalpha.com/symbol/NVDA/earnings',
+      keywords: ['nvidia', 'earnings', 'beat'],
+    };
+
+    const { newsNewsMatches } = await correlateAllEmbedding([], [], [vcpNvda, saNvda], MODEL);
+
+    // Both sides enrich to the shared canonical token `nvidia` → cosine 1.0.
+    expect(newsNewsMatches).toHaveLength(1);
+    expect(newsNewsMatches[0].newsA.id).toBe(vcpNvda.id);
+    expect(newsNewsMatches[0].newsB.id).toBe(saNvda.id);
+    expect(newsNewsMatches[0].matchedKeywords).toEqual([]);
+  });
+
+  it('skips same-source pairs and unrelated pairs on the embedding path', async () => {
+    const vcpA: NewsItem = { ...newsItem('stockScreener2', 'NVDA — VCP 2026-08-27'), keywords: ['nvda'] };
+    const vcpB: NewsItem = { ...newsItem('stockScreener2', 'NVDA — VCP 2026-08-28'), keywords: ['nvda'] };
+    const weather = newsItem('bbc', 'Global weather patterns shift');
+
+    const { newsNewsMatches } = await correlateAllEmbedding([], [], [vcpA, vcpB, weather], MODEL);
+
+    // Same-source NVDA pair skipped; weather↔NVDA has no semantic overlap.
+    expect(newsNewsMatches).toEqual([]);
+  });
+
+  it('entity-gated threshold: shared-entity pair in the 0.35–0.45 band is accepted', async () => {
+    // The SA headline lights 5 concepts (nvidia + 4 noise) while the VCP
+    // item lights only `nvidia` → cosine = 1/√5 ≈ 0.447: below the general
+    // EMBEDDING_THRESHOLD (0.45) but above the entity-gated 0.35 bar.
+    const vcpNvda: NewsItem = { ...newsItem('stockScreener2', 'NVDA — VCP 2026-08-27'), keywords: ['nvda'] };
+    const saDiluted: NewsItem = {
+      ...newsItem('seekingalpha', 'nvidia bitcoin trump weather moon'),
+      keywords: ['nvidia', 'bitcoin', 'trump', 'weather', 'moon'],
+    };
+
+    const { newsNewsMatches } = await correlateAllEmbedding([], [], [vcpNvda, saDiluted], MODEL);
+
+    expect(newsNewsMatches).toHaveLength(1);
+    expect(newsNewsMatches[0].newsA.id).toBe(vcpNvda.id);
+  });
+
+  it('entity-gated threshold: shared-entity pair below 0.35 is still rejected', async () => {
+    // Shared `nvidia` entity lowers the bar to 0.35 but does not remove it:
+    // a heavily diluted headline (10 concepts) drops cosine to 1/√10 ≈ 0.32.
+    const vcpNvda: NewsItem = { ...newsItem('stockScreener2', 'NVDA — VCP 2026-08-27'), keywords: ['nvda'] };
+    const saDiluted: NewsItem = {
+      ...newsItem('seekingalpha', 'nvidia bitcoin trump weather moon fed rate powell crypto ethereum'),
+      keywords: ['nvidia', 'bitcoin', 'trump', 'weather', 'moon', 'fed', 'rate', 'powell', 'crypto', 'ethereum'],
+    };
+
+    const { newsNewsMatches } = await correlateAllEmbedding([], [], [vcpNvda, saDiluted], MODEL);
+
+    expect(newsNewsMatches).toEqual([]);
   });
 });

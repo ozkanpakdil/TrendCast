@@ -106,19 +106,40 @@ function dateFromTitle(title: string): string {
 }
 
 /**
- * Extract Seeking Alpha symbol-page tickers from a headline/summary
- * (CORR-06). SA feed items link to `seekingalpha.com/symbol/PEN/...` pages;
- * their headlines are often generic ("More On Earnings Revisions »"), so the
- * ticker must be pulled from the URL and added to the keyword set — otherwise
- * the item can never bridge to a VCP screener item about the same stock.
+ * Extract Seeking Alpha tickers from a headline/summary/link (CORR-06).
+ *
+ * SA feed items link to `seekingalpha.com/symbol/PEN/...` pages; their
+ * headlines are often generic ("More On Earnings Revisions »"), so the ticker
+ * must be pulled from the URL and added to the keyword set — otherwise the
+ * item can never bridge to a VCP screener item about the same stock.
+ *
+ * However, the configured SA feed is proxied through Google News RSS, which
+ * rewrites every link to a `news.google.com/rss/articles/...` redirect — so
+ * the URL carries no ticker. Instead the ticker appears in the title as a
+ * parenthetical marker: `(NASDAQ:IREN)`, `(NYSE:CRM)`, `(GLD:NYSEARCA)`,
+ * `(TFC:NYSE)`, etc. The format is inconsistent (the exchange may come first
+ * or second), so we extract BOTH tokens from the parenthetical; the exchange-
+ * name token is harmless noise that never matches a real screener ticker.
  */
 function extractSeekingAlphaSymbols(text: string): string[] {
   const symbols: string[] = [];
-  const re = /seekingalpha\.com\/symbol\/([A-Z][A-Z0-9.-]{0,9})/gi;
-  for (const m of text.matchAll(re)) {
-    const sym = m[1].replace(/[.-]+$/, '').toLowerCase();
-    if (sym && !symbols.includes(sym)) symbols.push(sym);
+  const push = (sym: string) => {
+    const s = sym.replace(/[.-]+$/, '').toLowerCase();
+    if (s && !symbols.includes(s)) symbols.push(s);
+  };
+
+  // URL-derived tickers: `seekingalpha.com/symbol/PEN/...`.
+  const urlRe = /seekingalpha\.com\/symbol\/([A-Z][A-Z0-9.-]{0,9})/gi;
+  for (const m of text.matchAll(urlRe)) push(m[1]);
+
+  // Title-embedded tickers: `(EXCHANGE:TICKER)` or `(TICKER:EXCHANGE)`.
+  // Extract both sides so the real ticker is captured regardless of order.
+  const parenRe = /\(([A-Z][A-Z0-9.-]{0,9}):([A-Z][A-Z0-9.-]{0,9})\)/g;
+  for (const m of text.matchAll(parenRe)) {
+    push(m[1]);
+    push(m[2]);
   }
+
   return symbols;
 }
 
