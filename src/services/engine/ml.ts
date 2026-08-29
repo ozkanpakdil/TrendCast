@@ -12,7 +12,6 @@
  *   - `ml/math`         — cosine similarity, mean pooling
  *   - `ml/embedding`    — embedding cosine-similarity engine (3 correlate fns)
  *   - `ml/sentiment`    — sentiment-classification engine (3 correlate fns)
- *   - `ml/zeroshot`     — zero-shot NLI classification engine (3 correlate fns)
  *   - `ml/ner`          — ML NER + weighted Jaccard engine (3 correlate fns)
  *   - `ml/llm`          — LLM text-generation engine (3 correlate fns)
  *
@@ -59,14 +58,6 @@ export {
   correlateAllSentiment,
 } from './ml/sentiment';
 
-// Zero-shot classification engine
-export {
-  correlateZeroShot,
-  correlateNewsZeroShot,
-  correlateNewsSocialZeroShot,
-  correlateAllZeroShot,
-} from './ml/zeroshot';
-
 // NER engine
 export {
   correlateNER,
@@ -89,12 +80,10 @@ import type {
   LLMModel,
   NERModel,
   SentimentModel,
-  ZeroShotModel,
 } from '@/types';
 import { getTransformers } from './ml/transformers';
 import { getEmbeddingPipeline } from './ml/transformers';
 import { getSentimentPipeline } from './ml/transformers';
-import { getZeroShotPipeline } from './ml/transformers';
 import { getNERPipeline } from './ml/transformers';
 import { getLLMPipeline } from './ml/transformers';
 
@@ -103,15 +92,13 @@ import { getLLMPipeline } from './ml/transformers';
  * Called when the user selects an ML engine in the settings UI.
  */
 export async function preloadModel(
-  engine: 'embedding' | 'sentiment' | 'zeroshot' | 'ner' | 'llm',
+  engine: 'embedding' | 'sentiment' | 'ner' | 'llm',
   model: string,
 ): Promise<void> {
   if (engine === 'embedding') {
     await getEmbeddingPipeline(model as EmbeddingModel);
   } else if (engine === 'sentiment') {
     await getSentimentPipeline(model as SentimentModel);
-  } else if (engine === 'zeroshot') {
-    await getZeroShotPipeline(model as ZeroShotModel);
   } else if (engine === 'ner') {
     await getNERPipeline(model as NERModel);
   } else if (engine === 'llm') {

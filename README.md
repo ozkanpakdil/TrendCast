@@ -225,7 +225,7 @@ bun run log-server
 ```
 
 The `benchmark` command runs the full correlation pipeline once per
-engine (`heuristic embedding sentiment zeroshot ner` by default) against
+engine (`heuristic embedding sentiment ner` by default) against
 the current collected data and scores each run:
 
 ```

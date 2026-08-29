@@ -21,7 +21,6 @@ function engineLabel(engine: string): string {
     heuristic: '🧮 Heuristic',
     embedding: '🧠 Embedding',
     sentiment: '📊 Sentiment',
-    zeroshot: '🎯 Zero-Shot',
     ner: '🏷️ NER',
     llm: '🤖 LLM',
   };

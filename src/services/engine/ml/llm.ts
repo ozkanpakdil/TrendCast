@@ -11,12 +11,11 @@
  * also the slowest, especially on CPU (WASM). WebGPU is strongly
  * recommended for acceptable performance.
  *
- * We use keyword overlap as a pre-filter (same as zero-shot) to avoid
+ * We use keyword overlap as a pre-filter to avoid
  * running the LLM on all signal × contract pairs.
  *
  * ── Batching ─────────────────────────────────────────────────────
- * Unlike the zero-shot pipeline (which loops premise × hypothesis
- * internally), Transformers.js `TextGenerationPipeline._call` accepts an
+ * Transformers.js `TextGenerationPipeline._call` accepts an
  * array of `Chat[]` and runs a SINGLE `model.generate()` over the whole
  * batch tensor (left-padded). On WebGPU this gives near-linear batch
  * parallelism, so scoring N signals costs roughly the same as scoring 1

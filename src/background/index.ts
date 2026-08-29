@@ -51,7 +51,7 @@ import { correlate, correlateNews, correlateNewsSocial, correlateNewsNews } from
 import { exportToCsv, exportToJson } from '@/utils/export';
 import { pruneStorageIfNeeded, measureStorageUsage } from '@/utils/storage';
 import { backfillWatchlist } from '@/utils/watchlist';
-import { getSettingsFromStorage, migrateEnabledSourcesFromStorage } from '@/utils/settings';
+import { getSettingsFromStorage, migrateEnabledSourcesFromStorage, migrateCorrelationEngine } from '@/utils/settings';
 import { evaluateAlerts, evaluateCrossSourceAlerts, dispatchAlerts, broadcastAlerts, clearAlerts, updateBadge, getAlertHistory } from '@/background/alerts';
 import { buildMarketDrivenNews } from '@/background/correlationNews';
 import { mergeMarkets, mergeSignals, mergeNews } from '@/background/merge';
@@ -229,12 +229,11 @@ function scoreRun(run: BenchmarkRun, fastestMs: number): BenchmarkScore {
 }
 
 registerRpcHandler('benchmark', async (params) => {
-  const engines = (params.engines as string[] | undefined) ?? ['heuristic', 'embedding', 'sentiment', 'zeroshot', 'ner'];
+  const engines = (params.engines as string[] | undefined) ?? ['heuristic', 'embedding', 'sentiment', 'ner'];
   const modelsByEngine: Record<string, string> = {
     heuristic: '',
     embedding: (params.embeddingModel as string) ?? 'Xenova/all-MiniLM-L6-v2',
     sentiment: (params.sentimentModel as string) ?? 'Xenova/distilbert-base-uncased-finetuned-sst-2-english',
-    zeroshot: (params.zeroshotModel as string) ?? 'Xenova/distilbert-base-uncased-mnli',
     ner: (params.nerModel as string) ?? 'Xenova/bert-base-NER-uncased',
     llm: (params.llmModel as string) ?? 'HuggingFaceTB/SmolLM2-135M-Instruct',
   };
@@ -256,7 +255,7 @@ registerRpcHandler('benchmark', async (params) => {
     try {
       const result = await runCorrelationWithEngine(
         markets, signals, news,
-        engine as 'heuristic' | 'embedding' | 'sentiment' | 'zeroshot' | 'ner' | 'llm',
+        engine as 'heuristic' | 'embedding' | 'sentiment' | 'ner' | 'llm',
         model,
         `bench-${engine}-${startedAt}`,
       );
@@ -447,7 +446,7 @@ async function runMLCorrelation(
   markets: MarketContract[],
   signals: SocialSignal[],
   news: NewsItem[],
-  engine: 'embedding' | 'sentiment' | 'zeroshot' | 'ner' | 'llm',
+  engine: 'embedding' | 'sentiment' | 'ner' | 'llm',
   model: string,
   requestId: string,
   onProgress?: (info: { phase: string; current: number; total: number; engine: string; model: string }) => void,
@@ -463,9 +462,6 @@ async function runMLCorrelation(
       return { matches: all.matches, newsMatches: all.newsMatches, newsSocialMatches: all.newsSocialMatches, newsNewsMatches: all.newsNewsMatches, engine };
     } else if (engine === 'sentiment') {
       const all = await ml.correlateAllSentiment(signals, markets, news, model as never, onProgress as never);
-      return { matches: all.matches, newsMatches: all.newsMatches, newsSocialMatches: all.newsSocialMatches, newsNewsMatches: [], engine };
-    } else if (engine === 'zeroshot') {
-      const all = await ml.correlateAllZeroShot(signals, markets, news, model as never, onProgress as never);
       return { matches: all.matches, newsMatches: all.newsMatches, newsSocialMatches: all.newsSocialMatches, newsNewsMatches: [], engine };
     } else if (engine === 'ner') {
       const all = await ml.correlateAllNER(signals, markets, news, model as never, onProgress as never);
@@ -656,7 +652,6 @@ function setupMessageHandlers(): void {
     const model = payload.model ?? (
       engine === 'embedding' ? settings.embeddingModel
       : engine === 'sentiment' ? settings.sentimentModel
-      : engine === 'zeroshot' ? settings.zeroShotModel
       : engine === 'ner' ? settings.nerModel
       : engine === 'llm' ? settings.llmModel
       : settings.embeddingModel
@@ -764,6 +759,9 @@ function setupInstallHandler(): void {
       // investing/googleFinance) into persisted settings so the deep-merge fix
       // survives restarts. Silent and idempotent — never overwrites a preference.
       await migrateEnabledSourcesDefault();
+      // Migration: the zero-shot engine was removed in v0.1.6 — users who had
+      // it selected fall back to the heuristic default.
+      await migrateCorrelationEngineDefault();
     }
 
     // Always re-register alarms on install/update.
@@ -928,7 +926,7 @@ async function runCollection(): Promise<CollectionSnapshot> {
  * channel timeout for long-running ML operations (especially LLMs).
  */
 async function runCorrelationAsync(
-  engine: 'heuristic' | 'embedding' | 'sentiment' | 'zeroshot' | 'ner' | 'llm',
+  engine: 'heuristic' | 'embedding' | 'sentiment' | 'ner' | 'llm',
   model: string,
   requestId: string,
 ): Promise<void> {
@@ -1009,7 +1007,7 @@ async function runCorrelationWithEngine(
   markets: MarketContract[],
   signals: SocialSignal[],
   news: NewsItem[],
-  engine: 'heuristic' | 'embedding' | 'sentiment' | 'zeroshot' | 'ner' | 'llm',
+  engine: 'heuristic' | 'embedding' | 'sentiment' | 'ner' | 'llm',
   model: string,
   requestId?: string,
 ): Promise<CorrelationResult> {
@@ -1019,7 +1017,7 @@ async function runCorrelationWithEngine(
     `inputs: ${markets.length} markets, ${signals.length} signals, ${news.length} news`,
   );
 
-  if (engine === 'embedding' || engine === 'sentiment' || engine === 'zeroshot' || engine === 'ner' || engine === 'llm') {
+  if (engine === 'embedding' || engine === 'sentiment' || engine === 'ner' || engine === 'llm') {
     try {
       // Progress callback — forwards progress to the dashboard via runtime message
       let lastProgressAt = runStart;
@@ -1117,7 +1115,6 @@ async function runCorrelationPrecompute(
   const engine = settings.correlationEngine;
   const model = engine === 'embedding' ? settings.embeddingModel
     : engine === 'sentiment' ? settings.sentimentModel
-    : engine === 'zeroshot' ? settings.zeroShotModel
     : engine === 'ner' ? settings.nerModel
     : engine === 'llm' ? settings.llmModel
     : settings.embeddingModel;
@@ -1228,6 +1225,24 @@ async function migrateEnabledSourcesDefault(): Promise<void> {
     console.log('[TrendCast] Migration: backfilled missing news source flags');
   } catch (err) {
     console.warn('[TrendCast] News source flags migration failed (non-fatal):', err);
+  }
+}
+
+/**
+ * Migration: the zero-shot correlation engine was removed in v0.1.6. Users
+ * who had `correlationEngine: 'zeroshot'` saved fall back to `heuristic`.
+ * Silent and idempotent — no write when the stored engine is still valid.
+ */
+async function migrateCorrelationEngineDefault(): Promise<void> {
+  try {
+    const result = await browser.storage.local.get(CONFIG.storage.settings);
+    const stored = result[CONFIG.storage.settings] as Partial<ExtensionSettings> | undefined;
+    const migrated = migrateCorrelationEngine(stored);
+    if (!migrated) return; // nothing to migrate — skip the write
+    await browser.storage.local.set({ [CONFIG.storage.settings]: migrated });
+    console.log('[TrendCast] Migration: zero-shot engine removed — fell back to heuristic');
+  } catch (err) {
+    console.warn('[TrendCast] Correlation engine migration failed (non-fatal):', err);
   }
 }
 

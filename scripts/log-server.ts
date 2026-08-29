@@ -117,7 +117,7 @@ function callRpc(method: string, params: Record<string, unknown> = {}): Promise<
 
 const HELP = `Commands:
   collectNow              trigger a full collection cycle (waits for completion)
-  correlate [engine]      run correlation (heuristic|embedding|sentiment|zeroshot|ner|llm)
+  correlate [engine]      run correlation (heuristic|embedding|sentiment|ner|llm)
   getSnapshot             latest collection snapshot summary
   getVersion              extension build version + user agent
   getSettings             current extension settings

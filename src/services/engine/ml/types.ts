@@ -15,9 +15,6 @@ export type CorrelationPhase =
   | 'classifying-signals'
   | 'classifying-news'
   | 'classifying-news-social'
-  | 'zero-shot-signals'
-  | 'zero-shot-news'
-  | 'zero-shot-news-social'
   | 'ner-extracting-signals'
   | 'ner-extracting-news'
   | 'ner-extracting-contracts'
@@ -33,7 +30,7 @@ export interface ProgressInfo {
   phase: CorrelationPhase;
   current: number;
   total: number;
-  engine: 'embedding' | 'sentiment' | 'zeroshot' | 'ner' | 'llm';
+  engine: 'embedding' | 'sentiment' | 'ner' | 'llm';
   model: string;
 }
 
@@ -69,9 +66,6 @@ export const EMBEDDING_ENTITY_THRESHOLD = 0.35;
 
 export const SENTIMENT_THRESHOLD = 0.35;
 
-/** Minimum entailment score for zero-shot classification matches. */
-export const ZEROSHOT_THRESHOLD = 0.50;
-
 /** Minimum entity similarity for ML-NER matches. */
 export const NER_THRESHOLD = 0.35;
 
@@ -88,13 +82,6 @@ export const LLM_MAX_NEW_TOKENS = 20;
 /**
  * Maximum candidate contracts per signal for LLM scoring.
  * LLM forward passes are extremely expensive on WASM CPU (2-10s each),
- * so we cap this much lower than zero-shot (15) to keep runtime reasonable.
+ * so we cap this much lower than other engines to keep runtime reasonable.
  */
 export const LLM_MAX_CANDIDATES = 5;
-
-/**
- * Maximum number of candidate labels per zero-shot classification call.
- * NLI models have token limits and performance degrades with too many labels.
- * We pre-filter by keyword overlap, then cap to the top-K most promising.
- */
-export const ZEROSHOT_MAX_LABELS = 15;

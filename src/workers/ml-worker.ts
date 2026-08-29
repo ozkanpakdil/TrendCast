@@ -31,7 +31,6 @@ import {
   setWasmPath,
   correlateAllEmbedding,
   correlateAllSentiment,
-  correlateAllZeroShot,
   correlateAllNER,
   correlateLLM,
   correlateNewsLLM,
@@ -45,7 +44,7 @@ import {
 interface WorkerRequest {
   type: 'correlate';
   requestId: string;
-  engine: 'embedding' | 'sentiment' | 'zeroshot' | 'ner' | 'llm';
+  engine: 'embedding' | 'sentiment' | 'ner' | 'llm';
   model: string;
   markets: MarketContract[];
   signals: SocialSignal[];
@@ -169,12 +168,6 @@ async function handleCorrelate(msg: WorkerRequest): Promise<void> {
     } else if (engine === 'sentiment') {
       console.log(`[TrendCast ML Worker] Starting sentiment correlation: model="${model}"`);
       const all = await correlateAllSentiment(signals, markets, news, model as never, onProgress, cancelFlag);
-      matches = all.matches;
-      newsMatches = all.newsMatches;
-      newsSocialMatches = all.newsSocialMatches;
-    } else if (engine === 'zeroshot') {
-      console.log(`[TrendCast ML Worker] Starting zero-shot correlation: model="${model}"`);
-      const all = await correlateAllZeroShot(signals, markets, news, model as never, onProgress, cancelFlag);
       matches = all.matches;
       newsMatches = all.newsMatches;
       newsSocialMatches = all.newsSocialMatches;

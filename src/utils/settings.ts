@@ -86,6 +86,28 @@ export function migrateEnabledSources(
 }
 
 /**
+ * Migrate a stored `correlationEngine` value that no longer exists.
+ *
+ * The zero-shot engine was removed in v0.1.6 (benchmark: 321s per run — ~10×
+ * slower than every other engine — for the lowest score). Users who had it
+ * selected fall back to `heuristic` (the default) rather than keeping an
+ * invalid engine value that no engine dispatch would handle.
+ *
+ * Pure and idempotent. Returns `null` when there is nothing to migrate so the
+ * caller can skip the write.
+ */
+export function migrateCorrelationEngine(
+  stored: Partial<ExtensionSettings> | undefined,
+): Partial<ExtensionSettings> | null {
+  if (!stored) return null;
+  // Read as string — the stored value may be a removed engine literal
+  // ('zeroshot') that no longer exists in the CorrelationEngine union.
+  const engine = stored.correlationEngine as string | undefined;
+  if (engine !== 'zeroshot') return null;
+  return { ...stored, correlationEngine: 'heuristic' };
+}
+
+/**
  * Read stored settings from storage and deep-merge them over defaults so
  * newly-added source flags default to `true` while explicit user preferences
  * are preserved. Mirrors the background worker's `getSettings()`.

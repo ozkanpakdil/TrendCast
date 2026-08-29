@@ -19,7 +19,6 @@ import type {
   LLMModel,
   NERModel,
   SentimentModel,
-  ZeroShotModel,
 } from '@/types';
 import { cosineSimilarity, meanPool } from './math';
 
@@ -376,26 +375,6 @@ export async function getSentimentPipeline(model: SentimentModel): Promise<Pipel
     const lib = await getTransformers();
     pipeline = createPipelineWithFallback(lib, 'text-classification', model).catch((err) => {
       console.error(`[TrendCast] ML: sentiment pipeline "${model}" failed:`, err);
-      pipelineCache.delete(model);
-      throw err;
-    });
-    pipelineCache.set(model, pipeline);
-  }
-  return pipeline;
-}
-
-// ── Zero-shot classification pipeline ──────────────────────────────
-// Uses a NLI (natural language inference) model to classify text against
-// arbitrary labels (e.g., contract questions). The model scores how well
-// the text entails each label.
-
-export async function getZeroShotPipeline(model: ZeroShotModel): Promise<Pipeline> {
-  let pipeline = pipelineCache.get(model);
-  if (!pipeline) {
-    console.log(`[TrendCast] ML: creating zero-shot pipeline for "${model}"…`);
-    const lib = await getTransformers();
-    pipeline = createPipelineWithFallback(lib, 'zero-shot-classification', model).catch((err) => {
-      console.error(`[TrendCast] ML: zero-shot pipeline "${model}" failed:`, err);
       pipelineCache.delete(model);
       throw err;
     });

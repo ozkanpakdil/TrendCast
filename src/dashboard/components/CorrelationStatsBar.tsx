@@ -39,7 +39,6 @@ function CorrelationStatsBarImpl({ stats, isDark }: CorrelationStatsBarProps) {
           {stats.engine === 'heuristic' ? '🧮 Heuristic' :
            stats.engine === 'embedding' ? '🧠 Embedding' :
            stats.engine === 'sentiment' ? '📊 Sentiment' :
-           stats.engine === 'zeroshot' ? '🎯 Zero-Shot' :
            stats.engine === 'ner' ? '🏷️ NER' :
            stats.engine === 'llm' ? '🤖 LLM' : stats.engine}
         </span>

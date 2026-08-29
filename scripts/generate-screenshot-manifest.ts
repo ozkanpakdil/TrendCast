@@ -93,7 +93,7 @@ const META: Record<string, ScreenshotMeta> = {
   'dashboard-faq.png': {
     title: 'FAQ — Correlation Engines',
     description:
-      'In-app FAQ explaining the six correlation engines (Heuristic, Embedding, Sentiment, Zero-Shot, NER, LLM) and how to choose between them.',
+      'In-app FAQ explaining the five correlation engines (Heuristic, Embedding, Sentiment, NER, LLM) and how to choose between them.',
     category: 'dashboard',
   },
   'dashboard-settings.png': {

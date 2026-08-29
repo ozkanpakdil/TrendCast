@@ -56,13 +56,12 @@ market contracts connect.
   - News → Social: news published before social post
   - Social → Market: social signal correlates with market contract
   - News → Market: news headline correlates with market contract
-- **Six correlation engines**:
+- **Five correlation engines**:
   1. **🧮 Heuristic** — NER + keyword Jaccard similarity. Fast, no download.
   2. **🧠 Embedding** — Semantic similarity via transformer embeddings.
   3. **📊 Sentiment** — Sentiment-aware matching via transformer classifier.
-  4. **🎯 Zero-Shot** — NLI-based zero-shot classification.
-  5. **🏷️ ML NER** — Transformer-based named entity extraction.
-  6. **🤖 LLM** — LLM-based correlation scoring.
+  4. **🏷️ ML NER** — Transformer-based named entity extraction.
+  5. **🤖 LLM** — LLM-based correlation scoring.
 - **Progress bar** — ML engines show real-time progress with phase labels.
 - **Stats bar** — Match count, avg/max confidence, spread, elapsed time.
 - **Run history** — Table of past correlation runs for model comparison.

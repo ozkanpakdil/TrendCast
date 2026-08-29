@@ -42,7 +42,6 @@ export const MOCK_SETTINGS = {
   correlationEngine: 'heuristic',
   embeddingModel: 'Xenova/all-MiniLM-L6-v2',
   sentimentModel: 'Xenova/distilbert-base-uncased-finetuned-sst-2-english',
-  zeroShotModel: 'Xenova/distilbert-base-uncased-mnli',
   nerModel: 'Xenova/bert-base-NER-uncased',
   redditSubreddits: ['investing', 'stocks', 'wallstreetbets', 'UKInvesting'],
 };

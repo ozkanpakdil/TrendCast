@@ -164,7 +164,7 @@ export interface NewsItem {
  * ML models fully client-side. No API keys, no network calls to LLM APIs.
  * The user picks the model and strategy from the popup settings UI.
  */
-export type CorrelationEngine = 'heuristic' | 'embedding' | 'sentiment' | 'zeroshot' | 'ner' | 'llm';
+export type CorrelationEngine = 'heuristic' | 'embedding' | 'sentiment' | 'ner' | 'llm';
 
 /**
  * Available local ML models for the `embedding` strategy.
@@ -184,16 +184,6 @@ export type SentimentModel =
   | 'Xenova/twitter-roberta-base-sentiment-latest'
   | 'Xenova/finbert'
   | 'Xenova/bert-base-multilingual-uncased-sentiment';
-
-/**
- * Available local ML models for the `zeroshot` strategy (NLI-based zero-shot classification).
- * These models classify text against arbitrary labels (e.g., contract questions)
- * without fine-tuning. Uses natural language inference (entailment scoring).
- * All run in-browser via Transformers.js (ONNX Runtime Web).
- */
-export type ZeroShotModel =
-  | 'Xenova/distilbert-base-uncased-mnli'
-  | 'Xenova/deberta-v3-base-zeroshot';
 
 /**
  * Available local ML models for the `ner` strategy (ML-based named entity recognition).
@@ -591,8 +581,6 @@ export interface ExtensionSettings {
   embeddingModel: EmbeddingModel;
   /** Which sentiment model to use (when engine = 'sentiment'). */
   sentimentModel: SentimentModel;
-  /** Which zero-shot classification model to use (when engine = 'zeroshot'). */
-  zeroShotModel: ZeroShotModel;
   /** Which NER model to use (when engine = 'ner'). */
   nerModel: NERModel;
   /** Which LLM model to use (when engine = 'llm'). */
@@ -633,7 +621,6 @@ export const DEFAULT_SETTINGS: ExtensionSettings = {
   correlationEngine: 'heuristic',
   embeddingModel: 'Xenova/all-MiniLM-L6-v2',
   sentimentModel: 'Xenova/distilbert-base-uncased-finetuned-sst-2-english',
-  zeroShotModel: 'Xenova/distilbert-base-uncased-mnli',
   nerModel: 'Xenova/bert-base-NER-uncased',
   llmModel: 'HuggingFaceTB/SmolLM2-135M-Instruct',
   redditSubreddits: ['investing', 'stocks', 'wallstreetbets', 'UKInvesting'],

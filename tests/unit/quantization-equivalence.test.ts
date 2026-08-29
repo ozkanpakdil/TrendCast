@@ -18,7 +18,6 @@ import {
   getLLMPipeline,
   getNERPipeline,
   getSentimentPipeline,
-  getZeroShotPipeline,
   resetPipelineCaches,
   resolveDeviceAndDtype,
 } from '@/services/engine/ml/transformers';
@@ -173,14 +172,6 @@ describe('pipeline device/dtype + WebGPU→WASM fallback (D-04)', () => {
     await getSentimentPipeline('Xenova/twitter-roberta-base-sentiment-latest');
     const call = pipelineCalls[0];
     expect(call.task).toBe('text-classification');
-    expect((call.options as { device?: string }).device).toBe('webgpu');
-  });
-
-  it('zero-shot pipeline uses webgpu/q4 when available', async () => {
-    setWebGPU(true);
-    await getZeroShotPipeline('Xenova/deberta-v3-base-zeroshot');
-    const call = pipelineCalls[0];
-    expect(call.task).toBe('zero-shot-classification');
     expect((call.options as { device?: string }).device).toBe('webgpu');
   });
 

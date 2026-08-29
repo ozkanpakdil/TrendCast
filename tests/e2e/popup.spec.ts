@@ -285,7 +285,7 @@ test.describe('Popup — Settings Tab', () => {
     await openPopup(page);
     await page.locator('nav button', { hasText: 'Settings' }).click();
     await page.waitForTimeout(300);
-    // Radio buttons are ordered: heuristic, embedding, sentiment, zeroshot, ner
+    // Radio buttons are ordered: heuristic, embedding, sentiment, ner
     const radios = page.locator('main input[type="radio"][name="correlationEngine"]');
     await radios.nth(1).check(); // embedding is 2nd
     await page.waitForTimeout(300);
@@ -304,23 +304,12 @@ test.describe('Popup — Settings Tab', () => {
     await expect(modelSelect).toBeVisible({ timeout: 10_000 });
   });
 
-  test('selecting zeroshot engine shows zero-shot model dropdown', async ({ page }) => {
-    await openPopup(page);
-    await page.locator('nav button', { hasText: 'Settings' }).click();
-    await page.waitForTimeout(300);
-    const radios = page.locator('main input[type="radio"][name="correlationEngine"]');
-    await radios.nth(3).check(); // zeroshot is 4th
-    await page.waitForTimeout(300);
-    const modelSelect = page.locator('main select').first();
-    await expect(modelSelect).toBeVisible({ timeout: 10_000 });
-  });
-
   test('selecting NER engine shows NER model dropdown', async ({ page }) => {
     await openPopup(page);
     await page.locator('nav button', { hasText: 'Settings' }).click();
     await page.waitForTimeout(300);
     const radios = page.locator('main input[type="radio"][name="correlationEngine"]');
-    await radios.nth(4).check(); // ner is 5th
+    await radios.nth(3).check(); // ner is 4th
     await page.waitForTimeout(300);
     const modelSelect = page.locator('main select').first();
     await expect(modelSelect).toBeVisible({ timeout: 10_000 });

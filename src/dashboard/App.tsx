@@ -71,9 +71,6 @@ function phaseLabel(phase: string): string {
     'classifying-signals': 'Classifying signal sentiment',
     'classifying-news': 'Classifying news sentiment',
     'classifying-news-social': 'Classifying news→social',
-    'zero-shot-signals': 'Zero-shot classifying signals',
-    'zero-shot-news': 'Zero-shot classifying news',
-    'zero-shot-news-social': 'Zero-shot classifying news→social',
     'ner-extracting-contracts': 'Extracting contract entities',
     'ner-extracting-signals': 'Extracting signal entities',
     'ner-extracting-news': 'Extracting news entities',
@@ -211,7 +208,6 @@ export function App() {
     const initModel =
       settings.correlationEngine === 'embedding' ? settings.embeddingModel
       : settings.correlationEngine === 'sentiment' ? settings.sentimentModel
-      : settings.correlationEngine === 'zeroshot' ? settings.zeroShotModel
       : settings.correlationEngine === 'ner' ? settings.nerModel
       : settings.correlationEngine === 'llm' ? settings.llmModel
       : settings.embeddingModel;
@@ -496,7 +492,6 @@ export function App() {
                       <option value="heuristic">🧮 Heuristic</option>
                       <option value="embedding">🧠 Embedding</option>
                       <option value="sentiment">📊 Sentiment</option>
-                      <option value="zeroshot">🎯 Zero-Shot(Slow)</option>
                       <option value="ner">🏷️ ML NER(Slow)</option>
                       <option value="llm">🤖 LLM(Slowest)</option>
                     </select>
@@ -545,31 +540,6 @@ export function App() {
                         title="Sentiment model"
                       >
                         {CONFIG.ml.sentimentModels.map((m) => (
-                          <option key={m.id} value={m.id}>
-                            {m.label}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-
-                    {settings.correlationEngine === 'zeroshot' && (
-                      <select
-                        value={settings.zeroShotModel}
-                        onChange={(e) => {
-                          const model = e.target.value as ExtensionSettings['zeroShotModel'];
-                          setSettings({ ...settings, zeroShotModel: model });
-                          browser.storage.local.set({
-                            [CONFIG.storage.settings]: { ...settings, zeroShotModel: model },
-                          });
-                        }}
-                        className={`text-xs px-2 py-1.5 rounded border ${
-                          isDark
-                            ? 'bg-slate-800 border-slate-700 text-slate-300'
-                            : 'bg-white border-light-border text-light-text'
-                        } focus:outline-none focus:border-brand-400`}
-                        title="Zero-shot model"
-                      >
-                        {CONFIG.ml.zeroShotModels.map((m) => (
                           <option key={m.id} value={m.id}>
                             {m.label}
                           </option>
@@ -648,8 +618,6 @@ export function App() {
                               ? settings.embeddingModel
                               : settings.correlationEngine === 'sentiment'
                               ? settings.sentimentModel
-                              : settings.correlationEngine === 'zeroshot'
-                              ? settings.zeroShotModel
                               : settings.correlationEngine === 'ner'
                               ? settings.nerModel
                               : settings.correlationEngine === 'llm'
@@ -672,7 +640,7 @@ export function App() {
                   }`}>
                     <div className="flex items-center justify-between mb-2">
                       <span className={`font-medium ${isDark ? 'text-slate-300' : 'text-light-text'}`}>
-                        {corrProgress.engine === 'embedding' ? '🧠 Embedding' : corrProgress.engine === 'sentiment' ? '📊 Sentiment' : corrProgress.engine === 'zeroshot' ? '🎯 Zero-Shot' : corrProgress.engine === 'ner' ? '🏷️ NER' : '🤖 LLM'} · {corrProgress.model}
+                        {corrProgress.engine === 'embedding' ? '🧠 Embedding' : corrProgress.engine === 'sentiment' ? '📊 Sentiment' : corrProgress.engine === 'ner' ? '🏷️ NER' : '🤖 LLM'} · {corrProgress.model}
                       </span>
                       <span className={`tabular-nums ${isDark ? 'text-slate-400' : 'text-light-muted'}`}>
                         ⏱ {Math.floor(elapsedMs / 1000)}s
@@ -744,7 +712,7 @@ export function App() {
 
                 {!corrError && settings.correlationEngine !== 'heuristic' && (
                   <p className={`text-[10px] mb-3 ${isDark ? 'text-slate-500' : 'text-light-muted'}`}>
-                    ⚠️ ML engine selected — first run downloads the model ({settings.correlationEngine === 'embedding' ? '~23–33 MB' : settings.correlationEngine === 'sentiment' ? '~67–134 MB' : settings.correlationEngine === 'zeroshot' ? '~67–110 MB' : settings.correlationEngine === 'ner' ? '~110–340 MB' : '~270 MB–2.3 GB'}) and may take longer. Model is cached for subsequent runs.
+                    ⚠️ ML engine selected — first run downloads the model ({settings.correlationEngine === 'embedding' ? '~23–33 MB' : settings.correlationEngine === 'sentiment' ? '~67–134 MB' : settings.correlationEngine === 'ner' ? '~110–340 MB' : '~270 MB–2.3 GB'}) and may take longer. Model is cached for subsequent runs.
                   </p>
                 )}
 

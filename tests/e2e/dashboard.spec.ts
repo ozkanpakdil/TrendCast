@@ -1075,7 +1075,7 @@ test.describe('Dashboard — Settings Tab', () => {
     await openDashboard(page);
     await page.locator('nav button', { hasText: 'Settings' }).click();
     await page.waitForTimeout(300);
-    // Radio buttons are ordered: heuristic, embedding, sentiment, zeroshot, ner
+    // Radio buttons are ordered: heuristic, embedding, sentiment, ner
     const radios = page.locator('main input[type="radio"][name="correlationEngine"]');
     await radios.nth(1).check(); // embedding is 2nd
     await page.waitForTimeout(300);

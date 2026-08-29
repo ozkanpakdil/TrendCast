@@ -160,44 +160,6 @@ Sentiment: MATCH + DIVERGENCE DETECTED
         </ul>
       </div>
 
-      {/* Zero-Shot */}
-      <div className={card}>
-        <h2 className={h2}>🎯 Zero-Shot Classification Engine</h2>
-        <h3 className={h3}>How It Works</h3>
-        <p className={p}>
-          Uses a <strong>natural language inference (NLI)</strong> model to classify text against
-          arbitrary labels — without any fine-tuning. Each contract question is used as a candidate
-          label; each signal/news headline is scored for how well it <strong>entails</strong> (supports)
-          that label. Pairs above a threshold (0.50) are reported as matches.
-        </p>
-        <h3 className={h3}>Available Models</h3>
-        <ModelTable isDark={isDark} compact={compact} models={[
-          ['Xenova/distilbert-base-uncased-mnli', '~67 MB', 'Default. DistilBERT fine-tuned on MNLI. Fast.'],
-          ['Xenova/deberta-v3-base-zeroshot', '~110 MB', 'DeBERTa-v3, stronger zero-shot accuracy.'],
-        ]} />
-        <h3 className={h3}>Example</h3>
-        <CodeBlock isDark={isDark} compact={compact}>{`Contract:  "Will Bitcoin go above $100k by December?"
-Signal:    "BTC breaking through resistance levels, institutional buying surges"
-
-Heuristic: MATCH (shares "Bitcoin"/"BTC")
-Embedding: MATCH (semantically close)
-Zero-Shot: MATCH with entailment score = 0.82
-           The model understands the signal SUPPORTS the contract premise.`}</CodeBlock>
-        <h3 className={h3}>Pros</h3>
-        <ul className={ul}>
-          <li>Most flexible — matches text to any contract question without pre-defined labels.</li>
-          <li>Entailment-aware — assesses whether text supports, contradicts, or is neutral.</li>
-          <li>No keyword overlap needed — works purely on semantic understanding.</li>
-          <li>Best for novel topics — handles entities the other engines have never seen.</li>
-        </ul>
-        <h3 className={h3}>Cons</h3>
-        <ul className={ul}>
-          <li>Slower — NLI classification requires a forward pass per text-label pair.</li>
-          <li>Model download — 67–110 MB.</li>
-          <li>Threshold sensitivity — may need tuning for different contract types.</li>
-        </ul>
-      </div>
-
       {/* ML-NER */}
       <div className={card}>
         <h2 className={h2}>🏷️ ML-Based NER Engine</h2>
@@ -250,7 +212,7 @@ ML NER:     entities = [
           score (0–100). Pairs above a threshold (0.40) are reported as matches.
         </p>
         <p className={p}>
-          Keyword overlap is used as a pre-filter (same as Zero-Shot) to avoid running the LLM on
+          Keyword overlap is used as a pre-filter to avoid running the LLM on
           every possible pair. Each LLM call handles one signal with up to 5 candidate questions,
           keeping the input small (~200 tokens) and output tiny (~20 tokens) for faster inference.
         </p>
@@ -310,23 +272,22 @@ LLM:       MATCH with score = 85/100
               <th className={`p-2 text-center border ${tableBorder}`}>Heuristic</th>
               <th className={`p-2 text-center border ${tableBorder}`}>Embedding</th>
               <th className={`p-2 text-center border ${tableBorder}`}>Sentiment</th>
-              <th className={`p-2 text-center border ${tableBorder}`}>Zero-Shot</th>
               <th className={`p-2 text-center border ${tableBorder}`}>ML-NER</th>
               <th className={`p-2 text-center border ${tableBorder}`}>LLM</th>
             </tr>
           </thead>
           <tbody className={tableRow}>
             {[
-              ['Download size', '0 MB', '23–33 MB', '67–134 MB', '67–110 MB', '110–340 MB', '270 MB – 2.3 GB'],
-              ['Speed', '⚡ Fastest', '🟡 Medium', '🟡 Medium', '🔴 Slow', '🟡 Medium', '🔴 Slowest'],
-              ['Semantic matching', '❌', '✅', '❌', '✅✅', '❌', '✅✅✅'],
-              ['Sentiment direction', '❌', '❌', '✅', '✅ (entailment)', '❌', '✅ (reasoning)'],
-              ['Entity extraction', '✅ (regex)', '❌', '❌', '❌', '✅✅ (ML)', '❌'],
-              ['Novel entity support', '❌', '✅', '✅', '✅', '✅', '✅'],
-              ['No keyword overlap needed', '❌', '✅', '❌', '✅', '❌', '✅ (pre-filter used)'],
-              ['Reasoning / nuance', '❌', '❌', '❌', '❌', '❌', '✅✅✅'],
-              ['WebGPU recommended', '—', '—', '—', '—', '—', '✅✅✅'],
-              ['Privacy (100% local)', '✅', '✅', '✅', '✅', '✅', '✅'],
+              ['Download size', '0 MB', '23–33 MB', '67–134 MB', '110–340 MB', '270 MB – 2.3 GB'],
+              ['Speed', '⚡ Fastest', '🟡 Medium', '🟡 Medium', '🟡 Medium', '🔴 Slowest'],
+              ['Semantic matching', '❌', '✅', '❌', '❌', '✅✅✅'],
+              ['Sentiment direction', '❌', '❌', '✅', '❌', '✅ (reasoning)'],
+              ['Entity extraction', '✅ (regex)', '❌', '❌', '✅✅ (ML)', '❌'],
+              ['Novel entity support', '❌', '✅', '✅', '✅', '✅'],
+              ['No keyword overlap needed', '❌', '✅', '❌', '❌', '✅ (pre-filter used)'],
+              ['Reasoning / nuance', '❌', '❌', '❌', '❌', '✅✅✅'],
+              ['WebGPU recommended', '—', '—', '—', '—', '✅✅✅'],
+              ['Privacy (100% local)', '✅', '✅', '✅', '✅', '✅'],
             ].map((row, i) => (
               <tr key={i} className={i % 2 === 0 ? '' : (isDark ? 'bg-slate-900/50' : 'bg-slate-50/50')}>
                 <td className={`p-2 border ${tableBorder} font-medium`}>{row[0]}</td>
@@ -354,13 +315,12 @@ LLM:       MATCH with score = 85/100
               ['Everyday use, fast results', 'Heuristic'],
               ['Best semantic matching', 'Embedding (all-MiniLM-L6-v2)'],
               ['Sentiment-aware analysis', 'Sentiment (FinBERT for finance)'],
-              ['Most accurate matching', 'Zero-Shot (deberta-v3-base)'],
               ['Best entity extraction', 'ML-NER (bert-base-NER)'],
               ['Best reasoning / nuance', 'LLM (Qwen2.5-1.5B with WebGPU)'],
               ['Low bandwidth / slow connection', 'Heuristic'],
               ['Financial news analysis', 'Sentiment (FinBERT)'],
               ['Social media analysis', 'Sentiment (Twitter RoBERTa)'],
-              ['Novel/niche topics', 'Zero-Shot, Embedding, or LLM'],
+              ['Novel/niche topics', 'Embedding or LLM'],
               ['Detecting sentiment divergence', 'Sentiment'],
               ['Has WebGPU & wants best quality', 'LLM (Qwen2.5-1.5B or Phi-3.5)'],
               ['CPU-only, wants LLM quality', 'LLM (SmolLM2-135M — smallest)'],
@@ -381,7 +341,6 @@ LLM:       MATCH with score = 85/100
         <li>Start with <strong>Heuristic</strong> for fast initial results.</li>
         <li>Switch to <strong>Embedding</strong> when you suspect missed semantic connections.</li>
         <li>Use <strong>Sentiment</strong> when you want directional bias.</li>
-        <li>Use <strong>Zero-Shot</strong> for the most challenging matching cases.</li>
         <li>Use <strong>ML-NER</strong> when entity extraction quality is critical.</li>
         <li>Use <strong>LLM</strong> when you need reasoning, nuance, or sarcasm detection (WebGPU recommended).</li>
       </ol>
@@ -406,10 +365,10 @@ LLM:       MATCH with score = 85/100
         <li>Background worker pre-computes correlations after each hourly collection.</li>
       </ul>
 
-      {/* Why Zero-Shot and ML-NER Are Slow */}
-      <h3 className={h3}>Why Zero-Shot and ML-NER Are Slower Than Other Engines</h3>
+      {/* Why ML-NER Is Slow */}
+      <h3 className={h3}>Why ML-NER Is Slower Than Other Engines</h3>
       <p className={p}>
-        If you&rsquo;ve used the Embedding or Sentiment engines and then tried Zero-Shot or ML-NER, you&rsquo;ll
+        If you&rsquo;ve used the Embedding or Sentiment engines and then tried ML-NER, you&rsquo;ll
         notice a significant speed difference. Here&rsquo;s why:
       </p>
 
@@ -436,41 +395,7 @@ Step 2: Compare (no model needed!)
       </div>
 
       <div className={card}>
-        <h3 className={h3}>🎯 Why Zero-Shot Is Slow</h3>
-        <p className={p}>
-          Zero-shot classification uses a <strong>Natural Language Inference (NLI)</strong> model.
-          Unlike embeddings, it can&rsquo;t pre-compute a vector and compare later. Instead, it must run
-          a full model forward pass for <strong>each (text, label) pair</strong>:
-        </p>
-        <CodeBlock isDark={isDark} compact={compact}>{`For each signal:
-  NLI model: "Does this signal entail contract[0]?"  ← 1 model call
-  NLI model: "Does this signal entail contract[1]?"  ← 1 model call
-  NLI model: "Does this signal entail contract[2]?"  ← 1 model call
-  ...
-
-Total model calls = signals × candidate_contracts`}</CodeBlock>
-        <p className={p}>
-          Even with the keyword pre-filter (which limits candidates to contracts sharing keywords),
-          each NLI forward pass on WASM takes <strong>~1–3 seconds</strong>. With 229 signals and
-          even just 3 candidate contracts each, that&rsquo;s <strong>~700 model calls</strong> — roughly
-          10–35 minutes on WASM.
-        </p>
-        <p className={p}>
-          <strong>Why can&rsquo;t we batch all labels in one call?</strong> The NLI pipeline does support
-          multiple labels per call, but the model processes them sequentially internally. More
-          labels = longer inference. We cap at 15 candidate labels per signal to keep each call
-          bounded, but the fundamental cost is O(texts × labels).
-        </p>
-        <p className={p}>
-          <strong>Why is WASM slower than native?</strong> The ONNX Runtime Web backend uses
-          WebAssembly, which is 5–20× slower than native CPU inference. There&rsquo;s no GPU acceleration
-          in the browser extension context (no CUDA, no Metal). A model that takes 50ms on a GPU
-          can take 1–3 seconds on WASM.
-        </p>
-      </div>
-
-      <div className={card}>
-        <h3 className={h3}>🏷️ Why ML-NER Is Slow</h3>
+        <h3 className={h3}>️ Why ML-NER Is Slow</h3>
         <p className={p}>
           ML-NER runs a <strong>token classification model</strong> on every single text (contract,
           signal, news headline). Unlike the heuristic engine&rsquo;s regex (which is instant), the
@@ -515,7 +440,6 @@ Total model calls = contracts + signals + news (same as embedding)`}</CodeBlock>
                 ['Heuristic', '0', '<1ms', '<1s'],
                 ['Embedding', '~379', '~50–200ms', '~20–80s'],
                 ['Sentiment', '~379', '~100–300ms', '~40–120s'],
-                ['Zero-Shot', '~700+', '~1–3s', '~10–35min'],
                 ['ML-NER', '~379', '~1–2s', '~6–13min'],
                 ['LLM (WebGPU)', '~229', '~0.5–2s', '~2–8min'],
                 ['LLM (CPU/WASM)', '~229', '~2–10s', '~8–40min'],
@@ -537,13 +461,13 @@ Total model calls = contracts + signals + news (same as embedding)`}</CodeBlock>
       </div>
 
       <div className={card}>
-        <h3 className={h3}>💡 How to Make Zero-Shot and ML-NER Faster</h3>
+        <h3 className={h3}>💡 How to Make ML Engines Faster</h3>
         <ul className={ul}>
-          <li><strong>Use the smaller model</strong> — DistilBERT MNLI (67 MB) is faster than DeBERTa-v3 (110 MB). BERT Base NER (110 MB) is faster than BERT Large NER (340 MB). For LLMs, SmolLM2-135M (270 MB) is fastest; Qwen2.5-1.5B (1.5 GB) is slowest.</li>
+          <li><strong>Use the smaller model</strong> — BERT Base NER (110 MB) is faster than BERT Large NER (340 MB). For LLMs, SmolLM2-135M (270 MB) is fastest; Qwen2.5-1.5B (1.5 GB) is slowest.</li>
           <li><strong>Use WebGPU for LLMs</strong> — if your browser supports WebGPU, LLMs run 10–50× faster than on CPU. Chrome/Edge 113+ and recent Firefox nightlies support it.</li>
           <li><strong>Reduce data volume</strong> — disable unused data sources in settings (e.g., turn off Reddit or X if you only care about news→market correlations). Fewer items = fewer model calls.</li>
-          <li><strong>Let it run in the background</strong> — the background worker pre-computes after each hourly collection. If you switch to Zero-Shot, ML-NER, or LLM, the first collection will be slow, but subsequent dashboard loads will use cached results.</li>
-          <li><strong>Use Heuristic for quick checks</strong> — get instant results, then switch to Zero-Shot, ML-NER, or LLM for deeper analysis when you have time to wait.</li>
+          <li><strong>Let it run in the background</strong> — the background worker pre-computes after each hourly collection. If you switch to ML-NER or LLM, the first collection will be slow, but subsequent dashboard loads will use cached results.</li>
+          <li><strong>Use Heuristic for quick checks</strong> — get instant results, then switch to ML-NER or LLM for deeper analysis when you have time to wait.</li>
           <li><strong>Close other tabs</strong> — WASM inference is CPU-bound. Fewer competing tabs = more CPU for the model.</li>
           <li><strong>Be patient on first run</strong> — the model downloads on first use. After that it&rsquo;s cached, so only the inference time remains.</li>
         </ul>
@@ -595,7 +519,7 @@ Total model calls = contracts + signals + news (same as embedding)`}</CodeBlock>
       <div className={card}>
         <h3 className={h3}>&ldquo;No matches found&rdquo;</h3>
         <ul className={ul}>
-          <li>Try a different engine — Embedding, Zero-Shot, or LLM may catch semantic matches.</li>
+          <li>Try a different engine — Embedding or LLM may catch semantic matches.</li>
           <li>Check that data sources are enabled in settings.</li>
           <li>Run a manual collection first (popup → &ldquo;Collect Now&rdquo;).</li>
           <li>Lower the highlight threshold in settings.</li>
@@ -606,7 +530,7 @@ Total model calls = contracts + signals + news (same as embedding)`}</CodeBlock>
         <ul className={ul}>
           <li>Switch to SmolLM2-135M (270 MB) — the smallest and fastest LLM.</li>
           <li>Check WebGPU support — without it, LLMs run on CPU and are very slow.</li>
-          <li>Use a non-LLM engine (Embedding or Zero-Shot) for similar quality at lower cost.</li>
+          <li>Use a non-LLM engine (Embedding) for similar quality at lower cost.</li>
           <li>Reduce data sources to lower the number of LLM forward passes.</li>
           <li>Let the background worker pre-compute — first run is slow, later loads use cache.</li>
         </ul>

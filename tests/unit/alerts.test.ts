@@ -115,7 +115,6 @@ function settings(partial: Partial<ExtensionSettings> = {}): ExtensionSettings {
     correlationEngine: 'heuristic',
     embeddingModel: 'Xenova/all-MiniLM-L6-v2',
     sentimentModel: 'Xenova/distilbert-base-uncased-finetuned-sst-2-english',
-    zeroShotModel: 'Xenova/distilbert-base-uncased-mnli',
     nerModel: 'Xenova/bert-base-NER-uncased',
     llmModel: 'HuggingFaceTB/SmolLM2-135M-Instruct',
     redditSubreddits: ['investing'],

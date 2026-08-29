@@ -324,20 +324,6 @@ export const CONFIG = {
         size: '~110 MB',
       },
     ],
-    // Zero-shot classification models — NLI-based entailment scoring against
-    // arbitrary labels (e.g., contract questions). No fine-tuning needed.
-    zeroShotModels: [
-      {
-        id: 'Xenova/distilbert-base-uncased-mnli' as const,
-        label: 'DistilBERT MNLI (67 MB · fastest zero-shot)',
-        size: '~67 MB',
-      },
-      {
-        id: 'Xenova/deberta-v3-base-zeroshot' as const,
-        label: 'DeBERTa-v3 Zero-Shot (110 MB · higher accuracy)',
-        size: '~110 MB',
-      },
-    ],
     // ML-based NER models — transformer token classification for entity extraction.
     // Replaces the regex-based entity extraction in the heuristic engine.
     nerModels: [
