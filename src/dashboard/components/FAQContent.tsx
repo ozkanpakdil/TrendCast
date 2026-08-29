@@ -206,7 +206,7 @@ ML NER:     entities = [
         <h2 className={h2}>🤖 LLM Engine (Text Generation)</h2>
         <h3 className={h3}>How It Works</h3>
         <p className={p}>
-          Uses a <strong>small instruction-tuned LLM</strong> (e.g., SmolLM2, Qwen2.5, Phi-3.5) to
+          Uses a <strong>small instruction-tuned LLM</strong> (e.g., SmolLM2, Qwen2.5) to
           reason about the relationship between a signal/news headline and a contract question. The
           LLM is prompted with the text and candidate questions and asked to return a relevance
           score (0–100). Pairs above a threshold (0.40) are reported as matches.
@@ -221,10 +221,6 @@ ML NER:     entities = [
           ['HuggingFaceTB/SmolLM2-135M-Instruct', '~270 MB', 'Fastest LLM. Good for quick checks.'],
           ['HuggingFaceTB/SmolLM2-360M-Instruct', '~720 MB', 'Better reasoning than 135M.'],
           ['onnx-community/Qwen2.5-0.5B-Instruct-ONNX', '~500 MB', 'Strong small LLM, good quality.'],
-          ['onnx-community/Qwen2.5-1.5B-Instruct-ONNX', '~1.5 GB', 'Best quality, slow on CPU.'],
-          ['onnx-community/Phi-3.5-mini-instruct-onnx-web', '~2.3 GB', 'Microsoft, 128K context.'],
-          ['onnx-community/DeepSeek-R1-Distill-Qwen-1.5B-ONNX', '~1.4 GB', 'Reasoning-focused model.'],
-          ['onnx-community/glm-edge-1.5b-chat-ONNX', '~1 GB', 'Zhipu AI, edge-optimized.'],
         ]} />
         <h3 className={h3}>Example</h3>
         <CodeBlock isDark={isDark} compact={compact}>{`Contract:  "Will the Fed cut rates in September?"
@@ -237,7 +233,7 @@ LLM:       MATCH with score = 85/100
            implies a rate cut, strengthening the correlation.`}</CodeBlock>
         <h3 className={h3}>WebGPU vs. CPU (WASM)</h3>
         <p className={p}>
-          LLMs are much larger than other ML models (270 MB – 2.3 GB). On CPU (WASM) they are
+          LLMs are much larger than other ML models (270 MB – 720 MB). On CPU (WASM) they are
           {' '}<strong>very slow</strong> — each forward pass can take 2–10 seconds. If your browser
           supports <strong>WebGPU</strong>, TrendCast automatically uses it for 10–50× faster
           inference. If WebGPU is unavailable or fails, it falls back to WASM CPU automatically.
@@ -255,7 +251,7 @@ LLM:       MATCH with score = 85/100
         </ul>
         <h3 className={h3}>Cons</h3>
         <ul className={ul}>
-          <li>Largest downloads — 270 MB to 2.3 GB per model.</li>
+          <li>Largest downloads — 270 MB to 720 MB per model.</li>
           <li>Slowest on CPU — impractical without WebGPU for larger models.</li>
           <li>Higher memory usage — may strain low-RAM devices.</li>
           <li>Score calibration varies by model — threshold may need adjustment.</li>

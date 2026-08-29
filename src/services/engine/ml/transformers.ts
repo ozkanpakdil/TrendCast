@@ -407,7 +407,7 @@ export async function getNERPipeline(model: NERModel): Promise<Pipeline> {
 // by prompting the model with the signal/news text and contract question.
 // The LLM generates a structured response with a confidence score.
 //
-// ⚠️ LLM models are much larger than other ML models (270 MB – 1.5 GB).
+// ⚠️ LLM models are much larger than other ML models (270 MB – 720 MB).
 // On CPU (WASM) they are very slow. WebGPU is strongly recommended.
 
 export async function getLLMPipeline(model: LLMModel): Promise<Pipeline> {

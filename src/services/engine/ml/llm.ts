@@ -56,10 +56,6 @@ const LLM_VOCAB: Record<LLMModel, number> = {
   'HuggingFaceTB/SmolLM2-135M-Instruct': 49152,
   'HuggingFaceTB/SmolLM2-360M-Instruct': 49152,
   'onnx-community/Qwen2.5-0.5B-Instruct-ONNX': 151936,
-  'onnx-community/Qwen2.5-1.5B-Instruct-ONNX': 151936,
-  'onnx-community/Phi-3.5-mini-instruct-onnx-web': 32064,
-  'onnx-community/DeepSeek-R1-Distill-Qwen-1.5B-ONNX': 151936,
-  'onnx-community/glm-edge-1.5b-chat-ONNX': 131072,
 };
 
 /** Conservative fallback vocab for unknown models. */

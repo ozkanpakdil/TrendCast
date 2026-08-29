@@ -226,7 +226,9 @@ bun run log-server
 
 The `benchmark` command runs the full correlation pipeline once per
 engine (`heuristic embedding sentiment ner` by default) against
-the current collected data and scores each run:
+the current collected data and scores each run. Pass `engine=model`
+pairs to score a specific model, e.g.
+`benchmark llm=HuggingFaceTB/SmolLM2-360M-Instruct`:
 
 ```
 score = 40% coverage + 30% precision + 15% spread + 15% speed

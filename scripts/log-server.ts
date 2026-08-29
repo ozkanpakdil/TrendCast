@@ -22,6 +22,10 @@
  * The extension connects to ws://localhost:18080. If the server isn't
  * running, the extension just buffers (up to 500 lines) and flushes on
  * connect, so you can start the server at any time.
+ *
+ * ⚠️ The extension only connects when the "Stream logs to local server"
+ * setting is enabled (Settings → Debug). The forwarder is debug-build-only
+ * and is stripped from production bundles regardless of the setting.
  */
 
 import { createServer } from 'node:http';
@@ -123,9 +127,9 @@ const HELP = `Commands:
   getSettings             current extension settings
   getStorageUsage         storage usage breakdown
   benchmark [engines]     run correlation per engine and score them
-                          (default: heuristic embedding sentiment zeroshot ner;
-                          e.g. "benchmark embedding embedding" with different models
-                          is not supported yet — one run per engine)
+                          (default: heuristic embedding sentiment ner;
+                          engine=model pairs override the model, e.g.
+                          "benchmark llm=HuggingFaceTB/SmolLM2-360M-Instruct")
   benchmarkResults        print the last benchmark report as a scored table
   ping                    liveness check
   help                    this message
@@ -230,8 +234,27 @@ rl.on('line', async (line) => {
         print('rpc', COLORS.rpc, JSON.stringify(await callRpc('getStorageUsage'), null, 2));
         break;
       case 'benchmark': {
-        const engines = arg ? arg.split(/[,\s]+/).filter(Boolean) : undefined;
-        const report = (await callRpc('benchmark', engines ? { engines } : {})) as BenchReport;
+        // Accept "engine" or "engine=model" tokens; model overrides map to the
+        // RPC params the background benchmark handler already supports.
+        const tokens = arg ? arg.split(/[\s,]+/).filter(Boolean) : [];
+        const engines: string[] = [];
+        const params: Record<string, string> = {};
+        for (const token of tokens) {
+          const eq = token.indexOf('=');
+          if (eq > 0) {
+            const engine = token.slice(0, eq);
+            params[`${engine}Model`] = token.slice(eq + 1);
+            if (!engines.includes(engine)) engines.push(engine);
+          } else {
+            engines.push(token);
+          }
+          if (!['heuristic', 'embedding', 'sentiment', 'ner', 'llm'].includes(
+            eq > 0 ? token.slice(0, token.indexOf('=')) : token,
+          )) {
+            print('benchmark', COLORS.warn, `Unknown engine in "${token}" — valid: heuristic embedding sentiment ner llm`);
+          }
+        }
+        const report = (await callRpc('benchmark', { ...params, ...(engines.length ? { engines } : {}) })) as BenchReport;
         printBenchmarkReport(report);
         break;
       }

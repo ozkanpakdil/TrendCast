@@ -120,6 +120,7 @@ function settings(partial: Partial<ExtensionSettings> = {}): ExtensionSettings {
     redditSubreddits: ['investing'],
     alertsEnabled: true,
     alertCooldownMinutes: 60,
+    logServerEnabled: false,
     ...partial,
   };
 }

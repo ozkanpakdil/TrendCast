@@ -51,7 +51,7 @@ import { correlate, correlateNews, correlateNewsSocial, correlateNewsNews } from
 import { exportToCsv, exportToJson } from '@/utils/export';
 import { pruneStorageIfNeeded, measureStorageUsage } from '@/utils/storage';
 import { backfillWatchlist } from '@/utils/watchlist';
-import { getSettingsFromStorage, migrateEnabledSourcesFromStorage, migrateCorrelationEngine } from '@/utils/settings';
+import { getSettingsFromStorage, migrateEnabledSourcesFromStorage, migrateCorrelationEngine, migrateLLMModel } from '@/utils/settings';
 import { evaluateAlerts, evaluateCrossSourceAlerts, dispatchAlerts, broadcastAlerts, clearAlerts, updateBadge, getAlertHistory } from '@/background/alerts';
 import { buildMarketDrivenNews } from '@/background/correlationNews';
 import { mergeMarkets, mergeSignals, mergeNews } from '@/background/merge';
@@ -762,6 +762,9 @@ function setupInstallHandler(): void {
       // Migration: the zero-shot engine was removed in v0.1.6 — users who had
       // it selected fall back to the heuristic default.
       await migrateCorrelationEngineDefault();
+      // Migration: LLM models ≥1 GB were removed in v0.1.6 (WASM OOM) — users
+      // who had one selected fall back to Qwen2.5-0.5B.
+      await migrateLLMModelDefault();
     }
 
     // Always re-register alarms on install/update.
@@ -1243,6 +1246,24 @@ async function migrateCorrelationEngineDefault(): Promise<void> {
     console.log('[TrendCast] Migration: zero-shot engine removed — fell back to heuristic');
   } catch (err) {
     console.warn('[TrendCast] Correlation engine migration failed (non-fatal):', err);
+  }
+}
+
+/**
+ * Migration: the four LLM models ≥1 GB were removed in v0.1.6 (all exhaust
+ * the browser WASM heap). Users who had one selected fall back to
+ * Qwen2.5-0.5B. Silent and idempotent — no write when the model is valid.
+ */
+async function migrateLLMModelDefault(): Promise<void> {
+  try {
+    const result = await browser.storage.local.get(CONFIG.storage.settings);
+    const stored = result[CONFIG.storage.settings] as Partial<ExtensionSettings> | undefined;
+    const migrated = migrateLLMModel(stored);
+    if (!migrated) return; // nothing to migrate — skip the write
+    await browser.storage.local.set({ [CONFIG.storage.settings]: migrated });
+    console.log('[TrendCast] Migration: removed LLM model — fell back to Qwen2.5-0.5B');
+  } catch (err) {
+    console.warn('[TrendCast] LLM model migration failed (non-fatal):', err);
   }
 }
 

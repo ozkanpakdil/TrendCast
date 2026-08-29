@@ -4,7 +4,7 @@
  * Verifies:
  *   - `resolveDeviceAndDtype()` detects `navigator.gpu` and picks the smallest
  *     dtype from the fallback chain `["q4", "q8", "fp16", "fp32"]` (D-04).
- *   - All five `get*Pipeline()` functions use the shared helper and have a
+ *   - All four `get*Pipeline()` functions use the shared helper and have a
  *     WebGPU→WASM catch-and-retry fallback (D-04).
  *   - Quantized (q8/q4) correlation results are equivalent to fp32 within a
  *     tolerance (golden-test equivalence, D-05).
@@ -137,7 +137,7 @@ describe('resolveDeviceAndDtype (D-04)', () => {
   });
 });
 
-// ── All five pipelines use the shared helper + fallback (D-04) ─────
+// ── All four pipelines use the shared helper + fallback (D-04) ─────
 
 describe('pipeline device/dtype + WebGPU→WASM fallback (D-04)', () => {
   it('embedding pipeline uses webgpu/q8 when available (q4 excluded — degrades cosine similarity)', async () => {

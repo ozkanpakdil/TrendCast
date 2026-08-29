@@ -341,6 +341,28 @@ export function Settings({ settings, onUpdate }: SettingsProps) {
           </span>
         </label>
       </Section>
+
+      {/* Debug log server (debug builds only) */}
+      <Section title="Debug">
+        <label className="flex items-center justify-between text-xs py-1 px-2 rounded bg-slate-800 cursor-pointer">
+          <span className="text-slate-300">🛠️ Stream logs to local server</span>
+          <input
+            type="checkbox"
+            checked={settings.logServerEnabled}
+            onChange={(e) => onUpdate({ logServerEnabled: e.target.checked })}
+            className="accent-brand-500"
+          />
+        </label>
+        <p className="text-[10px] text-slate-500 mt-1">
+          Stream the background worker&apos;s debug logs to a local WebSocket
+          server for troubleshooting. Only active in debug builds — production
+          builds never forward logs regardless of this setting.
+        </p>
+        <p className="text-[10px] text-slate-500 mt-1">
+          Start the server with <code className="text-slate-400">bun run log-server</code>,
+          then enable this toggle. Logs stream to ws://localhost:18080.
+        </p>
+      </Section>
     </div>
   );
 }

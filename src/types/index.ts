@@ -205,15 +205,14 @@ export type NERModel =
  * ⚠️ These models are larger than embedding/sentiment models and
  * require WebGPU for acceptable performance. On CPU-only (WASM)
  * they will work but be very slow.
+ *
+ * Models ≥1 GB were removed in v0.1.6: every one of them exhausts the
+ * browser WASM heap during benchmarking and can never complete a run.
  */
 export type LLMModel =
   | 'HuggingFaceTB/SmolLM2-135M-Instruct'
   | 'HuggingFaceTB/SmolLM2-360M-Instruct'
-  | 'onnx-community/Qwen2.5-0.5B-Instruct-ONNX'
-  | 'onnx-community/Qwen2.5-1.5B-Instruct-ONNX'
-  | 'onnx-community/Phi-3.5-mini-instruct-onnx-web'
-  | 'onnx-community/DeepSeek-R1-Distill-Qwen-1.5B-ONNX'
-  | 'onnx-community/glm-edge-1.5b-chat-ONNX';
+  | 'onnx-community/Qwen2.5-0.5B-Instruct-ONNX';
 
 /** A matched correlation between a social signal and a market contract. */
 export interface CorrelationMatch {
@@ -594,6 +593,12 @@ export interface ExtensionSettings {
   alertsEnabled: boolean;
   /** Per-market cooldown between alerts, in minutes (Phase 4). */
   alertCooldownMinutes: number;
+  /**
+   * Whether to stream debug logs to the local log server
+   * (scripts/log-server.ts, ws://localhost:18080). Debug builds only —
+   * the forwarder is stripped from production bundles regardless.
+   */
+  logServerEnabled: boolean;
 }
 
 export const DEFAULT_SETTINGS: ExtensionSettings = {
@@ -626,4 +631,5 @@ export const DEFAULT_SETTINGS: ExtensionSettings = {
   redditSubreddits: ['investing', 'stocks', 'wallstreetbets', 'UKInvesting'],
   alertsEnabled: true,
   alertCooldownMinutes: 60,
+  logServerEnabled: false,
 };

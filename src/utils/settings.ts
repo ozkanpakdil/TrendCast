@@ -108,6 +108,36 @@ export function migrateCorrelationEngine(
 }
 
 /**
+ * Migrate a stored `llmModel` that no longer exists.
+ *
+ * The four LLM models ≥1 GB were removed in v0.1.6: benchmarking showed every
+ * one of them exhausts the browser WASM heap ("Aborted()" / buffer allocation
+ * failure) and can never complete a run. Users who had one selected fall back
+ * to Qwen2.5-0.5B — the highest-scoring LLM that actually runs (81.4 vs 75.0
+ * for both SmolLM2 variants).
+ *
+ * Pure and idempotent. Returns `null` when there is nothing to migrate so the
+ * caller can skip the write.
+ */
+export function migrateLLMModel(
+  stored: Partial<ExtensionSettings> | undefined,
+): Partial<ExtensionSettings> | null {
+  if (!stored) return null;
+  // Read as string — the stored value may be a removed model literal that no
+  // longer exists in the LLMModel union.
+  const model = stored.llmModel as string | undefined;
+  const removed: readonly string[] = [
+    'onnx-community/Qwen2.5-1.5B-Instruct',
+    'onnx-community/Qwen2.5-1.5B-Instruct-ONNX', // pre-fix repo id (HF 401)
+    'onnx-community/Phi-3.5-mini-instruct-onnx-web',
+    'onnx-community/DeepSeek-R1-Distill-Qwen-1.5B-ONNX',
+    'onnx-community/glm-edge-1.5b-chat-ONNX',
+  ];
+  if (!model || !removed.includes(model)) return null;
+  return { ...stored, llmModel: 'onnx-community/Qwen2.5-0.5B-Instruct-ONNX' };
+}
+
+/**
  * Read stored settings from storage and deep-merge them over defaults so
  * newly-added source flags default to `true` while explicit user preferences
  * are preserved. Mirrors the background worker's `getSettings()`.

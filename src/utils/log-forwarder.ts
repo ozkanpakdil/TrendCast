@@ -5,6 +5,11 @@
  * which Vite sets to `true` only for `--mode development` builds
  * (`bun run build:debug:firefox`). Production builds strip this entirely.
  *
+ * The forwarder is additionally gated at runtime by the user's
+ * `logServerEnabled` setting (Settings → Debug → "Stream logs to local
+ * server"). It only connects and patches `console.*` when that setting is
+ * on, and reacts to changes so toggling it takes effect immediately.
+ *
  * Why this exists: the `[TrendCast]` collection/correlation logs come from
  * the background service worker, which is a SEPARATE JS context from any
  * page. Pasting a `console.log` override into the dashboard/popup DevTools
@@ -26,11 +31,16 @@
  *   # listens on ws://localhost:18080, prints logs, accepts commands
  */
 
+import { CONFIG } from '@/config';
+import { browser } from '@/messaging/browser';
+
 const WS_URL = 'ws://localhost:18080';
 
-// Only enable in debug builds. `import.meta.env.DEBUG_LOG_FORWARD` is
-// replaced at build time by Vite's `define` (see vite.config.ts).
-const ENABLED = import.meta.env.DEBUG_LOG_FORWARD === true;
+// Only include this module in debug builds. `import.meta.env.DEBUG_LOG_FORWARD`
+// is replaced at build time by Vite's `define` (see vite.config.ts) — it is
+// `true` only for `--mode development` builds, so production bundles strip
+// this entire module.
+const DEBUG_BUILD = import.meta.env.DEBUG_LOG_FORWARD === true;
 
 /** An RPC handler: receives params, returns the result (or throws). */
 export type RpcHandler = (params: Record<string, unknown>) => Promise<unknown> | unknown;
@@ -42,16 +52,50 @@ const rpcHandlers = new Map<string, RpcHandler>();
  * at startup. No-op in production builds (the whole module is stripped).
  */
 export function registerRpcHandler(method: string, handler: RpcHandler): void {
-  if (!ENABLED) return;
+  if (!DEBUG_BUILD) return;
   rpcHandlers.set(method, handler);
 }
 
 let ws: WebSocket | null = null;
 let queue: string[] = [];
-let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let consolePatched = false;
+let enabled = false;
+/** Set once a connection attempt has failed, so we only warn the user once. */
+let connectFailed = false;
+
+/**
+ * Enable or disable the forwarder at runtime.
+ *
+ * The forwarder is only active when BOTH the build is a debug build AND the
+ * user has turned on `logServerEnabled` in settings. When disabled, the
+ * console patch is removed (if it was applied) and the socket is closed.
+ */
+function setEnabled(next: boolean): void {
+  if (next === enabled) return;
+  enabled = next;
+
+  if (enabled) {
+    connectFailed = false;
+    patchConsole();
+    connect();
+  } else {
+    if (ws) {
+      try {
+        ws.close();
+      } catch {
+        /* ignore */
+      }
+      ws = null;
+    }
+    queue = [];
+    if (consolePatched) {
+      restoreConsole();
+    }
+  }
+}
 
 function connect(): void {
-  if (!ENABLED) return;
+  if (!enabled) return;
   try {
     ws = new WebSocket(WS_URL);
   } catch {
@@ -75,13 +119,21 @@ function connect(): void {
 
   ws.addEventListener('close', () => {
     ws = null;
-    // Retry periodically so the forwarder survives server restarts.
-    if (reconnectTimer) clearTimeout(reconnectTimer);
-    reconnectTimer = setTimeout(connect, 3000);
+    // Deliberately do NOT auto-reconnect here. A tight reconnect loop spams
+    // the dev console with "can't establish a connection to the server"
+    // errors when the log server isn't running. Instead we connect once and
+    // reconnect only when the setting is toggled off→on or the worker restarts.
   });
 
   ws.addEventListener('error', () => {
-    // Non-fatal — the server may simply not be running. Close triggers retry.
+    // Non-fatal — the server may simply not be running. Print a single notice
+    // (once) instead of spamming the console on every retry.
+    if (!connectFailed) {
+      connectFailed = true;
+      console.warn(
+        `[TrendCast] Log server not reachable at ${WS_URL} — start it with \`bun run log-server\`, then toggle the setting off/on.`,
+      );
+    }
     try {
       ws?.close();
     } catch {
@@ -122,7 +174,7 @@ async function dispatchRpc(id: string, method: string, params: Record<string, un
 }
 
 function sendRaw(text: string): void {
-  if (!ENABLED) return;
+  if (!enabled) return;
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(text);
   } else {
@@ -132,7 +184,7 @@ function sendRaw(text: string): void {
 }
 
 function send(level: string, args: unknown[]): void {
-  if (!ENABLED) return;
+  if (!enabled) return;
   const line = JSON.stringify({
     type: level,
     ts: new Date().toISOString(),
@@ -154,10 +206,18 @@ function safeStringify(value: unknown): string {
   }
 }
 
-function patchConsole(): void {
-  if (!ENABLED) return;
+let originalConsole: {
+  log: typeof console.log;
+  error: typeof console.error;
+  warn: typeof console.warn;
+  info: typeof console.info;
+} | null = null;
 
-  const original = {
+function patchConsole(): void {
+  if (consolePatched) return;
+  consolePatched = true;
+
+  originalConsole = {
     log: console.log.bind(console),
     error: console.error.bind(console),
     warn: console.warn.bind(console),
@@ -165,24 +225,68 @@ function patchConsole(): void {
   };
 
   console.log = (...args: unknown[]) => {
-    original.log(...args);
+    originalConsole!.log(...args);
     send('log', args);
   };
   console.error = (...args: unknown[]) => {
-    original.error(...args);
+    originalConsole!.error(...args);
     send('error', args);
   };
   console.warn = (...args: unknown[]) => {
-    original.warn(...args);
+    originalConsole!.warn(...args);
     send('warn', args);
   };
   console.info = (...args: unknown[]) => {
-    original.info(...args);
+    originalConsole!.info(...args);
     send('info', args);
   };
 }
 
+function restoreConsole(): void {
+  if (!consolePatched || !originalConsole) return;
+  consolePatched = false;
+  console.log = originalConsole.log;
+  console.error = originalConsole.error;
+  console.warn = originalConsole.warn;
+  console.info = originalConsole.info;
+  originalConsole = null;
+}
+
+// ── Runtime enable/disable from settings ─────────────────────────
+// The forwarder only streams when the user has enabled it in settings
+// (`logServerEnabled`). We read the current value on worker start and
+// react to changes so toggling the setting takes effect immediately.
+// In production builds this whole block is stripped (DEBUG_BUILD is false).
+
+function readLogServerEnabled(): boolean {
+  try {
+    // Synchronous read is not possible; we kick off an async read below.
+    void browser.storage.local.get(CONFIG.storage.settings).then((result) => {
+      const stored = result[CONFIG.storage.settings] as { logServerEnabled?: boolean } | undefined;
+      setEnabled(Boolean(stored?.logServerEnabled));
+    });
+  } catch {
+    /* ignore */
+  }
+  return false;
+}
+
+function watchSettings(): void {
+  if (!DEBUG_BUILD) return;
+  readLogServerEnabled();
+  try {
+    browser.storage.onChanged.addListener((changes, area) => {
+      if (area !== 'local') return;
+      const change = changes[CONFIG.storage.settings];
+      if (!change) return;
+      const stored = change.newValue as { logServerEnabled?: boolean } | undefined;
+      setEnabled(Boolean(stored?.logServerEnabled));
+    });
+  } catch {
+    /* ignore */
+  }
+}
+
 // Patch immediately, then connect. The worker is ephemeral, so this runs
 // on every worker start — which is exactly when we want the logs.
-patchConsole();
-connect();
+watchSettings();
