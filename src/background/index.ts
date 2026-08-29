@@ -61,6 +61,12 @@ import { mergeMarkets, mergeSignals, mergeNews } from '@/background/merge';
 // At runtime, MLWorker is a Worker constructor.
 import MLWorker from '@/workers/ml-worker?worker';
 
+// Debug-only: forwards every console.* call from this worker to a local
+// WebSocket server (ws://localhost:18080) so the user can capture the
+// [TrendCast] logs without manually pasting console overrides. No-op in
+// production builds (gated by import.meta.env.DEBUG_LOG_FORWARD).
+import '@/utils/log-forwarder';
+
 // ── Register all listeners synchronously at top level ────────────
 setupAlarms();
 setupMessageHandlers();

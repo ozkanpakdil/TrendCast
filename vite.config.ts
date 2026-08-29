@@ -45,6 +45,10 @@ export default defineConfig(({ mode }) => {
     define: {
       // Allows code to branch on browser at build time
       'import.meta.env.IS_FIREFOX': JSON.stringify(isFirefox),
+      // Debug-only log forwarding. Only `--mode development` builds
+      // (bun run build:debug:firefox) set this to true, so the
+      // log-forwarder is stripped from production bundles.
+      'import.meta.env.DEBUG_LOG_FORWARD': JSON.stringify(mode === 'development'),
       // Build-time version stamp so users can verify they're running the latest build.
       // Format: "0.1.0+2026-08-14T13:21:00Z" — version + build timestamp.
       'import.meta.env.BUILD_VERSION': JSON.stringify(
