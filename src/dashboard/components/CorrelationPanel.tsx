@@ -153,7 +153,7 @@ export function CorrelationPanelImpl({
   newsSocialMatches,
   newsNewsMatches,
 }: CorrelationPanelProps) {
-  const [showGraph, setShowGraph] = useState(true);
+  const [showGraph, setShowGraph] = useState(false);
   const [filter, setFilter] = useState<NodeType | 'all'>('all');
   const [hoveredNode, setHoveredNode] = useState<GraphNode | null>(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
