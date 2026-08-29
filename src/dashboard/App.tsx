@@ -649,6 +649,9 @@ export function App() {
                     <div className="flex items-center gap-2 mb-1">
                       <span className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-light-muted'} whitespace-nowrap`}>
                         {phaseLabel(corrProgress.phase)}
+                        {corrProgress.phase === 'loading-model' && corrProgress.file
+                          ? ` ${corrProgress.file}`
+                          : ''}
                       </span>
                       <div className={`flex-1 h-2 rounded-full overflow-hidden ${
                         isDark ? 'bg-slate-800' : 'bg-slate-200'

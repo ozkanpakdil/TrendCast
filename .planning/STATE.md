@@ -2,20 +2,20 @@
 gsd_state_version: 1.0
 milestone: v0.1.6
 milestone_name: fix correlation (Phases 14-16)
-current_phase: 14
-current_phase_name: Ticker/Cashtag Bridging
-status: verifying
-stopped_at: Milestone v0.1.5 complete — all phases done, archived
-last_updated: "2026-08-27T22:26:23.081Z"
-last_activity: 2026-08-27
-last_activity_desc: Phase 14 execution started
+current_phase: 15
+current_phase_name: ML Run Orchestration & Progress
+status: phase_complete
+stopped_at: Phase 15 complete (2/2 plans executed, verified) — ready for Phase 16
+last_updated: "2026-08-29T19:00:00.000Z"
+last_activity: 2026-08-29
+last_activity_desc: Phase 15 executed — 15-01 (ML run queue) + 15-02 (download progress) verified green
 state_head: d094f63c47c8f0677ec711870d944d37adf2380d
 progress:
   total_phases: 3
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 2
-  completed_plans: 1
-  percent: 0
+  completed_plans: 2
+  percent: 33
 ---
 
 # Project State
@@ -29,10 +29,10 @@ See: .planning/PROJECT.md (updated 2026-08-27)
 
 ## Current Position
 
-Phase: 14 (Ticker/Cashtag Bridging) — EXECUTING
-Plan: 2 of 2
-Status: Phase complete — ready for verification
-Last activity: 2026-08-27 — Phase 14 execution started
+Phase: 15 (ML Run Orchestration & Progress) — PHASE COMPLETE
+Plan: 15-01 + 15-02 executed
+Status: Both plans verified green (416/416 tests, typecheck/lint/build clean)
+Last activity: 2026-08-29 — Phase 15 executed; awaiting user validation/commit
 
 ## Performance Metrics
 
@@ -83,6 +83,7 @@ Recent decisions affecting current work:
 ### Roadmap Evolution
 
 - Milestone 0.1.6 roadmap created: Phases 14-16 (fix correlation) — Phase 14 ticker/cashtag bridging (CORR-01..04), Phase 15 ML run orchestration & progress (MLPROG-01/02), Phase 16 correlation persistence & analysis triggers (TRIG-01..04). F4 (persistence) merged with F3 (triggers) per research dependency analysis; F4-before-F3 ordering satisfied within Phase 16.
+- Phase 14 complete (2026-08-29): 2/2 plans executed, verified GOAL ACHIEVED — all 5 success criteria pass (entity unification, bare-caps gates, keyword curation, equivalence suites, bridging coverage UI). Follow-up filed as CORR-06 (news↔news pass, deferred to v0.1.7+).
 
 ### Pending Todos
 
@@ -111,10 +112,10 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-08-27T16:24:48.292Z
-Stopped at: Milestone v0.1.5 complete — all phases done, archived
+Last session: 2026-08-29T18:20:00.000Z
+Stopped at: Phase 14 closed (verified GOAL ACHIEVED) — Phase 15 planning
 Resume file: None
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone
+- Plan Phase 15 (ML Run Orchestration & Progress, MLPROG-01/02), then execute

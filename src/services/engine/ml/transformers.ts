@@ -20,9 +20,64 @@ import type {
   NERModel,
   SentimentModel,
 } from '@/types';
+import type { ProgressInfo } from './types';
 import { cosineSimilarity, meanPool } from './math';
 
 export type Pipeline = (...args: unknown[]) => Promise<unknown>;
+
+/**
+ * Per-file model-download event from transformers.js `progress_callback`
+ * (Phase 15, MLPROG-02). Statuses: `initiate` (file queued), `download`
+ * (started), `progress` (bytes flowing), `done` (file complete).
+ */
+export interface ModelDownloadInfo {
+  status: 'initiate' | 'download' | 'progress' | 'done';
+  /** Name of the file being downloaded (e.g. `onnx/model_quantized.onnx`). */
+  file?: string;
+  /** 0–100 download percentage (progress events). */
+  progress?: number;
+  /** Bytes downloaded so far (progress events). */
+  loaded?: number;
+  /** Total bytes for the file (progress events). */
+  total?: number;
+}
+
+/** Receives per-file model-download events while a pipeline is created. */
+export type ModelDownloadCallback = (info: ModelDownloadInfo) => void;
+
+/**
+ * Map a transformers.js download event onto the correlation progress
+ * channel (Phase 15, MLPROG-02).
+ *
+ * - `initiate` → `loading-model` 0/1 (file queued)
+ * - `progress` → `loading-model` with byte counts (`loaded`/`total`,
+ *   falling back to percentage/100 when bytes are absent)
+ * - `done`     → `loading-model` 1/1 (file complete)
+ * - `download` → null (start event carries no counts — nothing to show)
+ */
+export function mapDownloadToProgress(
+  info: ModelDownloadInfo,
+  engine: ProgressInfo['engine'],
+  model: string,
+): ProgressInfo | null {
+  if (info.status === 'initiate') {
+    return { phase: 'loading-model', current: 0, total: 1, engine, model, file: info.file };
+  }
+  if (info.status === 'progress') {
+    return {
+      phase: 'loading-model',
+      current: info.loaded ?? Math.round(info.progress ?? 0),
+      total: info.total ?? 100,
+      engine,
+      model,
+      file: info.file,
+    };
+  }
+  if (info.status === 'done') {
+    return { phase: 'loading-model', current: 1, total: 1, engine, model, file: info.file };
+  }
+  return null;
+}
 
 /**
  * Raw model output from a feature-extraction pipeline.
@@ -47,7 +102,12 @@ export interface TransformersLib {
   pipeline: (
     task: string,
     model: string,
-    options?: { quantized?: boolean; device?: string; dtype?: string },
+    options?: {
+      quantized?: boolean;
+      device?: string;
+      dtype?: string;
+      progress_callback?: (info: ModelDownloadInfo) => void;
+    },
   ) => Promise<Pipeline>;
   env: {
     allowLocalModels: boolean;
@@ -215,13 +275,22 @@ async function createPipelineWithFallback(
   task: string,
   model: string,
   supportedDtypes?: readonly string[],
+  onModelDownload?: ModelDownloadCallback,
 ): Promise<Pipeline> {
   const resolved = resolveDeviceAndDtype(supportedDtypes);
-  const options: { quantized: boolean; device?: string; dtype?: string } = {
+  const options: {
+    quantized: boolean;
+    device?: string;
+    dtype?: string;
+    progress_callback?: ModelDownloadCallback;
+  } = {
     quantized: true, // q4 quantization for smaller download + faster inference
   };
   if (resolved.device) options.device = resolved.device;
   if (resolved.dtype) options.dtype = resolved.dtype;
+  // Phase 15 (MLPROG-02): surface per-file download events instead of
+  // silence during first-run model downloads.
+  if (onModelDownload) options.progress_callback = onModelDownload;
 
   try {
     const p = await lib.pipeline(task, model, options);
@@ -235,7 +304,10 @@ async function createPipelineWithFallback(
     if (resolved.device) {
       console.warn(`[TrendCast] ML: ${task} WebGPU failed for "${model}":`, err);
       console.log(`[TrendCast] ML: Retrying ${task} pipeline with WASM CPU…`);
-      return lib.pipeline(task, model, { quantized: true });
+      return lib.pipeline(task, model, {
+        quantized: true,
+        ...(onModelDownload ? { progress_callback: onModelDownload } : {}),
+      });
     }
     throw err;
   }
@@ -329,14 +401,14 @@ export function resetPipelineCaches(): void {
   pipelineCache.clear();
 }
 
-export async function getEmbeddingPipeline(model: EmbeddingModel): Promise<Pipeline> {
+export async function getEmbeddingPipeline(model: EmbeddingModel, onModelDownload?: ModelDownloadCallback): Promise<Pipeline> {
   let pipeline = pipelineCache.get(model);
   if (!pipeline) {
     console.log(`[TrendCast] ML: creating embedding pipeline for "${model}"…`);
     const lib = await getTransformers();
     pipeline = createPipelineWithFallback(lib, 'feature-extraction', model, [
       ...EMBEDDING_SUPPORTED_DTYPES,
-    ])
+    ], onModelDownload)
       .then(async (p) => {
         // WebGPU can silently produce garbage vectors for quantized
         // embedding models (Firefox: session creation succeeds, output is
@@ -368,12 +440,12 @@ export async function getEmbeddingPipeline(model: EmbeddingModel): Promise<Pipel
   return pipeline;
 }
 
-export async function getSentimentPipeline(model: SentimentModel): Promise<Pipeline> {
+export async function getSentimentPipeline(model: SentimentModel, onModelDownload?: ModelDownloadCallback): Promise<Pipeline> {
   let pipeline = pipelineCache.get(model);
   if (!pipeline) {
     console.log(`[TrendCast] ML: creating sentiment pipeline for "${model}"…`);
     const lib = await getTransformers();
-    pipeline = createPipelineWithFallback(lib, 'text-classification', model).catch((err) => {
+    pipeline = createPipelineWithFallback(lib, 'text-classification', model, undefined, onModelDownload).catch((err) => {
       console.error(`[TrendCast] ML: sentiment pipeline "${model}" failed:`, err);
       pipelineCache.delete(model);
       throw err;
@@ -387,12 +459,12 @@ export async function getSentimentPipeline(model: SentimentModel): Promise<Pipel
 // Uses a transformer NER model to extract named entities (PER, ORG, LOC, MISC)
 // from text. Replaces the regex-based entity extraction in the heuristic engine.
 
-export async function getNERPipeline(model: NERModel): Promise<Pipeline> {
+export async function getNERPipeline(model: NERModel, onModelDownload?: ModelDownloadCallback): Promise<Pipeline> {
   let pipeline = pipelineCache.get(model);
   if (!pipeline) {
     console.log(`[TrendCast] ML: creating NER pipeline for "${model}"…`);
     const lib = await getTransformers();
-    pipeline = createPipelineWithFallback(lib, 'token-classification', model).catch((err) => {
+    pipeline = createPipelineWithFallback(lib, 'token-classification', model, undefined, onModelDownload).catch((err) => {
       console.error(`[TrendCast] ML: NER pipeline "${model}" failed:`, err);
       pipelineCache.delete(model);
       throw err;
@@ -410,12 +482,12 @@ export async function getNERPipeline(model: NERModel): Promise<Pipeline> {
 // ⚠️ LLM models are much larger than other ML models (270 MB – 720 MB).
 // On CPU (WASM) they are very slow. WebGPU is strongly recommended.
 
-export async function getLLMPipeline(model: LLMModel): Promise<Pipeline> {
+export async function getLLMPipeline(model: LLMModel, onModelDownload?: ModelDownloadCallback): Promise<Pipeline> {
   let pipeline = pipelineCache.get(model);
   if (!pipeline) {
     console.log(`[TrendCast] ML: creating LLM text-generation pipeline for "${model}"…`);
     const lib = await getTransformers();
-    pipeline = createPipelineWithFallback(lib, 'text-generation', model).catch((err) => {
+    pipeline = createPipelineWithFallback(lib, 'text-generation', model, undefined, onModelDownload).catch((err) => {
       console.error(`[TrendCast] ML: LLM pipeline "${model}" failed on all backends:`, err);
       pipelineCache.delete(model);
       throw err;

@@ -37,6 +37,8 @@ import {
   correlateNewsSocialLLM,
   type ProgressCallback,
   type CancelFlag,
+  type ModelDownloadCallback,
+  mapDownloadToProgress,
 } from '@/services/engine/ml';
 
 // ── Worker message protocol ────────────────────────────────────────
@@ -59,6 +61,8 @@ interface WorkerProgressMessage {
   total: number;
   engine: string;
   model: string;
+  /** Model file being downloaded — only set during `loading-model`. */
+  file?: string;
 }
 
 interface WorkerResultMessage {
@@ -149,7 +153,30 @@ async function handleCorrelate(msg: WorkerRequest): Promise<void> {
       total: info.total,
       engine: info.engine,
       model: info.model,
+      ...(info.file ? { file: info.file } : {}),
     });
+  };
+
+  // Phase 15 (MLPROG-02): surface first-run model downloads through the
+  // same progress channel as a `loading-model` phase instead of silence.
+  const onModelDownload: ModelDownloadCallback = (info) => {
+    // Cancel check inside the callback — aborts the download loop.
+    if (cancelFlag.cancelled) {
+      throw new Error('Correlation cancelled by user.');
+    }
+    const mapped = mapDownloadToProgress(info, engine, model);
+    if (mapped) {
+      postMessageToHost({
+        type: 'progress',
+        requestId,
+        phase: mapped.phase,
+        current: mapped.current,
+        total: mapped.total,
+        engine: mapped.engine,
+        model: mapped.model,
+        ...(mapped.file ? { file: mapped.file } : {}),
+      });
+    }
   };
 
   try {
@@ -160,28 +187,28 @@ async function handleCorrelate(msg: WorkerRequest): Promise<void> {
 
     if (engine === 'embedding') {
       console.log(`[TrendCast ML Worker] Starting embedding correlation: model="${model}"`);
-      const all = await correlateAllEmbedding(signals, markets, news, model as never, onProgress, cancelFlag);
+      const all = await correlateAllEmbedding(signals, markets, news, model as never, onProgress, cancelFlag, onModelDownload);
       matches = all.matches;
       newsMatches = all.newsMatches;
       newsSocialMatches = all.newsSocialMatches;
       newsNewsMatches = all.newsNewsMatches;
     } else if (engine === 'sentiment') {
       console.log(`[TrendCast ML Worker] Starting sentiment correlation: model="${model}"`);
-      const all = await correlateAllSentiment(signals, markets, news, model as never, onProgress, cancelFlag);
+      const all = await correlateAllSentiment(signals, markets, news, model as never, onProgress, cancelFlag, onModelDownload);
       matches = all.matches;
       newsMatches = all.newsMatches;
       newsSocialMatches = all.newsSocialMatches;
     } else if (engine === 'ner') {
       console.log(`[TrendCast ML Worker] Starting NER correlation: model="${model}"`);
-      const all = await correlateAllNER(signals, markets, news, model as never, onProgress, cancelFlag);
+      const all = await correlateAllNER(signals, markets, news, model as never, onProgress, cancelFlag, onModelDownload);
       matches = all.matches;
       newsMatches = all.newsMatches;
       newsSocialMatches = all.newsSocialMatches;
     } else if (engine === 'llm') {
       console.log(`[TrendCast ML Worker] Starting LLM correlation: model="${model}"`);
-      matches = await correlateLLM(signals, markets, model as never, onProgress, cancelFlag);
-      newsMatches = await correlateNewsLLM(news, markets, model as never, onProgress, cancelFlag);
-      newsSocialMatches = await correlateNewsSocialLLM(news, signals, model as never, onProgress, cancelFlag);
+      matches = await correlateLLM(signals, markets, model as never, onProgress, cancelFlag, onModelDownload);
+      newsMatches = await correlateNewsLLM(news, markets, model as never, onProgress, cancelFlag, onModelDownload);
+      newsSocialMatches = await correlateNewsSocialLLM(news, signals, model as never, onProgress, cancelFlag, onModelDownload);
     }
 
     const result: CorrelationResult = {

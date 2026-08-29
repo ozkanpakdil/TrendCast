@@ -517,10 +517,17 @@ export type Message =
   | { type: 'CORRELATE_ALL'; payload: { engine?: CorrelationEngine; model?: string; requestId?: string } }
   | { type: 'CORRELATION_RESULT'; payload: CorrelationResult }
   // Background → Dashboard: progress update for ML correlation
-  | { type: 'CORRELATION_PROGRESS'; payload: { requestId: string; phase: string; current: number; total: number; engine: string; model: string } }
+  // `file` is only set during the `loading-model` phase (Phase 15, MLPROG-02)
+  // and names the model file currently being downloaded.
+  | { type: 'CORRELATION_PROGRESS'; payload: { requestId: string; phase: string; current: number; total: number; engine: string; model: string; file?: string } }
   // Dashboard → Background: cancel a running ML correlation
   | { type: 'CANCEL_CORRELATION'; payload: { requestId: string } }
   | { type: 'CANCEL_RESULT'; payload: { cancelled: boolean } }
+  // Phase 15 (MLPROG-01): Dashboard → Background: is an ML run live?
+  // Lets the UI detect a run whose service worker died mid-flight and
+  // settle stale progress instead of spinning forever.
+  | { type: 'CORRELATION_RUN_STATE'; payload: { requestId?: string } }
+  | { type: 'CORRELATION_RUN_STATE_RESULT'; payload: { live: boolean; requestId: string | null; queued: boolean; activeRequestId: string | null } }
   // Overlay injection (socials content script)
   | { type: 'INJECT_OVERLAY'; payload: { matches: CorrelationMatch[] } }
   // Dashboard → Background: get historical snapshots for charting

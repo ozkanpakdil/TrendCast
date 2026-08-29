@@ -43,7 +43,7 @@ import {
   LLM_MAX_NEW_TOKENS,
   LLM_MAX_CANDIDATES,
 } from './types';
-import { getLLMPipeline } from './transformers';
+import { getLLMPipeline, type ModelDownloadCallback } from './transformers';
 import { getIncrementalIndex } from '../index';
 
 /**
@@ -203,9 +203,10 @@ function parseScores(generated: string, numQuestions: number): number[] {
 async function llmScoreBatch(
   items: LLMScoreItem[],
   model: LLMModel,
+  onModelDownload?: ModelDownloadCallback,
 ): Promise<number[][]> {
   if (items.length === 0) return [];
-  const pipeline = await getLLMPipeline(model);
+  const pipeline = await getLLMPipeline(model, onModelDownload);
 
   const messages = items.map(buildMessages);
 
@@ -238,6 +239,7 @@ export async function correlateLLM(
   model: LLMModel,
   onProgress?: ProgressCallback,
   cancelFlag?: CancelFlag,
+  onModelDownload?: ModelDownloadCallback,
 ): Promise<CorrelationMatch[]> {
   const matches: CorrelationMatch[] = [];
   const llmStart = performance.now();
@@ -268,7 +270,7 @@ export async function correlateLLM(
       questions: b.candidates.map((c) => c.question),
     }));
 
-    const scoresBatch = await llmScoreBatch(scoreItems, model);
+    const scoresBatch = await llmScoreBatch(scoreItems, model, onModelDownload);
     llmCalls++;
 
     for (let b = 0; b < batch.length; b++) {
@@ -318,6 +320,7 @@ export async function correlateNewsLLM(
   model: LLMModel,
   onProgress?: ProgressCallback,
   cancelFlag?: CancelFlag,
+  onModelDownload?: ModelDownloadCallback,
 ): Promise<NewsCorrelationMatch[]> {
   const matches: NewsCorrelationMatch[] = [];
   const llmStart = performance.now();
@@ -347,7 +350,7 @@ export async function correlateNewsLLM(
       questions: it.candidates.map((c) => c.question),
     }));
 
-    const scoresBatch = await llmScoreBatch(scoreItems, model);
+    const scoresBatch = await llmScoreBatch(scoreItems, model, onModelDownload);
     llmCalls++;
 
     for (let b = 0; b < batch.length; b++) {
@@ -394,6 +397,7 @@ export async function correlateNewsSocialLLM(
   model: LLMModel,
   onProgress?: ProgressCallback,
   cancelFlag?: CancelFlag,
+  onModelDownload?: ModelDownloadCallback,
 ): Promise<NewsSocialCorrelationMatch[]> {
   const matches: NewsSocialCorrelationMatch[] = [];
   const llmStart = performance.now();
@@ -424,7 +428,7 @@ export async function correlateNewsSocialLLM(
       questions: it.candidates.map((n) => n.headline),
     }));
 
-    const scoresBatch = await llmScoreBatch(scoreItems, model);
+    const scoresBatch = await llmScoreBatch(scoreItems, model, onModelDownload);
     llmCalls++;
 
     for (let b = 0; b < batch.length; b++) {

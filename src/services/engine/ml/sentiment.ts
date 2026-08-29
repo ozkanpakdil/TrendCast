@@ -33,6 +33,7 @@ import {
   SENTIMENT_THRESHOLD,
 } from './types';
 import {
+  type ModelDownloadCallback,
   type Pipeline,
   type SentimentResult,
   getSentimentPipeline,
@@ -46,14 +47,16 @@ import { getIncrementalIndex } from '../index';
 class BatchSentimentClassifier {
   private pipeline: Pipeline | null = null;
   private readonly model: SentimentModel;
+  private readonly onModelDownload?: ModelDownloadCallback;
 
-  constructor(model: SentimentModel) {
+  constructor(model: SentimentModel, onModelDownload?: ModelDownloadCallback) {
     this.model = model;
+    this.onModelDownload = onModelDownload;
   }
 
   private async getPipeline(): Promise<Pipeline> {
     if (!this.pipeline) {
-      this.pipeline = await getSentimentPipeline(this.model);
+      this.pipeline = await getSentimentPipeline(this.model, this.onModelDownload);
     }
     return this.pipeline;
   }
@@ -116,8 +119,8 @@ class SentimentIndex {
   private readonly cache = new Map<string, { score: number; label: string }>();
   private readonly classifier: BatchSentimentClassifier;
 
-  constructor(model: SentimentModel) {
-    this.classifier = new BatchSentimentClassifier(model);
+  constructor(model: SentimentModel, onModelDownload?: ModelDownloadCallback) {
+    this.classifier = new BatchSentimentClassifier(model, onModelDownload);
   }
 
   /**
@@ -231,12 +234,13 @@ export async function correlateAllSentiment(
   model: SentimentModel,
   onProgress?: ProgressCallback,
   cancelFlag?: CancelFlag,
+  onModelDownload?: ModelDownloadCallback,
 ): Promise<{
   matches: CorrelationMatch[];
   newsMatches: NewsCorrelationMatch[];
   newsSocialMatches: NewsSocialCorrelationMatch[];
 }> {
-  const index = new SentimentIndex(model);
+  const index = new SentimentIndex(model, onModelDownload);
 
   const matches = await correlateSignalsToContracts(index, signals, contracts, model, onProgress, cancelFlag);
   const newsMatches = await correlateNewsToContracts(index, news, contracts, model, onProgress, cancelFlag);

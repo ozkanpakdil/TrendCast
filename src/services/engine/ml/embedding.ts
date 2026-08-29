@@ -56,6 +56,7 @@ import {
 } from './types';
 import {
   type EmbeddingResult,
+  type ModelDownloadCallback,
   type Pipeline,
   getEmbeddingPipeline,
 } from './transformers';
@@ -98,14 +99,16 @@ function enrichForEmbedding(text: string): string {
 class BatchEmbedder {
   private pipeline: Pipeline | null = null;
   private readonly model: EmbeddingModel;
+  private readonly onModelDownload?: ModelDownloadCallback;
 
-  constructor(model: EmbeddingModel) {
+  constructor(model: EmbeddingModel, onModelDownload?: ModelDownloadCallback) {
     this.model = model;
+    this.onModelDownload = onModelDownload;
   }
 
   private async getPipeline(): Promise<Pipeline> {
     if (!this.pipeline) {
-      this.pipeline = await getEmbeddingPipeline(this.model);
+      this.pipeline = await getEmbeddingPipeline(this.model, this.onModelDownload);
     }
     return this.pipeline;
   }
@@ -192,8 +195,8 @@ class EmbeddingIndex {
   private readonly cache = new Map<string, number[]>();
   private readonly embedder: BatchEmbedder;
 
-  constructor(model: EmbeddingModel) {
-    this.embedder = new BatchEmbedder(model);
+  constructor(model: EmbeddingModel, onModelDownload?: ModelDownloadCallback) {
+    this.embedder = new BatchEmbedder(model, onModelDownload);
   }
 
   /**
@@ -339,13 +342,14 @@ export async function correlateAllEmbedding(
   model: EmbeddingModel,
   onProgress?: ProgressCallback,
   cancelFlag?: CancelFlag,
+  onModelDownload?: ModelDownloadCallback,
 ): Promise<{
   matches: CorrelationMatch[];
   newsMatches: NewsCorrelationMatch[];
   newsSocialMatches: NewsSocialCorrelationMatch[];
   newsNewsMatches: NewsNewsCorrelationMatch[];
 }> {
-  const index = new EmbeddingIndex(model);
+  const index = new EmbeddingIndex(model, onModelDownload);
 
   const matches = await correlateSignalsToContracts(index, signals, contracts, model, onProgress, cancelFlag);
   const newsMatches = await correlateNewsToContracts(index, news, contracts, model, onProgress, cancelFlag);

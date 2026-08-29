@@ -40,7 +40,12 @@ export type {
 } from './ml/types';
 
 // Transformers.js setup
-export { setWasmPath } from './ml/transformers';
+export {
+  setWasmPath,
+  type ModelDownloadCallback,
+  type ModelDownloadInfo,
+  mapDownloadToProgress,
+} from './ml/transformers';
 
 // Embedding engine
 export {
@@ -86,6 +91,7 @@ import { getEmbeddingPipeline } from './ml/transformers';
 import { getSentimentPipeline } from './ml/transformers';
 import { getNERPipeline } from './ml/transformers';
 import { getLLMPipeline } from './ml/transformers';
+import type { ModelDownloadCallback } from './ml/transformers';
 
 /**
  * Preload an ML model so the first correlation run is fast.
@@ -103,6 +109,27 @@ export async function preloadModel(
     await getNERPipeline(model as NERModel);
   } else if (engine === 'llm') {
     await getLLMPipeline(model as LLMModel);
+  }
+}
+
+/**
+ * Preload an ML model with per-file download progress (Phase 15, MLPROG-02).
+ * Same as `preloadModel` but forwards transformers.js download events to the
+ * given callback so the UI can show what is being fetched.
+ */
+export async function preloadModelWithProgress(
+  engine: 'embedding' | 'sentiment' | 'ner' | 'llm',
+  model: string,
+  onModelDownload: ModelDownloadCallback,
+): Promise<void> {
+  if (engine === 'embedding') {
+    await getEmbeddingPipeline(model as EmbeddingModel, onModelDownload);
+  } else if (engine === 'sentiment') {
+    await getSentimentPipeline(model as SentimentModel, onModelDownload);
+  } else if (engine === 'ner') {
+    await getNERPipeline(model as NERModel, onModelDownload);
+  } else if (engine === 'llm') {
+    await getLLMPipeline(model as LLMModel, onModelDownload);
   }
 }
 

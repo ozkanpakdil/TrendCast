@@ -40,8 +40,8 @@
 
 ### v0.1.6 fix correlation (Phases 14-16)
 
-- [ ] **Phase 14: Ticker/Cashtag Bridging** - Unify `$AMZN`/`AMZN`/`Amazon` into one canonical entity space so stock-indicator news correlates with social/news/markets
-- [ ] **Phase 15: ML Run Orchestration & Progress** - Fix stuck-progress: requestId-scoped progress/results, serialized worker queue, model-download progress events, guaranteed terminal state
+- [x] **Phase 14: Ticker/Cashtag Bridging** - Unify `$AMZN`/`AMZN`/`Amazon` into one canonical entity space so stock-indicator news correlates with social/news/markets — completed 2026-08-29 (2/2 plans, verified GOAL ACHIEVED)
+- [x] **Phase 15: ML Run Orchestration & Progress** - Fix stuck-progress: requestId-scoped progress/results, serialized worker queue, model-download progress events, guaranteed terminal state — completed 2026-08-29 (2/2 plans, verified: 416/416 tests, typecheck/lint/build clean)
 - [ ] **Phase 16: Correlation Persistence & Analysis Triggers** - Persist results with `computedAt` freshness metadata; no auto-analyze on tab open, analyze only when none exists, re-analyze after collectNow
 
 ## Phase Details

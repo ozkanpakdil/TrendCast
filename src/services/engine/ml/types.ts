@@ -32,6 +32,11 @@ export interface ProgressInfo {
   total: number;
   engine: 'embedding' | 'sentiment' | 'ner' | 'llm';
   model: string;
+  /**
+   * Model file being downloaded — only present during the `loading-model`
+   * phase (Phase 15, MLPROG-02), e.g. `onnx/model_quantized.onnx`.
+   */
+  file?: string;
 }
 
 export type ProgressCallback = (info: ProgressInfo) => void;

@@ -187,6 +187,9 @@ export const CONFIG = {
     collectedNews: 'trendcast:collected-news',
     correlations: 'trendcast:correlations',
     correlationRunHistory: 'trendcast:corr-run-history',
+    // Phase 15 (MLPROG-01): persisted marker for the in-flight ML run —
+    // lets any tab detect a run whose service worker died mid-flight.
+    mlRunState: 'trendcast:ml-run-state',
     // Debug-only: results of RPC-triggered engine/model benchmarks
     // (see registerRpcHandler('benchmark') in background/index.ts).
     modelBenchmark: 'trendcast:model-benchmark',

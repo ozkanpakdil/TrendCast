@@ -24,6 +24,8 @@ export interface CorrelationProgress {
   total: number;
   engine: string;
   model: string;
+  /** Model file being downloaded — only set during `loading-model`. */
+  file?: string;
 }
 
 /** Maximum number of past run stats to keep in storage. */
@@ -191,7 +193,14 @@ export function useCorrelations() {
       const data = msg as { type?: string; payload?: CorrelationProgress & { requestId: string } & CorrelationResultType };
 
       if (data.type === 'CORRELATION_PROGRESS' && data.payload) {
-        setProgress(data.payload as CorrelationProgress);
+        // Phase 15 (MLPROG-01): scope progress by requestId — a concurrent
+        // `precompute-*` run's progress must never update (or resurrect)
+        // this run's UI.
+        const p = data.payload as CorrelationProgress & { requestId: string };
+        if (requestIdRef.current && p.requestId && p.requestId !== requestIdRef.current) {
+          return;
+        }
+        setProgress(p);
       }
 
       // Fire-and-forget pattern: background sends CORRELATION_RESULT
@@ -226,9 +235,12 @@ export function useCorrelations() {
         const stored = await browser.storage.local.get(CONFIG.storage.correlations);
         const cached = stored[CONFIG.storage.correlations] as CorrelationResultType | undefined;
         if (cached && typeof cached === 'object' && 'matches' in cached) {
-          // Only apply if it corresponds to the active request (or has no id).
+          // Only apply if it corresponds to the active request. Phase 15:
+          // results without a requestId are only accepted when no run is
+          // active — with an active id, an unstamped result belongs to some
+          // other (older) run and must not settle this one.
           const activeId = requestIdRef.current;
-          if (!activeId || !cached.requestId || cached.requestId === activeId) {
+          if (!activeId || (cached.requestId && cached.requestId === activeId)) {
             applyResultRef.current(cached);
           }
         }
@@ -238,6 +250,43 @@ export function useCorrelations() {
     }, 1000);
     return () => clearInterval(pollId);
   }, [loading]);
+
+  // Phase 15 (MLPROG-01): liveness poll. While a run is loading, ask the
+  // background whether the run is still live. If the service worker died
+  // mid-run, the persisted run-state marker is gone and no result will ever
+  // arrive — settle with an interrupted error instead of spinning forever.
+  useEffect(() => {
+    if (!loading) return;
+    let cancelled = false;
+    const check = async () => {
+      const activeId = requestIdRef.current;
+      if (!activeId) return;
+      try {
+        const resp = await sendMessage('CORRELATION_RUN_STATE', { requestId: activeId });
+        if (cancelled) return;
+        const unwrapped =
+          resp && typeof resp === 'object' && 'ok' in resp
+            ? (resp as { ok: boolean; data: { live: boolean; requestId: string | null; queued: boolean } }).data
+            : (resp as { live: boolean; requestId: string | null; queued: boolean });
+        const live = unwrapped?.live === true || unwrapped?.queued === true;
+        if (!live) {
+          console.warn('[TrendCast] [Dashboard] Run no longer live in background — settling with interrupted error');
+          setError('Correlation run was interrupted (browser stopped the background worker). Please run the analysis again.');
+          setLoading(false);
+          setProgress(null);
+          stopTimer();
+          requestIdRef.current = null;
+        }
+      } catch {
+        // Background unreachable (e.g. SW restarting) — retry on next tick.
+      }
+    };
+    const livenessId = setInterval(check, 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(livenessId);
+    };
+  }, [loading, stopTimer]);
 
   const runCorrelation = useCallback(
     async (engine?: CorrelationEngine, model?: string) => {

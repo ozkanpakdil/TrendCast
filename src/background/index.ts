@@ -52,6 +52,8 @@ import { exportToCsv, exportToJson } from '@/utils/export';
 import { pruneStorageIfNeeded, measureStorageUsage } from '@/utils/storage';
 import { backfillWatchlist } from '@/utils/watchlist';
 import { getSettingsFromStorage, migrateEnabledSourcesFromStorage, migrateCorrelationEngine, migrateLLMModel } from '@/utils/settings';
+import { MlRunQueue } from '@/utils/ml-run-queue';
+import { readMlRunState, writeMlRunState, clearMlRunState, isOrphanedRunState, type MlRunState } from '@/utils/ml-run-state';
 import { evaluateAlerts, evaluateCrossSourceAlerts, dispatchAlerts, broadcastAlerts, clearAlerts, updateBadge, getAlertHistory } from '@/background/alerts';
 import { buildMarketDrivenNews } from '@/background/correlationNews';
 import { mergeMarkets, mergeSignals, mergeNews } from '@/background/merge';
@@ -333,6 +335,36 @@ setupAlarms();
 setupMessageHandlers();
 setupInstallHandler();
 
+// Phase 15 (MLPROG-01): recover from a service-worker death mid-run. A
+// run-state marker that survived from the previous SW life means that run
+// never reached a terminal path — clear the marker and broadcast an
+// interrupted error result so any waiting tab settles instead of spinning.
+void (async () => {
+  try {
+    const marker = await readMlRunState(browser.storage.local, CONFIG.storage.mlRunState);
+    if (isOrphanedRunState(marker)) {
+      console.warn('[TrendCast] Orphaned ML run-state marker found — run interrupted by service-worker death:', marker.requestId);
+      await clearMlRunState(browser.storage.local, CONFIG.storage.mlRunState);
+      const interruptedResult: CorrelationResult = {
+        matches: [],
+        newsMatches: [],
+        newsSocialMatches: [],
+        newsNewsMatches: [],
+        engine: (marker.engine as CorrelationResult['engine']) ?? 'heuristic',
+        requestId: marker.requestId,
+        error: 'Correlation run was interrupted (browser stopped the background worker). Please run the analysis again.',
+      };
+      await browser.storage.local.set({ [CONFIG.storage.correlations]: interruptedResult });
+      browser.runtime.sendMessage({
+        type: 'CORRELATION_RESULT',
+        payload: interruptedResult,
+      }).catch(() => {});
+    }
+  } catch (err) {
+    console.warn('[TrendCast] ML run-state recovery failed (non-fatal):', err);
+  }
+})();
+
 // Build-time version stamp injected by Vite's define.
 // Format: "0.1.0+2026-08-14T13:21:00Z"
 const BUILD_VERSION = import.meta.env.BUILD_VERSION ?? 'dev';
@@ -347,11 +379,15 @@ console.log(
 // responsive. The worker is created on demand and terminated when idle.
 
 let mlWorker: Worker | null = null;
-let mlWorkerRequestId: string | null = null;
+// Phase 15 (MLPROG-01): runs are serialized through a queue. Overlapping
+// requests (dashboard `corr-*` vs post-collection `precompute-*`) queue
+// instead of overwriting each other's resolvers.
+const mlRunQueue = new MlRunQueue();
 let mlWorkerResolvers: {
+  requestId: string;
   resolve: (result: CorrelationResult) => void;
   reject: (error: Error) => void;
-  onProgress?: (info: { phase: string; current: number; total: number; engine: string; model: string }) => void;
+  onProgress?: (info: { phase: string; current: number; total: number; engine: string; model: string; file?: string }) => void;
 } | null = null;
 let mlWorkerTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -379,6 +415,14 @@ function getMLWorker(): Worker | null {
         return;
       }
 
+      // Phase 15: ignore messages from a stale run — a late result/error
+      // from a previous (terminated) request must never settle the current
+      // run's promise.
+      if (msg.requestId && msg.requestId !== mlWorkerResolvers.requestId) {
+        console.warn('[TrendCast] ML worker message for stale requestId — ignoring:', msg.requestId);
+        return;
+      }
+
       if (msg.type === 'progress') {
         // Reset idle timer on progress — LLM inference can take many minutes.
         // Without this, the 60s idle timer kills the worker mid-computation.
@@ -389,6 +433,7 @@ function getMLWorker(): Worker | null {
           total: msg.total,
           engine: msg.engine,
           model: msg.model,
+          ...(msg.file ? { file: msg.file } : {}),
         });
       } else if (msg.type === 'result') {
         console.log('[TrendCast] ML worker result received');
@@ -427,7 +472,6 @@ function terminateMLWorker(): void {
     mlWorkerTimeout = null;
   }
   mlWorkerResolvers = null;
-  mlWorkerRequestId = null;
 }
 
 function resetWorkerIdleTimer(): void {
@@ -449,7 +493,7 @@ async function runMLCorrelation(
   engine: 'embedding' | 'sentiment' | 'ner' | 'llm',
   model: string,
   requestId: string,
-  onProgress?: (info: { phase: string; current: number; total: number; engine: string; model: string }) => void,
+  onProgress?: (info: { phase: string; current: number; total: number; engine: string; model: string; file?: string }) => void,
 ): Promise<CorrelationResult> {
   const worker = getMLWorker();
 
@@ -476,28 +520,63 @@ async function runMLCorrelation(
   }
 
   return new Promise<CorrelationResult>((resolve, reject) => {
-    mlWorkerRequestId = requestId;
-    mlWorkerResolvers = { resolve, reject, onProgress };
-
-    worker.postMessage({
-      type: 'correlate',
+    mlRunQueue.enqueue({
       requestId,
-      engine,
-      model,
-      markets,
-      signals,
-      news,
+      reject,
+      run: () =>
+        new Promise<void>((runSettled) => {
+          mlWorkerResolvers = {
+            requestId,
+            resolve: (result) => {
+              mlWorkerResolvers = null;
+              resolve(result);
+              runSettled();
+            },
+            reject: (err) => {
+              mlWorkerResolvers = null;
+              reject(err);
+              runSettled();
+            },
+            onProgress,
+          };
+          worker.postMessage({
+            type: 'correlate',
+            requestId,
+            engine,
+            model,
+            markets,
+            signals,
+            news,
+          });
+        }),
     });
   });
 }
 
 /**
- * Cancel a running ML correlation.
+ * Cancel a running (or queued) ML correlation.
+ *
+ * - Active run: terminate the worker and reject the pending promise — the
+ *   caller's await settles with the cancelled error (previously the promise
+ *   hung forever, leaving the UI stuck).
+ * - Queued run: reject its promise directly via the queue.
  */
-function cancelMLCorrelation(): void {
-  if (mlWorker && mlWorkerRequestId) {
-    console.log('[TrendCast] Cancelling ML correlation:', mlWorkerRequestId);
-    // Terminate the worker to immediately stop inference
+function cancelMLCorrelation(requestId?: string): void {
+  const activeId = mlRunQueue.activeRequestId;
+  if (requestId && activeId && requestId !== activeId) {
+    // Queued run — reject without touching the worker.
+    mlRunQueue.cancel(requestId);
+    return;
+  }
+  if (mlWorker && (!requestId || requestId === activeId)) {
+    console.log('[TrendCast] Cancelling ML correlation:', activeId ?? requestId);
+    // Reject the pending promise first, then terminate the worker to
+    // immediately stop inference. The queue advances via the rejection.
+    if (mlWorkerResolvers) {
+      const { reject } = mlWorkerResolvers;
+      mlWorkerResolvers = null;
+      reject(new Error('Correlation cancelled by user.'));
+    }
     terminateMLWorker();
   }
 }
@@ -670,10 +749,23 @@ function setupMessageHandlers(): void {
   });
 
   // Dashboard → Background: cancel a running ML correlation
-  onMessage('CANCEL_CORRELATION', async () => {
-    console.log('[TrendCast] CANCEL_CORRELATION received');
-    cancelMLCorrelation();
+  onMessage('CANCEL_CORRELATION', async (payload) => {
+    console.log('[TrendCast] CANCEL_CORRELATION received:', payload.requestId);
+    cancelMLCorrelation(payload.requestId || undefined);
     return { cancelled: true };
+  });
+
+  // Dashboard → Background: is an ML correlation run live? Used by the
+  // dashboard to detect a run whose service worker died mid-flight
+  // (MLPROG-01) — the hook settles stale progress instead of spinning.
+  onMessage('CORRELATION_RUN_STATE', async (payload) => {
+    const marker = await readMlRunState(browser.storage.local, CONFIG.storage.mlRunState);
+    return {
+      live: marker !== null,
+      requestId: marker?.requestId ?? null,
+      queued: payload.requestId ? mlRunQueue.isQueued(payload.requestId) : false,
+      activeRequestId: mlRunQueue.activeRequestId,
+    };
   });
 
   // Dashboard → Background: get historical snapshots for charting
@@ -933,6 +1025,16 @@ async function runCorrelationAsync(
   model: string,
   requestId: string,
 ): Promise<void> {
+  // Phase 15 (MLPROG-01): persist a run-state marker so any tab (and the
+  // next service-worker life) can tell a run was in flight. Cleared on
+  // every terminal path below.
+  const runState: MlRunState = { requestId, engine, model, startedAt: Date.now() };
+  try {
+    await writeMlRunState(browser.storage.local, CONFIG.storage.mlRunState, runState);
+  } catch (err) {
+    console.warn('[TrendCast] Failed to write ML run-state marker (non-fatal):', err);
+  }
+
   try {
     const markets = await getCollectedMarkets();
     const signals = await getCollectedSignals();
@@ -991,6 +1093,7 @@ async function runCorrelationAsync(
       newsSocialMatches: [],
       newsNewsMatches: [],
       engine,
+      requestId, // Phase 15: stamp the id so the UI can scope this terminal state
       error: err instanceof Error ? err.message : String(err),
     };
     await browser.storage.local.set({ [CONFIG.storage.correlations]: errorResult });
@@ -998,6 +1101,14 @@ async function runCorrelationAsync(
       type: 'CORRELATION_RESULT',
       payload: errorResult,
     }).catch(() => {});
+  } finally {
+    // Phase 15: terminal path reached (success, ML error, or cancel) —
+    // clear the persisted run-state marker.
+    try {
+      await clearMlRunState(browser.storage.local, CONFIG.storage.mlRunState);
+    } catch (err) {
+      console.warn('[TrendCast] Failed to clear ML run-state marker (non-fatal):', err);
+    }
   }
 }
 
@@ -1024,7 +1135,7 @@ async function runCorrelationWithEngine(
     try {
       // Progress callback — forwards progress to the dashboard via runtime message
       let lastProgressAt = runStart;
-      const onProgress = (info: { phase: string; current: number; total: number; engine: string; model: string }) => {
+      const onProgress = (info: { phase: string; current: number; total: number; engine: string; model: string; file?: string }) => {
         const now = performance.now();
         const sinceLast = (now - lastProgressAt) / 1000;
         const elapsed = (now - runStart) / 1000;
@@ -1043,6 +1154,7 @@ async function runCorrelationWithEngine(
             total: info.total,
             engine: info.engine,
             model: info.model,
+            ...(info.file ? { file: info.file } : {}),
           },
         }).catch(() => {
           // No listener — that's fine, progress is optional
@@ -1063,7 +1175,10 @@ async function runCorrelationWithEngine(
       const errorMsg = formatMLError(err, engine, model);
       console.error(`[TrendCast] ${engine} engine FAILED — model="${model}":`, err);
       console.error(`[TrendCast] ${engine} engine error message:`, errorMsg);
-      return { matches: [], newsMatches: [], newsSocialMatches: [], newsNewsMatches: [], engine, error: errorMsg };
+      // Phase 15: stamp the requestId so the UI can scope this terminal
+      // state — an unstamped error result would be accepted by any
+      // waiting tab's storage-poll fallback.
+      return { matches: [], newsMatches: [], newsSocialMatches: [], newsNewsMatches: [], engine, requestId, error: errorMsg };
     }
   }
 

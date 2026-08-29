@@ -33,6 +33,7 @@ import {
   NER_THRESHOLD,
 } from './types';
 import {
+  type ModelDownloadCallback,
   type Pipeline,
   getNERPipeline,
 } from './transformers';
@@ -57,14 +58,16 @@ interface NEREntity {
 class BatchEntityExtractor {
   private pipeline: Pipeline | null = null;
   private readonly model: NERModel;
+  private readonly onModelDownload?: ModelDownloadCallback;
 
-  constructor(model: NERModel) {
+  constructor(model: NERModel, onModelDownload?: ModelDownloadCallback) {
     this.model = model;
+    this.onModelDownload = onModelDownload;
   }
 
   private async getPipeline(): Promise<Pipeline> {
     if (!this.pipeline) {
-      this.pipeline = await getNERPipeline(this.model);
+      this.pipeline = await getNERPipeline(this.model, this.onModelDownload);
     }
     return this.pipeline;
   }
@@ -162,8 +165,8 @@ class NEREntityIndex {
   private readonly cache = new Map<string, Map<string, number>>();
   private readonly extractor: BatchEntityExtractor;
 
-  constructor(model: NERModel) {
-    this.extractor = new BatchEntityExtractor(model);
+  constructor(model: NERModel, onModelDownload?: ModelDownloadCallback) {
+    this.extractor = new BatchEntityExtractor(model, onModelDownload);
   }
 
   /**
@@ -294,12 +297,13 @@ export async function correlateAllNER(
   model: NERModel,
   onProgress?: ProgressCallback,
   cancelFlag?: CancelFlag,
+  onModelDownload?: ModelDownloadCallback,
 ): Promise<{
   matches: CorrelationMatch[];
   newsMatches: NewsCorrelationMatch[];
   newsSocialMatches: NewsSocialCorrelationMatch[];
 }> {
-  const index = new NEREntityIndex(model);
+  const index = new NEREntityIndex(model, onModelDownload);
 
   const matches = await correlateSignalsToContracts(index, signals, contracts, model, onProgress, cancelFlag);
   const newsMatches = await correlateNewsToContracts(index, news, contracts, model, onProgress, cancelFlag);

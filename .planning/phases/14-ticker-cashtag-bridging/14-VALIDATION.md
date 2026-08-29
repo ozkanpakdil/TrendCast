@@ -3,9 +3,9 @@ phase: 14
 slug: ticker-cashtag-bridging
 # status lifecycle: draft (seeded by plan-phase) → validated (set by validate-phase §6)
 # audit-milestone §5.5 distinguishes NOT-VALIDATED (draft) from PARTIAL (validated + nyquist_compliant: false) (#2117)
-status: draft
+status: validated
 nyquist_compliant: false
-wave_0_complete: false
+wave_0_complete: true
 created: 2026-08-27
 ---
 
@@ -40,10 +40,10 @@ created: 2026-08-27
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 14-01 Task 1 (tracer: bare cashtag emission + strip-$ bridge) | 14-01 | 1 | CORR-02 | T-14-03 | N/A | unit + fixtures | `bun run test` | ✅ | ⬜ pending |
-| 14-01 Task 2 (entity unification + bare-caps gates + boost rework) | 14-01 | 1 | CORR-01 | T-14-01, T-14-02 | No feed-derived pattern sources (ReDoS gate) | unit + equivalence + golden gates | `bun run test` | ✅ | ⬜ pending |
-| 14-02 Task 1 (stock-indicator keyword curation) | 14-02 | 2 | CORR-03 | T-14-05 | Symbol-bounded keyword emission | unit | `bun run test` | ✅ | ⬜ pending |
-| 14-02 Task 2 (computeBridgingCoverage + tooltip display) | 14-02 | 2 | CORR-04 | T-14-04, T-14-06 | Pure projection, no storage growth | unit | `bun run test` | ✅ | ⬜ pending |
+| 14-01 Task 1 (tracer: bare cashtag emission + strip-$ bridge) | 14-01 | 1 | CORR-02 | T-14-03 | N/A | unit + fixtures | `bun run test` | ✅ | ✅ green |
+| 14-01 Task 2 (entity unification + bare-caps gates + boost rework) | 14-01 | 1 | CORR-01 | T-14-01, T-14-02 | No feed-derived pattern sources (ReDoS gate) | unit + equivalence + golden gates | `bun run test` | ✅ | ✅ green |
+| 14-02 Task 1 (stock-indicator keyword curation) | 14-02 | 2 | CORR-03 | T-14-05 | Symbol-bounded keyword emission | unit | `bun run test` | ✅ | ✅ green |
+| 14-02 Task 2 (computeBridgingCoverage + tooltip display) | 14-02 | 2 | CORR-04 | T-14-04, T-14-06 | Pure projection, no storage growth | unit | `bun run test` | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -51,11 +51,17 @@ created: 2026-08-27
 
 ## Wave 0 Requirements
 
-- [ ] Extend `tests/unit/correlation-equivalence.test.ts` oracles with bridged-match fixtures ($AMZN ↔ amzn ↔ Amazon)
-- [ ] Add bare-caps ticker recognition tests (KNOWN_TICKERS match, STOP_WORDS/English-word exclusion, `V`/`ALL`/`ON` never match)
-- [ ] Add screener noise-token exclusion tests (`vcp`, `2026`, `breakout` absent from indicator keywords)
+- [x] Extend `tests/unit/correlation-equivalence.test.ts` oracles with bridged-match fixtures ($AMZN ↔ amzn ↔ Amazon)
+- [x] Add bare-caps ticker recognition tests (KNOWN_TICKERS match, STOP_WORDS/English-word exclusion, `V`/`ALL`/`ON` never match)
+- [x] Add screener noise-token exclusion tests (`vcp`, `2026`, `breakout` absent from indicator keywords)
 
 *If none: "Existing infrastructure covers all phase requirements."*
+
+---
+
+## Validation Outcome (2026-08-29, phase close-out)
+
+All per-task verification targets ran green during execution and were re-confirmed at verification: 92/92 across the 5 evidence suites (bridging, correlation-equivalence, embedding-equivalence, news-collector, source-health); full suite green; typecheck + lint clean. Wave 0 requirements were satisfied by the delivered test files listed above. `nyquist_compliant` remains `false` — no separate Nyquist sampling audit was run; verification (goal-backward, all 5 criteria PASS) stands as the phase's quality gate.
 
 ---
 

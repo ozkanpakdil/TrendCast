@@ -16,8 +16,8 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### ML Progress UX
 
-- [ ] **MLPROG-01**: User sees progress that always reaches a terminal state — progress is scoped by requestId, result acceptance no longer deadlocks on `precompute-*` vs `corr-*` mismatch, and progress clears on success, error, and cancel paths
-- [ ] **MLPROG-02**: User sees model-download progress — `progress_callback` wired into `createPipelineWithFallback`, surfaced through the existing `CORRELATION_PROGRESS` channel as a `loading-model` phase (per-file `initiate`/`download`/`progress`/`done` events)
+- [x] **MLPROG-01**: User sees progress that always reaches a terminal state — progress is scoped by requestId, result acceptance no longer deadlocks on `precompute-*` vs `corr-*` mismatch, and progress clears on success, error, and cancel paths
+- [x] **MLPROG-02**: User sees model-download progress — `progress_callback` wired into `createPipelineWithFallback`, surfaced through the existing `CORRELATION_PROGRESS` channel as a `loading-model` phase (per-file `initiate`/`download`/`progress`/`done` events)
 
 ### Analysis Triggers & Persistence
 
@@ -67,8 +67,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CORR-04 | Phase 14 | Complete |
 | CORR-05 | Deferred (v0.1.7+) | Pending |
 | CORR-06 | Deferred (v0.1.7+) | Pending |
-| MLPROG-01 | Phase 15 | Pending |
-| MLPROG-02 | Phase 15 | Pending |
+| MLPROG-01 | Phase 15 | Complete (2026-08-29) |
+| MLPROG-02 | Phase 15 | Complete (2026-08-29) |
 | TRIG-01 | Phase 16 | Pending |
 | TRIG-02 | Phase 16 | Pending |
 | TRIG-03 | Phase 16 | Pending |
