@@ -61,6 +61,8 @@ const wss = new WebSocketServer({ server });
 /** The single connected extension socket (latest wins). */
 let ext: WebSocket | null = null;
 let rpcSeq = 0;
+/** Interactive CLI — created in main(), referenced by the connection handler. */
+let rl: ReturnType<typeof createInterface>;
 /** Pending RPC calls awaiting a reply, by id. */
 const pending = new Map<string, { resolve: (v: unknown) => void; reject: (e: Error) => void; timer: NodeJS.Timeout }>();
 
@@ -184,7 +186,7 @@ async function main(): Promise<void> {
   await discoverHandlers();
   HELP = buildHelp();
 
-  const rl = createInterface({ input: process.stdin, terminal: true });
+  rl = createInterface({ input: process.stdin, terminal: true });
   rl.setPrompt(`${COLORS.ok}trendcast${COLORS.reset}> `);
   rl.prompt();
 
@@ -281,45 +283,3 @@ function parseParams(def: RpcDefinition, tokens: string[]): Record<string, unkno
   }
   return params;
 }
-
-const rl = createInterface({ input: process.stdin, terminal: true });
-rl.setPrompt(`${COLORS.ok}trendcast${COLORS.reset}> `);
-rl.prompt();
-
-rl.on('line', async (line) => {
-  const input = line.trim();
-  if (!input) {
-    rl.prompt();
-    return;
-  }
-  const [cmd, ...rest] = input.split(/\s+/);
-
-  try {
-    if (cmd === 'help') {
-      console.log(HELP);
-    } else if (cmd === 'quit' || cmd === 'exit') {
-      process.exit(0);
-    } else {
-      const def = getRpcDefinition(cmd);
-      if (!def) {
-        print('log-server', COLORS.warn, `Unknown command: ${cmd} (try "help")`);
-      } else {
-        const params = parseParams(def, rest);
-        const result = await callRpc(def.method, params);
-        print('rpc', COLORS.rpc, JSON.stringify(result, null, 2));
-      }
-    }
-  } catch (err) {
-    print('rpc', COLORS.error, err instanceof Error ? err.message : String(err));
-  }
-  rl.prompt(true);
-});
-
-rl.on('close', () => process.exit(0));
-
-server.listen(PORT, () => {
-  print('log-server', COLORS.ok, `Listening on ws://localhost:${PORT}`);
-  print('log-server', COLORS.ok, 'Waiting for the TrendCast extension to connect…');
-  console.log('');
-  rl.prompt(true);
-});
