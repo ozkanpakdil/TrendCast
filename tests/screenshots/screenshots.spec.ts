@@ -110,9 +110,10 @@ test.describe('Dashboard screenshots', () => {
     await page.screenshot({ path: `${OUT}/dashboard-correlations.png`, fullPage: true });
   });
 
-  test('dashboard — watchlist tab', async ({ page }) => {
+  test('dashboard — watchlist section', async ({ page }) => {
     await openDashboard(page);
-    await gotoTab(page, 'Watchlist');
+    await gotoTab(page, 'Markets');
+    await page.waitForTimeout(400);
     await page.screenshot({ path: `${OUT}/dashboard-watchlist.png`, fullPage: true });
   });
 
@@ -161,22 +162,23 @@ test.describe('Dashboard screenshots', () => {
     await page.screenshot({ path: `${OUT}/dashboard-alerts-cross-source.png`, fullPage: true });
   });
 
-  test('dashboard — history tab', async ({ page }) => {
+  test('dashboard — history section', async ({ page }) => {
     await openDashboard(page);
-    await gotoTab(page, 'History');
+    await gotoTab(page, 'Correlations');
     await page.waitForTimeout(600); // chart renders
     await page.screenshot({ path: `${OUT}/dashboard-history.png`, fullPage: true });
   });
 
-  test('dashboard — community tab', async ({ page }) => {
+  test('dashboard — community section', async ({ page }) => {
     await openDashboard(page);
-    await gotoTab(page, 'Community');
+    await gotoTab(page, 'Help');
+    await page.waitForTimeout(400);
     await page.screenshot({ path: `${OUT}/dashboard-community.png`, fullPage: true });
   });
 
-  test('dashboard — FAQ tab', async ({ page }) => {
+  test('dashboard — FAQ section', async ({ page }) => {
     await openDashboard(page);
-    await gotoTab(page, 'FAQ');
+    await gotoTab(page, 'Help');
     await page.waitForTimeout(400);
     await page.screenshot({ path: `${OUT}/dashboard-faq.png`, fullPage: true });
   });
@@ -312,10 +314,8 @@ test.describe('Screen-cast', () => {
       'Markets',
       'News',
       'Correlations',
-      'Watchlist',
-      'History',
-      'Community',
-      'FAQ',
+      'Alerts',
+      'Help',
       'Settings',
     ];
     for (const label of tabs) {
