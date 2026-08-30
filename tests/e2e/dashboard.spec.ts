@@ -466,8 +466,10 @@ test.describe('Dashboard — News Tab', () => {
     await page.waitForTimeout(300);
     const tile = page.locator('main a.card-hover', { hasText: 'Recent Tech Layoffs Stock Report' });
     await expect(tile).toContainText('Stock Indicator');
-    await expect(tile).toHaveCSS('background-color', 'rgb(20, 184, 166)');
-    await expect(tile).toHaveCSS('color', 'rgb(255, 255, 255)');
+    // v0.1.7 design: neutral card with a per-source accent left border + colored label
+    await expect(tile).toHaveCSS('border-left-color', 'rgb(20, 184, 166)');
+    const label = tile.locator('span').first();
+    await expect(label).toHaveCSS('color', 'rgb(20, 184, 166)');
   });
 
   test('renders Breakout and VCP labels with orange/fuchsia tiles', async ({ page }) => {
@@ -498,12 +500,15 @@ test.describe('Dashboard — News Tab', () => {
     await page.waitForTimeout(300);
     const breakoutTile = page.locator('main a.card-hover', { hasText: 'Breakout Scanner: NVDA above pivot' });
     await expect(breakoutTile).toContainText('Breakout');
-    await expect(breakoutTile).toHaveCSS('background-color', 'rgb(249, 115, 22)');
-    await expect(breakoutTile).toHaveCSS('color', 'rgb(15, 23, 42)');
+    // v0.1.7 design: accent left border + colored source label (not full-tile background)
+    await expect(breakoutTile).toHaveCSS('border-left-color', 'rgb(249, 115, 22)');
+    const breakoutLabel = breakoutTile.locator('span').first();
+    await expect(breakoutLabel).toHaveCSS('color', 'rgb(249, 115, 22)');
     const vcpTile = page.locator('main a.card-hover', { hasText: 'VCP Setup Watchlist Update' });
     await expect(vcpTile).toContainText('VCP');
-    await expect(vcpTile).toHaveCSS('background-color', 'rgb(217, 70, 239)');
-    await expect(vcpTile).toHaveCSS('color', 'rgb(255, 255, 255)');
+    await expect(vcpTile).toHaveCSS('border-left-color', 'rgb(217, 70, 239)');
+    const vcpLabel = vcpTile.locator('span').first();
+    await expect(vcpLabel).toHaveCSS('color', 'rgb(217, 70, 239)');
   });
 });
 
@@ -527,14 +532,14 @@ test.describe('Dashboard — Correlations Tab', () => {
     await expect(engineSelect).toHaveValue('heuristic');
   });
 
-  test('engine dropdown has all 6 engine options', async ({ page }) => {
+  test('engine dropdown has all 5 engine options', async ({ page }) => {
     await openDashboard(page);
     await page.locator('nav button', { hasText: 'Correlations' }).click();
     await page.waitForTimeout(500);
     // Target the engine selector by its title attribute
     const engineSelect = page.locator('main select[title="Correlation engine"]');
     const options = engineSelect.locator('option');
-    await expect(options).toHaveCount(6);
+    await expect(options).toHaveCount(5);
   });
 
   test('shows Re-analyze button', async ({ page }) => {
@@ -915,8 +920,11 @@ test.describe('Dashboard — Watchlist (Markets tab)', () => {
   test('shows remove button for watchlist items', async ({ page }) => {
     await openDashboard(page);
     await page.locator('nav button', { hasText: 'Markets' }).click();
-    // Wait for watchlist entry to load, then check remove button
-    const removeBtn = page.locator('main button[aria-label="Remove from watchlist"]');
+    // Wait for watchlist entry to load, then check remove button.
+    // Scope to the watchlist section: MarketOdds star toggles share the same
+    // aria-label, so an unscoped locator is a strict-mode violation.
+    const watchlistSection = page.locator('main').locator('div', { has: page.getByRole('heading', { name: /Your Watchlist/i }) }).last();
+    const removeBtn = watchlistSection.locator('button[aria-label="Remove from watchlist"]');
     await expect(removeBtn).toBeVisible({ timeout: 10_000 });
   });
 });
@@ -1089,7 +1097,7 @@ test.describe('Dashboard — Settings Tab', () => {
     await page.locator('nav button', { hasText: 'Settings' }).click();
     await page.waitForTimeout(300);
     const radios = page.locator('main input[type="radio"][name="correlationEngine"]');
-    await expect(radios).toHaveCount(6);
+    await expect(radios).toHaveCount(5);
   });
 
   test('heuristic engine is selected by default', async ({ page }) => {
@@ -1098,7 +1106,7 @@ test.describe('Dashboard — Settings Tab', () => {
     await page.waitForTimeout(300);
     // Radio buttons use name="correlationEngine"; checked state is on the heuristic one
     const radios = page.locator('main input[type="radio"][name="correlationEngine"]');
-    await expect(radios).toHaveCount(6);
+    await expect(radios).toHaveCount(5);
     // The first radio is heuristic (first in the list)
     await expect(radios.first()).toBeChecked();
   });
