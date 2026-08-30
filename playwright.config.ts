@@ -36,6 +36,13 @@ export default defineConfig({
     trace: 'on-first-retry',
     headless: true,
   },
+  // monocart-reporter adds the system sampler (CPU/memory timeline) consumed
+  // by the playwright-resource-monitor GitHub Action; the HTML reporter
+  // stays for the usual test results.
+  reporter: [
+    ['monocart-reporter', { outputFile: './monocart-report/index.html', json: true }],
+    ['html', { outputFolder: 'playwright-report', open: 'never' }],
+  ],
   projects: [
     {
       name: 'chromium',
