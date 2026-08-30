@@ -581,6 +581,8 @@ export interface ExtensionSettings {
   };
   /** Minimum virality score to highlight a signal (0–100). */
   highlightThreshold: number;
+  /** Feed card density for Hype Feed and News tabs. */
+  feedDensity: 'comfortable' | 'compact';
   /** Whether to override the new tab page with the TrendCast dashboard. */
   overrideNewTab: boolean;
   /** UI theme mode. */
@@ -633,6 +635,7 @@ export const DEFAULT_SETTINGS: ExtensionSettings = {
     stockScreener2: true,
   },
   highlightThreshold: 60,
+  feedDensity: 'comfortable',
   overrideNewTab: true,
   theme: 'dark',
   maxHistoryEntries: 168, // 7 days of hourly snapshots

@@ -109,6 +109,7 @@ function settings(partial: Partial<ExtensionSettings> = {}): ExtensionSettings {
       usaStocksIndicator: true, stockScreener: true, stockScreener2: true,
     },
     highlightThreshold: 60,
+    feedDensity: 'comfortable',
     overrideNewTab: true,
     theme: 'dark',
     maxHistoryEntries: 168,

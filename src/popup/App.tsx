@@ -197,14 +197,6 @@ export function App() {
           <FAQContent compact isDark />
         )}
 
-        {activeTab === 'faq' && (
-          <FAQContent compact isDark />
-        )}
-
-        {activeTab === 'faq' && (
-          <FAQContent compact isDark />
-        )}
-
         {activeTab === 'settings' && (
           <Settings settings={settings} onUpdate={updateSettings} />
         )}

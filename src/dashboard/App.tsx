@@ -32,7 +32,6 @@ import { CorrelationStatsBar } from './components/CorrelationStatsBar';
 import { SourceHealthIndicator } from './components/SourceHealthIndicator';
 import { SocialSourceFilter } from './components/SocialSourceFilter';
 import { CorrelationRunHistory } from './components/CorrelationRunHistory';
-import { HistoryChart } from './components/HistoryChart';
 import { Watchlist } from './components/Watchlist';
 import { AlertsTab } from './components/AlertsTab';
 import { MarketDrivenNews } from './components/MarketDrivenNews';
@@ -52,11 +51,7 @@ import { deepMergeSettings } from '@/utils/settings';
 import { hasFreshAnalysis } from '@/utils/correlation-persistence';
 import { computeBridgingCoverage, computeCorrelatedCounts } from '@/utils/source-health';
 
-// Build-time version stamp injected by Vite's define.
-// Format: "0.1.0+2026-08-14T13:21:00Z" — version + build timestamp.
-const BUILD_VERSION = import.meta.env.BUILD_VERSION ?? 'dev';
-
-type Tab = 'feed' | 'markets' | 'news' | 'correlations' | 'watchlist' | 'alerts' | 'market-news' | 'history' | 'community' | 'faq' | 'settings';
+type Tab = 'feed' | 'markets' | 'news' | 'correlations' | 'alerts' | 'help' | 'settings';
 
 /** Format relative time (e.g., "2h ago", "3d ago"). Copied from CorrelationPanel. */
 function timeAgo(epochMs: number): string {
@@ -154,6 +149,8 @@ export function App() {
   const { alerts, loading: alertsLoading, error: alertsError, clearAlerts } = useAlerts();
   const { view: marketNewsView, loading: marketNewsLoading } = useMarketNews();
   const [activeTab, setActiveTab] = useState<Tab>('feed');
+  /** News tab sub-view: raw feed or market-driven digest. */
+  const [newsView, setNewsView] = useState<'all' | 'market'>('all');
   const [settings, setSettings] = useState<ExtensionSettings>(DEFAULT_SETTINGS);
   const [theme, setTheme] = useState<ThemeMode>('dark');
   const [exporting, setExporting] = useState(false);
@@ -275,7 +272,7 @@ export function App() {
   }, []);
 
   const lastCollectionText = lastCollectionAt
-    ? new Date(lastCollectionAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    ? timeAgo(lastCollectionAt)
     : 'Never';
 
   const stats = snapshot
@@ -316,9 +313,12 @@ export function App() {
           </div>
           <div className="flex items-center gap-3">
             <div className={`text-xs ${isDark ? 'text-slate-500' : 'text-light-muted'}`}>
-              <span className="opacity-60">v{BUILD_VERSION}</span>
-              {' · '}
-              Last: <span className={isDark ? 'text-slate-300' : 'text-light-text'}>{lastCollectionText}</span>
+              <span
+                title={lastCollectionAt ? new Date(lastCollectionAt).toLocaleString() : 'No collection yet'}
+              >
+                Last collected{' '}
+                <span className={isDark ? 'text-slate-300' : 'text-light-text'}>{lastCollectionText}</span>
+              </span>
             </div>
 
             {/* Export dropdown */}
@@ -367,30 +367,45 @@ export function App() {
           </div>
         </div>
 
-        {/* Tab navigation */}
-        <nav className="max-w-7xl mx-auto px-6 flex gap-1 overflow-x-auto">
+        {/* Tab navigation — grouped into sections for scannability */}
+        <nav className="max-w-7xl mx-auto px-6 flex items-end gap-4 overflow-x-auto">
           {([
-            ['feed', '🔥 Hype Feed'],
-            ['markets', '📈 Markets'],
-            ['news', '📰 News'],
-            ['correlations', '🔗 Correlations'],
-            ['watchlist', '⭐ Watchlist'],
-            ['alerts', '🔔 Alerts'],
-            ['market-news', '📰 Market News'],
-            ['history', '📊 History'],
-            ['community', '💬 Community'],
-            ['faq', '❓ FAQ'],
-            ['settings', '⚙️ Settings'],
-          ] as [Tab, string][]).map(([tab, label]) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-                activeTab === tab ? tabActive : tabInactive
-              }`}
-            >
-              {label}
-            </button>
+            ['Data', [
+              ['feed', '🔥 Hype Feed'],
+              ['markets', '📈 Markets'],
+              ['news', '📰 News'],
+            ]],
+            ['Insights', [
+              ['correlations', '🔗 Correlations'],
+              ['alerts', '🔔 Alerts'],
+            ]],
+            ['More', [
+              ['help', '❓ Help'],
+              ['settings', '⚙️ Settings'],
+            ]],
+          ] as [string, [Tab, string][]][]).map(([section, tabs]) => (
+            <div key={section} className="flex flex-col">
+              <span
+                className={`text-[9px] font-bold uppercase tracking-wider px-1 pt-1 ${
+                  isDark ? 'text-slate-600' : 'text-light-muted opacity-60'
+                }`}
+              >
+                {section}
+              </span>
+              <div className="flex gap-1">
+                {tabs.map(([tab, label]) => (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveTab(tab)}
+                    className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                      activeTab === tab ? tabActive : tabInactive
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
           ))}
         </nav>
       </header>
@@ -428,6 +443,34 @@ export function App() {
                   </aside>
                   {/* Filtered hype feed */}
                   <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-3">
+                      <h2 className={`text-sm font-bold uppercase tracking-wider ${sectionTitle}`}>
+                        🔥 Hype Feed
+                      </h2>
+                      <div
+                        className={`flex rounded overflow-hidden border text-[10px] ${
+                          isDark ? 'border-slate-700' : 'border-light-border'
+                        }`}
+                        role="group"
+                        aria-label="Feed density"
+                      >
+                        {(['comfortable', 'compact'] as const).map((d) => (
+                          <button
+                            key={d}
+                            onClick={() => updateSettings({ feedDensity: d })}
+                            className={`px-2 py-1 capitalize transition-colors ${
+                              settings.feedDensity === d
+                                ? 'bg-brand-500 text-white'
+                                : isDark
+                                  ? 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                                  : 'bg-slate-200 text-slate-600 hover:text-slate-800'
+                            }`}
+                          >
+                            {d}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                     <HypeFeed
                       signals={
                         socialFilter.length > 0
@@ -435,6 +478,7 @@ export function App() {
                           : (snapshot?.signals ?? [])
                       }
                       highlightThreshold={settings.highlightThreshold}
+                      compact={settings.feedDensity === 'compact'}
                     />
                   </div>
                 </div>
@@ -442,16 +486,76 @@ export function App() {
             )}
 
             {activeTab === 'markets' && (
-              <section>
+              <section className="space-y-6">
                 <MarketOdds markets={snapshot?.markets ?? []} />
+
+                {/* Watchlist — starred markets live here, not in a separate tab */}
+                <div>
+                  <h2 className={`text-sm font-bold uppercase tracking-wider mb-3 ${sectionTitle}`}>
+                    ⭐ Your Watchlist
+                  </h2>
+                  <Watchlist markets={snapshot?.markets ?? []} correlations={correlations} />
+                </div>
               </section>
             )}
 
             {activeTab === 'news' && (
               <section>
-                <h2 className={`text-sm font-bold uppercase tracking-wider mb-3 ${sectionTitle}`}>
-                  📰 Latest News
-                </h2>
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className={`text-sm font-bold uppercase tracking-wider ${sectionTitle}`}>
+                    📰 Latest News
+                  </h2>
+                  <div className="flex items-center gap-2">
+                    {/* News view: raw feed vs market-driven digest */}
+                    <div
+                      className={`flex rounded overflow-hidden border text-[10px] ${
+                        isDark ? 'border-slate-700' : 'border-light-border'
+                      }`}
+                      role="group"
+                      aria-label="News view"
+                    >
+                      {(['all', 'market'] as const).map((v) => (
+                        <button
+                          key={v}
+                          onClick={() => setNewsView(v)}
+                          className={`px-2 py-1 transition-colors ${
+                            newsView === v
+                              ? 'bg-brand-500 text-white'
+                              : isDark
+                                ? 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                                : 'bg-slate-200 text-slate-600 hover:text-slate-800'
+                          }`}
+                        >
+                          {v === 'all' ? 'All news' : '🎯 Market-driven'}
+                        </button>
+                      ))}
+                    </div>
+                    {/* Density toggle */}
+                    <div
+                      className={`flex rounded overflow-hidden border text-[10px] ${
+                        isDark ? 'border-slate-700' : 'border-light-border'
+                      }`}
+                      role="group"
+                      aria-label="Feed density"
+                    >
+                      {(['comfortable', 'compact'] as const).map((d) => (
+                        <button
+                          key={d}
+                          onClick={() => updateSettings({ feedDensity: d })}
+                          className={`px-2 py-1 capitalize transition-colors ${
+                            settings.feedDensity === d
+                              ? 'bg-brand-500 text-white'
+                              : isDark
+                                ? 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                                : 'bg-slate-200 text-slate-600 hover:text-slate-800'
+                          }`}
+                        >
+                          {d}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
                 <div className="flex gap-4">
                   {/* Source filter sidebar */}
                   <aside className="w-44 shrink-0">
@@ -473,15 +577,24 @@ export function App() {
                       error={snapshotError}
                     />
                   </aside>
-                  {/* Filtered news feed */}
+                  {/* Filtered news feed — or the market-driven digest */}
                   <div className="flex-1 min-w-0">
-                    <NewsFeed
-                      news={
-                        newsFilter.length > 0
-                          ? (snapshot?.news ?? []).filter((n) => newsFilter.includes(n.source))
-                          : (snapshot?.news ?? [])
-                      }
-                    />
+                    {newsView === 'market' ? (
+                      <MarketDrivenNews
+                        view={marketNewsView}
+                        loading={marketNewsLoading}
+                        isDark={isDark}
+                      />
+                    ) : (
+                      <NewsFeed
+                        news={
+                          newsFilter.length > 0
+                            ? (snapshot?.news ?? []).filter((n) => newsFilter.includes(n.source))
+                            : (snapshot?.news ?? [])
+                        }
+                        compact={settings.feedDensity === 'compact'}
+                      />
+                    )}
                   </div>
                 </div>
               </section>
@@ -811,15 +924,21 @@ export function App() {
                     />
                   </div>
                 </div>
-              </section>
-            )}
 
-            {activeTab === 'watchlist' && (
-              <section>
-                <h2 className={`text-sm font-bold uppercase tracking-wider mb-3 ${sectionTitle}`}>
-                  ⭐ Your Watchlist
-                </h2>
-                <Watchlist markets={snapshot?.markets ?? []} correlations={correlations} />
+                {/* Run history — past correlation runs for model comparison */}
+                <div className="mt-6">
+                  <h2 className={`text-sm font-bold uppercase tracking-wider mb-3 ${sectionTitle}`}>
+                    📊 Run History
+                  </h2>
+                  <CorrelationRunHistory
+                    history={runHistory}
+                    isDark={isDark}
+                    onClear={() => {
+                      // Force re-read from storage by updating state
+                      // The hook already manages this state
+                    }}
+                  />
+                </div>
               </section>
             )}
 
@@ -838,109 +957,72 @@ export function App() {
               </section>
             )}
 
-            {activeTab === 'market-news' && (
-              <section>
-                <h2 className={`text-sm font-bold uppercase tracking-wider mb-3 ${sectionTitle}`}>
-                  📰 Market News
-                </h2>
-                <MarketDrivenNews
-                  view={marketNewsView}
-                  loading={marketNewsLoading}
-                  isDark={isDark}
-                />
-              </section>
-            )}
-
-            {activeTab === 'history' && (
-              <section className="space-y-6">
-                <div>
-                  <h2 className={`text-sm font-bold uppercase tracking-wider mb-3 ${sectionTitle}`}>
-                    📊 Historical Trends
-                  </h2>
-                  <HistoryChart />
-                </div>
-
-                <div>
-                  <CorrelationRunHistory
-                    history={runHistory}
-                    isDark={isDark}
-                    onClear={() => {
-                      // Force re-read from storage by updating state
-                      // The hook already manages this state
-                    }}
-                  />
-                </div>
-              </section>
-            )}
-
-            {activeTab === 'community' && (
-              <section className="max-w-2xl mx-auto py-8 space-y-6">
-                <div className="text-center space-y-2">
-                  <h2 className={`text-2xl font-bold ${isDark ? 'text-slate-100' : 'text-light-text'}`}>
-                    💬 Join the TrendCast Community
-                  </h2>
-                  <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-light-muted'}`}>
-                    Connect with other users, share insights, report bugs, and stay updated on new features.
-                  </p>
-                </div>
-
-                {/* Telegram card */}
-                <div className={`rounded-xl border p-6 space-y-3 ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-light-surface border-light-border'}`}>
-                  <div className="flex items-center gap-3">
-                    <span className="text-3xl">💬</span>
-                    <div>
-                      <h3 className={`text-lg font-bold ${isDark ? 'text-slate-100' : 'text-light-text'}`}>Telegram Group</h3>
-                      <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-light-muted'}`}>General chat · Announcements · Quick questions</p>
-                    </div>
-                  </div>
-                  <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-light-muted'}`}>
-                    Join our public Telegram group to discuss prediction markets, social sentiment trends,
-                    and feature requests with other TrendCast users.
-                  </p>
-                  <a
-                    href={CONFIG.community.telegram}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-block px-5 py-2.5 rounded-lg bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium transition-colors"
-                  >
-                    💬 Join on Telegram →
-                  </a>
-                </div>
-
-                {/* GitHub Issues card */}
-                <div className={`rounded-xl border p-6 space-y-3 ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-light-surface border-light-border'}`}>
-                  <div className="flex items-center gap-3">
-                    <span className="text-3xl">🐛</span>
-                    <div>
-                      <h3 className={`text-lg font-bold ${isDark ? 'text-slate-100' : 'text-light-text'}`}>GitHub Issues</h3>
-                      <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-light-muted'}`}>Bug reports · Feature requests</p>
-                    </div>
-                  </div>
-                  <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-light-muted'}`}>
-                    Found a bug or have a feature idea? Open an issue on GitHub. This is the best way
-                    to track and resolve problems.
-                  </p>
-                  <a
-                    href={CONFIG.community.githubIssues}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={`inline-block px-5 py-2.5 rounded-lg text-sm font-medium transition-colors ${btnSecondary}`}
-                  >
-                    🐛 Report on GitHub →
-                  </a>
-                </div>
-
-                {/* Privacy note */}
-                <div className={`rounded-lg p-4 text-xs text-center ${isDark ? 'bg-slate-900/50 text-slate-500' : 'bg-light-surface/50 text-light-muted'}`}>
-                  🔒 TrendCast is 100% client-side. These links open external sites in a new tab.
-                  No data is ever sent to Telegram, GitHub, or any server.
-                </div>
-              </section>
-            )}
-
-            {activeTab === 'faq' && (
-              <section>
+            {activeTab === 'help' && (
+              <section className="space-y-10">
                 <FAQContent isDark={isDark} />
+
+                <div className="max-w-2xl mx-auto space-y-6">
+                  <div className="text-center space-y-2">
+                    <h2 className={`text-2xl font-bold ${isDark ? 'text-slate-100' : 'text-light-text'}`}>
+                      💬 Join the TrendCast Community
+                    </h2>
+                    <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-light-muted'}`}>
+                      Connect with other users, share insights, report bugs, and stay updated on new features.
+                    </p>
+                  </div>
+
+                  {/* Telegram card */}
+                  <div className={`rounded-xl border p-6 space-y-3 ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-light-surface border-light-border'}`}>
+                    <div className="flex items-center gap-3">
+                      <span className="text-3xl">💬</span>
+                      <div>
+                        <h3 className={`text-lg font-bold ${isDark ? 'text-slate-100' : 'text-light-text'}`}>Telegram Group</h3>
+                        <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-light-muted'}`}>General chat · Announcements · Quick questions</p>
+                      </div>
+                    </div>
+                    <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-light-muted'}`}>
+                      Join our public Telegram group to discuss prediction markets, social sentiment trends,
+                      and feature requests with other TrendCast users.
+                    </p>
+                    <a
+                      href={CONFIG.community.telegram}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-block px-5 py-2.5 rounded-lg bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium transition-colors"
+                    >
+                      💬 Join on Telegram →
+                    </a>
+                  </div>
+
+                  {/* GitHub Issues card */}
+                  <div className={`rounded-xl border p-6 space-y-3 ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-light-surface border-light-border'}`}>
+                    <div className="flex items-center gap-3">
+                      <span className="text-3xl">🐛</span>
+                      <div>
+                        <h3 className={`text-lg font-bold ${isDark ? 'text-slate-100' : 'text-light-text'}`}>GitHub Issues</h3>
+                        <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-light-muted'}`}>Bug reports · Feature requests</p>
+                      </div>
+                    </div>
+                    <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-light-muted'}`}>
+                      Found a bug or have a feature idea? Open an issue on GitHub. This is the best way
+                      to track and resolve problems.
+                    </p>
+                    <a
+                      href={CONFIG.community.githubIssues}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={`inline-block px-5 py-2.5 rounded-lg text-sm font-medium transition-colors ${btnSecondary}`}
+                    >
+                      🐛 Report on GitHub →
+                    </a>
+                  </div>
+
+                  {/* Privacy note */}
+                  <div className={`rounded-lg p-4 text-xs text-center ${isDark ? 'bg-slate-900/50 text-slate-500' : 'bg-light-surface/50 text-light-muted'}`}>
+                    🔒 TrendCast is 100% client-side. These links open external sites in a new tab.
+                    No data is ever sent to Telegram, GitHub, or any server.
+                  </div>
+                </div>
               </section>
             )}
 

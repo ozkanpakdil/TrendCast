@@ -292,7 +292,15 @@ export function MarketOddsImpl({ markets }: MarketOddsProps) {
                       </span>
                     )}
                     {showStar && (
-                      <span className="shrink-0" onClick={(e) => e.stopPropagation()}>
+                      <span
+                        className="shrink-0"
+                        onClick={(e) => {
+                          // The tile is an <a> — without preventDefault the
+                          // browser follows the market URL instead of starring.
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }}
+                      >
                         <StarToggle
                           market={market}
                           isWatched={isWatched(market)}
@@ -382,7 +390,15 @@ export function MarketOddsImpl({ markets }: MarketOddsProps) {
                   <span className="text-[9px] font-bold uppercase opacity-80">
                     {icon} {market.platform}
                   </span>
-                  <span className="shrink-0" onClick={(e) => e.stopPropagation()}>
+                  <span
+                    className="shrink-0"
+                    onClick={(e) => {
+                      // The tile is an <a> — without preventDefault the
+                      // browser follows the market URL instead of starring.
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                  >
                     <StarToggle
                       market={market}
                       isWatched={isWatched(market)}

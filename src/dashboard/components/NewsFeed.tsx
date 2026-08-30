@@ -1,15 +1,19 @@
 /**
- * NewsFeed — grid view of news headlines, styled like the HypeFeed.
+ * NewsFeed — grid view of news headlines.
  *
- * Tile color reflects the source (each outlet gets a distinct accent).
+ * Cards use a neutral surface with a per-source accent (left border + label
+ * color) so the grid reads as information, not a wall of saturated tiles.
+ * Sentiment (when available) shows as a colored dot next to the source.
  */
 
 import { useMemo, memo } from 'react';
 import type { NewsItem } from '@/types';
+import { sentimentScore } from '@/utils/sentiment';
 import { VirtualizedGrid } from './VirtualizedGrid';
 
 interface NewsFeedProps {
   news: NewsItem[];
+  compact?: boolean;
 }
 
 const sourceLabels: Record<string, string> = {
@@ -25,30 +29,29 @@ const sourceLabels: Record<string, string> = {
 };
 
 /**
- * Map a source to a background color (dark, saturated tile).
- * Each source gets a distinct accent so tiles are visually scannable.
+ * Map a source to an accent color (used for the left border + source label).
+ * Each source gets a distinct hue so cards are visually scannable without
+ * saturating the whole tile.
  */
-function sourceColor(source: string): string {
-  const palette: Record<string, [number, number, number]> = {
-    bbc: [220, 38, 38],          // red
-    cnn: [190, 24, 93],          // pink/rose
-    yahoo: [124, 58, 237],       // violet
-    googleFinance: [16, 185, 129], // emerald
-    seekingalpha: [245, 158, 11],  // amber
-    investing: [14, 165, 233],     // sky
-    usaStocksIndicator: [20, 184, 166], // teal
-    stockScreener: [249, 115, 22],  // orange
-    stockScreener2: [217, 70, 239], // fuchsia
+function sourceAccent(source: string): string {
+  const palette: Record<string, string> = {
+    bbc: '#ef4444',            // red
+    cnn: '#ec4899',            // pink
+    yahoo: '#8b5cf6',          // violet
+    googleFinance: '#10b981',  // emerald
+    seekingalpha: '#f59e0b',   // amber
+    investing: '#0ea5e9',      // sky
+    usaStocksIndicator: '#14b8a6', // teal
+    stockScreener: '#f97316',  // orange
+    stockScreener2: '#d946ef', // fuchsia
   };
-  const [r, g, b] = palette[source] ?? [51, 65, 85]; // slate fallback
-  return `rgb(${r},${g},${b})`;
+  return palette[source] ?? '#64748b'; // slate fallback
 }
 
-/** Pick readable text color for a tile. */
-function textColor(source: string): string {
-  return source === 'seekingalpha' || source === 'investing' || source === 'stockScreener'
-    ? '#0f172a'
-    : '#ffffff';
+/** Sentiment dot color: green (bullish), red (bearish), slate (neutral). */
+function sentimentDot(sentiment: number): string {
+  if (Math.abs(sentiment) < 0.15) return '#64748b';
+  return sentiment > 0 ? '#22c55e' : '#ef4444';
 }
 
 /** Format publish time into a compact string. */
@@ -59,7 +62,7 @@ function formatTime(iso: string): string {
   });
 }
 
-function NewsFeedImpl({ news }: NewsFeedProps) {
+function NewsFeedImpl({ news, compact = false }: NewsFeedProps) {
   const sorted = useMemo(
     () =>
       [...news].sort(
@@ -79,8 +82,11 @@ function NewsFeedImpl({ news }: NewsFeedProps) {
   return (
     <VirtualizedGrid
       items={sorted.map((item) => {
-        const bg = sourceColor(item.source);
-        const fg = textColor(item.source);
+        const accent = sourceAccent(item.source);
+        const sentiment = sentimentScore(item.headline);
+        const dot = sentimentDot(sentiment);
+        const shownKeywords = item.keywords.slice(0, 3);
+        const extraKeywords = item.keywords.length - shownKeywords.length;
 
         return (
           <a
@@ -88,45 +94,61 @@ function NewsFeedImpl({ news }: NewsFeedProps) {
             href={item.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="card-hover rounded-lg border hover:border-slate-600 cursor-pointer block p-2.5 border-slate-800"
-            style={{ backgroundColor: bg, color: fg, minHeight: '100px' }}
+            className="card-hover rounded-lg border border-slate-800 hover:border-slate-600 cursor-pointer block bg-slate-900 text-slate-100"
+            style={{
+              borderLeft: `3px solid ${accent}`,
+              padding: compact ? '8px 10px' : '10px 12px',
+              minHeight: compact ? '76px' : '100px',
+            }}
           >
-            <div className="flex items-start justify-between gap-1 mb-1">
-              <span className="text-[9px] font-bold uppercase opacity-80">
+            <div className="flex items-center justify-between gap-1 mb-1">
+              <span
+                className="text-[9px] font-bold uppercase tracking-wide"
+                style={{ color: accent }}
+              >
                 {sourceLabels[item.source] ?? item.source}
               </span>
-              <span className="opacity-70 text-[9px]">{formatTime(item.publishedAt)}</span>
+              <span className="flex items-center gap-1.5">
+                <span
+                  className="inline-block w-1.5 h-1.5 rounded-full"
+                  style={{ backgroundColor: dot }}
+                  title={`Sentiment ${sentiment.toFixed(2)}`}
+                />
+                <span className="text-slate-500 text-[9px] tabular-nums">
+                  {formatTime(item.publishedAt)}
+                </span>
+              </span>
             </div>
             <p
-              className="font-semibold leading-tight mb-1"
+              className="font-semibold text-slate-100 leading-tight mb-1"
               style={{
-                fontSize: '11px',
-                lineHeight: '1.2',
+                fontSize: compact ? '10.5px' : '11px',
+                lineHeight: '1.25',
                 display: '-webkit-box',
-                WebkitLineClamp: 2,
+                WebkitLineClamp: compact ? 2 : 3,
                 WebkitBoxOrient: 'vertical',
                 overflow: 'hidden',
               }}
             >
               {item.headline}
             </p>
-            <div className="flex flex-col gap-1">
-              {item.keywords.length > 0 && (
-                <div className="flex flex-wrap gap-1">
-                  {item.keywords.slice(0, 4).map((kw) => (
-                    <span
-                      key={kw}
-                      className="text-[11px] font-medium px-1.5 py-0.5 rounded bg-black/20 opacity-80"
-                    >
-                      #{kw}
-                    </span>
-                  ))}
-                </div>
-              )}
-              {item.summary && (
-                <span className="opacity-70 text-[9px] line-clamp-1">{item.summary}</span>
-              )}
-            </div>
+            {shownKeywords.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {shownKeywords.map((kw) => (
+                  <span
+                    key={kw}
+                    className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-800 text-slate-400"
+                  >
+                    #{kw}
+                  </span>
+                ))}
+                {extraKeywords > 0 && (
+                  <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-800/60 text-slate-500">
+                    +{extraKeywords}
+                  </span>
+                )}
+              </div>
+            )}
           </a>
         );
       })}

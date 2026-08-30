@@ -1,5 +1,23 @@
 # Milestones
 
+## v0.1.7 Dashboard UX Polish (Shipped: 2026-08-30)
+
+**Phases completed:** 2 phases, 2 plans (executed inline), 9 requirements
+
+**Key accomplishments:**
+
+- News tab de-orange-walled: neutral card surfaces with per-source accent borders + colored source labels, article publish times (not batch times), keyword chips capped at 3 with `+N` overflow (UX-01/02).
+- Hype Feed cards informative: heat-colored virality badge + score bar, engagement metrics on X/TikTok cards matching Reddit's information density (UX-03).
+- Header cleanup: build version removed from header (visible in Settings), last collection shown as relative time with absolute on hover (UX-04).
+- Navigation consolidated 11 → 7 tabs (user-directed extension of Phase 18): watchlist → Markets tab bottom section, market-news → News tab segmented view, run history → Correlations tab, community+FAQ → single Help tab; nav grouped into Data / Insights / More (UX-05).
+- Sentiment dots on news cards + compact/comfortable density toggle persisted via `feedDensity` setting with deep-merge backfill (UX-06/07).
+- Star-click bug fixed: star inside an `<a href>` market tile now `preventDefault()`s — clicking ⭐ adds to watchlist instead of opening the market page (UX-08).
+- e2e suite rewritten for the real 7-tab layout, removing stale 9-tab and version-in-header assertions (UX-09).
+
+**Known verification overrides:** 1 newly acknowledged (Phase 16 UAT scenario count, archived v0.1.6), 5 carried forward (see STATE.md Deferred Items).
+
+---
+
 ## v0.1.6 v0.1.6 (Shipped: 2026-08-30)
 
 **Phases completed:** 3 phases, 6 plans, 10 tasks

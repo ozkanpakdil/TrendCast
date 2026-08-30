@@ -1,19 +1,17 @@
 /**
  * E2E tests for the TrendCast Dashboard (new tab page).
  *
- * Tests all 9 tabs:
+ * Tests all 7 tabs:
  *   1. Feed (Hype Feed)
- *   2. Markets (Market Odds)
- *   3. News (News Feed)
- *   4. Correlations (Correlation Panel)
- *   5. Watchlist
- *   6. History (History Chart)
- *   7. Community
- *   8. FAQ
- *   9. Settings
+ *   2. Markets (Market Odds + Watchlist)
+ *   3. News (News Feed + Market-driven digest)
+ *   4. Correlations (Correlation Panel + Run History)
+ *   5. Alerts
+ *   6. Help (FAQ + Community)
+ *   7. Settings
  *
  * Also tests:
- *   - Header (logo, stats, version, last collection time)
+ *   - Header (logo, stats, last collection time)
  *   - Theme toggle (dark/light)
  *   - Export dropdown (CSV/JSON)
  *   - Collect Now button
@@ -49,29 +47,21 @@ test.describe('Dashboard — Header', () => {
     await expect(page.locator('header')).toContainText('2 news');
   });
 
-  test('displays build version', async ({ page }) => {
+  test('displays relative last collection time', async ({ page }) => {
     await openDashboard(page);
-    // Version stamp format: "v0.1.0+..." or "vdev"
-    await expect(page.locator('header')).toContainText(/v\S+/);
+    // "Last collected" label followed by a relative time string
+    await expect(page.locator('header')).toContainText(/Last collected\s/);
   });
 
-  test('shows last collection time', async ({ page }) => {
-    await openDashboard(page);
-    // "Last:" label followed by a time string
-    await expect(page.locator('header')).toContainText(/Last:\s/);
-  });
-
-  test('renders all 9 tab buttons', async ({ page }) => {
+  test('renders all 7 tab buttons', async ({ page }) => {
     await openDashboard(page);
     const tabLabels = [
       '🔥 Hype Feed',
       '📈 Markets',
       '📰 News',
       '🔗 Correlations',
-      '⭐ Watchlist',
-      '📊 History',
-      '💬 Community',
-      '❓ FAQ',
+      '🔔 Alerts',
+      '❓ Help',
       '⚙️ Settings',
     ];
     for (const label of tabLabels) {
@@ -127,28 +117,16 @@ test.describe('Dashboard — Tab Navigation', () => {
     await expect(page.locator('nav button', { hasText: 'Correlations' })).toHaveClass(/border-brand-400/);
   });
 
-  test('switches to Watchlist tab on click', async ({ page }) => {
+  test('switches to Alerts tab on click', async ({ page }) => {
     await openDashboard(page);
-    await page.locator('nav button', { hasText: 'Watchlist' }).click();
-    await expect(page.locator('nav button', { hasText: 'Watchlist' })).toHaveClass(/border-brand-400/);
+    await page.locator('nav button', { hasText: 'Alerts' }).click();
+    await expect(page.locator('nav button', { hasText: 'Alerts' })).toHaveClass(/border-brand-400/);
   });
 
-  test('switches to History tab on click', async ({ page }) => {
+  test('switches to Help tab on click', async ({ page }) => {
     await openDashboard(page);
-    await page.locator('nav button', { hasText: 'History' }).click();
-    await expect(page.locator('nav button', { hasText: 'History' })).toHaveClass(/border-brand-400/);
-  });
-
-  test('switches to Community tab on click', async ({ page }) => {
-    await openDashboard(page);
-    await page.locator('nav button', { hasText: 'Community' }).click();
-    await expect(page.locator('nav button', { hasText: 'Community' })).toHaveClass(/border-brand-400/);
-  });
-
-  test('switches to FAQ tab on click', async ({ page }) => {
-    await openDashboard(page);
-    await page.locator('nav button', { hasText: 'FAQ' }).click();
-    await expect(page.locator('nav button', { hasText: 'FAQ' })).toHaveClass(/border-brand-400/);
+    await page.locator('nav button', { hasText: 'Help' }).click();
+    await expect(page.locator('nav button', { hasText: 'Help' })).toHaveClass(/border-brand-400/);
   });
 
   test('switches to Settings tab on click', async ({ page }) => {
@@ -909,19 +887,19 @@ test.describe('Dashboard — Correlations Tab', () => {
   });
 });
 
-// ── Watchlist Tab ─────────────────────────────────────────────────
+// ── Watchlist (Markets tab section) ───────────────────────────────
 
-test.describe('Dashboard — Watchlist Tab', () => {
+test.describe('Dashboard — Watchlist (Markets tab)', () => {
   test('displays watchlist section heading', async ({ page }) => {
     await openDashboard(page);
-    await page.locator('nav button', { hasText: 'Watchlist' }).click();
+    await page.locator('nav button', { hasText: 'Markets' }).click();
     await page.waitForTimeout(500);
     await expect(page.locator('main')).toContainText(/Your Watchlist/);
   });
 
   test('shows watchlist entries from mock data', async ({ page }) => {
     await openDashboard(page);
-    await page.locator('nav button', { hasText: 'Watchlist' }).click();
+    await page.locator('nav button', { hasText: 'Markets' }).click();
     // Wait for watchlist to load (async sendMessage + storage)
     await expect(page.locator('main')).toContainText(/BTC.*100k/i, { timeout: 10_000 });
   });
@@ -930,67 +908,30 @@ test.describe('Dashboard — Watchlist Tab', () => {
     await openDashboard(page, {
       'trendcast:watchlist': [],
     });
-    await page.locator('nav button', { hasText: 'Watchlist' }).click();
+    await page.locator('nav button', { hasText: 'Markets' }).click();
     await expect(page.locator('main')).toContainText(/Your watchlist is empty/, { timeout: 10_000 });
   });
 
   test('shows remove button for watchlist items', async ({ page }) => {
     await openDashboard(page);
-    await page.locator('nav button', { hasText: 'Watchlist' }).click();
+    await page.locator('nav button', { hasText: 'Markets' }).click();
     // Wait for watchlist entry to load, then check remove button
     const removeBtn = page.locator('main button[aria-label="Remove from watchlist"]');
     await expect(removeBtn).toBeVisible({ timeout: 10_000 });
   });
 });
 
-// ── History Tab ───────────────────────────────────────────────────
+// ── Run History (Correlations tab section) ───────────────────────
 
-test.describe('Dashboard — History Tab', () => {
-  test('displays history section heading', async ({ page }) => {
+test.describe('Dashboard — Run History (Correlations tab)', () => {
+  test('displays run history section heading', async ({ page }) => {
     await openDashboard(page);
-    await page.locator('nav button', { hasText: 'History' }).click();
+    await page.locator('nav button', { hasText: 'Correlations' }).click();
     await page.waitForTimeout(500);
-    await expect(page.locator('main')).toContainText(/Historical Trends/);
+    await expect(page.locator('main')).toContainText(/Run History/);
   });
 
-  test('renders an SVG chart', async ({ page }) => {
-    await openDashboard(page);
-    await page.locator('nav button', { hasText: 'History' }).click();
-    await page.waitForTimeout(500);
-    // HistoryChart renders an SVG element
-    await expect(page.locator('main svg')).toBeVisible();
-  });
-
-  test('shows metric selector buttons', async ({ page }) => {
-    await openDashboard(page);
-    await page.locator('nav button', { hasText: 'History' }).click();
-    await page.waitForTimeout(500);
-    // Metric labels: Markets, Signals, News, Correlations, Avg Sentiment
-    const mainSection = page.locator('main');
-    await expect(mainSection).toContainText(/Signals/);
-  });
-
-  test('chart renders with history data points', async ({ page }) => {
-    await openDashboard(page);
-    await page.locator('nav button', { hasText: 'History' }).click();
-    await page.waitForTimeout(500);
-    // The SVG should contain path elements (the line chart)
-    const svgPaths = page.locator('main svg path');
-    await expect(svgPaths.first()).toBeVisible();
-  });
-
-  test('shows empty state when no history', async ({ page }) => {
-    await openDashboard(page, {
-      'trendcast:history': [],
-    });
-    await page.locator('nav button', { hasText: 'History' }).click();
-    await page.waitForTimeout(500);
-    // Should show some empty state message
-    const mainSection = page.locator('main');
-    await expect(mainSection).toBeVisible();
-  });
-
-  test('renders Stock Indicator label in the detail-panel news list', async ({ page }) => {
+  test('renders Stock Indicator label in the run history news list', async ({ page }) => {
     const now = Date.now();
     await openDashboard(page, {
       'trendcast:history': [
@@ -1042,7 +983,7 @@ test.describe('Dashboard — History Tab', () => {
         },
       ],
     });
-    await page.locator('nav button', { hasText: 'History' }).click();
+    await page.locator('nav button', { hasText: 'Correlations' }).click();
     await page.waitForTimeout(500);
     // The detail panel defaults to the LAST entry (no hover), which contains the
     // new-source topNews items — their labels must render via PLATFORM_LABELS.
@@ -1052,19 +993,55 @@ test.describe('Dashboard — History Tab', () => {
   });
 });
 
-// ── Community Tab ─────────────────────────────────────────────────
+// ── Help Tab (FAQ + Community) ────────────────────────────────────
 
-test.describe('Dashboard — Community Tab', () => {
+test.describe('Dashboard — Help Tab', () => {
+  test('displays FAQ heading', async ({ page }) => {
+    await openDashboard(page);
+    await page.locator('nav button', { hasText: 'Help' }).click();
+    await page.waitForTimeout(300);
+    await expect(page.locator('main')).toContainText(/Correlation Engines FAQ/);
+  });
+
+  test('shows Heuristic engine section', async ({ page }) => {
+    await openDashboard(page);
+    await page.locator('nav button', { hasText: 'Help' }).click();
+    await page.waitForTimeout(300);
+    await expect(page.locator('main')).toContainText(/Heuristic Engine/);
+  });
+
+  test('shows Embedding engine section', async ({ page }) => {
+    await openDashboard(page);
+    await page.locator('nav button', { hasText: 'Help' }).click();
+    await page.waitForTimeout(300);
+    await expect(page.locator('main')).toContainText(/Embedding Engine/);
+  });
+
+  test('explains what correlation engines are', async ({ page }) => {
+    await openDashboard(page);
+    await page.locator('nav button', { hasText: 'Help' }).click();
+    await page.waitForTimeout(300);
+    await expect(page.locator('main')).toContainText(/What Are Correlation Engines/);
+  });
+
+  test('shows model comparison table', async ({ page }) => {
+    await openDashboard(page);
+    await page.locator('nav button', { hasText: 'Help' }).click();
+    await page.waitForTimeout(300);
+    // The FAQ contains a model table
+    await expect(page.locator('main')).toContainText(/MiniLM/);
+  });
+
   test('displays community section heading', async ({ page }) => {
     await openDashboard(page);
-    await page.locator('nav button', { hasText: 'Community' }).click();
+    await page.locator('nav button', { hasText: 'Help' }).click();
     await page.waitForTimeout(300);
     await expect(page.locator('main')).toContainText(/Join the TrendCast Community/);
   });
 
   test('shows Telegram group card with join link', async ({ page }) => {
     await openDashboard(page);
-    await page.locator('nav button', { hasText: 'Community' }).click();
+    await page.locator('nav button', { hasText: 'Help' }).click();
     await page.waitForTimeout(300);
     await expect(page.locator('main')).toContainText(/Telegram/);
     const telegramLink = page.locator('main a', { hasText: /Telegram/ });
@@ -1073,7 +1050,7 @@ test.describe('Dashboard — Community Tab', () => {
 
   test('shows GitHub Issues card with link', async ({ page }) => {
     await openDashboard(page);
-    await page.locator('nav button', { hasText: 'Community' }).click();
+    await page.locator('nav button', { hasText: 'Help' }).click();
     await page.waitForTimeout(300);
     await expect(page.locator('main')).toContainText(/GitHub Issues/);
     const githubLink = page.locator('main a', { hasText: /GitHub/ });
@@ -1082,49 +1059,9 @@ test.describe('Dashboard — Community Tab', () => {
 
   test('shows privacy note', async ({ page }) => {
     await openDashboard(page);
-    await page.locator('nav button', { hasText: 'Community' }).click();
+    await page.locator('nav button', { hasText: 'Help' }).click();
     await page.waitForTimeout(300);
     await expect(page.locator('main')).toContainText(/100% client-side/);
-  });
-});
-
-// ── FAQ Tab ───────────────────────────────────────────────────────
-
-test.describe('Dashboard — FAQ Tab', () => {
-  test('displays FAQ heading', async ({ page }) => {
-    await openDashboard(page);
-    await page.locator('nav button', { hasText: 'FAQ' }).click();
-    await page.waitForTimeout(300);
-    await expect(page.locator('main')).toContainText(/Correlation Engines FAQ/);
-  });
-
-  test('shows Heuristic engine section', async ({ page }) => {
-    await openDashboard(page);
-    await page.locator('nav button', { hasText: 'FAQ' }).click();
-    await page.waitForTimeout(300);
-    await expect(page.locator('main')).toContainText(/Heuristic Engine/);
-  });
-
-  test('shows Embedding engine section', async ({ page }) => {
-    await openDashboard(page);
-    await page.locator('nav button', { hasText: 'FAQ' }).click();
-    await page.waitForTimeout(300);
-    await expect(page.locator('main')).toContainText(/Embedding Engine/);
-  });
-
-  test('explains what correlation engines are', async ({ page }) => {
-    await openDashboard(page);
-    await page.locator('nav button', { hasText: 'FAQ' }).click();
-    await page.waitForTimeout(300);
-    await expect(page.locator('main')).toContainText(/What Are Correlation Engines/);
-  });
-
-  test('shows model comparison table', async ({ page }) => {
-    await openDashboard(page);
-    await page.locator('nav button', { hasText: 'FAQ' }).click();
-    await page.waitForTimeout(300);
-    // The FAQ contains a model table
-    await expect(page.locator('main')).toContainText(/MiniLM/);
   });
 });
 

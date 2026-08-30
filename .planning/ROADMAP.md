@@ -5,7 +5,8 @@
 - ✅ **v1.0 Speed, Alerts & New Data** — Phases 3-8 (shipped 2026-08-23)
 - ✅ **v1.1 News Source Fix** — Phases 9-10 (shipped 2026-08-24)
 - ✅ **v0.1.5 Stock Indicator News Sources** — Phases 11-13 (shipped 2026-08-27)
-- 🔄 **v0.1.6 fix correlation** — Phases 14-16 (current)
+- ✅ **v0.1.6 fix correlation** — Phases 14-16 (shipped 2026-08-30)
+- ✅ **v0.1.7 Dashboard UX Polish** — Phases 17-18 (shipped 2026-08-30)
 
 ## Phases
 
@@ -38,11 +39,22 @@
 
 </details>
 
-### v0.1.6 fix correlation (Phases 14-16)
+<details>
+<summary>✅ v0.1.6 fix correlation (Phases 14-16) — SHIPPED 2026-08-30</summary>
 
-- [x] **Phase 14: Ticker/Cashtag Bridging** - Unify `$AMZN`/`AMZN`/`Amazon` into one canonical entity space so stock-indicator news correlates with social/news/markets — completed 2026-08-29 (2/2 plans, verified GOAL ACHIEVED)
-- [x] **Phase 15: ML Run Orchestration & Progress** - Fix stuck-progress: requestId-scoped progress/results, serialized worker queue, model-download progress events, guaranteed terminal state — completed 2026-08-29 (2/2 plans, verified: 416/416 tests, typecheck/lint/build clean)
-- [x] **Phase 16: Correlation Persistence & Analysis Triggers** - Persist results with `computedAt` freshness metadata; no auto-analyze on tab open, analyze only when none exists, re-analyze after collectNow (completed 2026-08-30)
+- [x] Phase 14: Ticker/Cashtag Bridging (2/2 plans) — completed 2026-08-29
+- [x] Phase 15: ML Run Orchestration & Progress (2/2 plans) — completed 2026-08-29
+- [x] Phase 16: Correlation Persistence & Analysis Triggers (2/2 plans) — completed 2026-08-30
+
+</details>
+
+<details>
+<summary>✅ v0.1.7 Dashboard UX Polish (Phases 17-18) — SHIPPED 2026-08-30</summary>
+
+- [x] Phase 17: Feed Card & Header Polish — completed 2026-08-30 (NewsFeed source accents, HypeFeed virality/engagement, header cleanup, popup FAQ dedup)
+- [x] Phase 18: Navigation & Density — completed 2026-08-30 (grouped nav, sentiment dots, density toggle; extended per user: tabs consolidated 11 → 7, watchlist → Markets, market-news → News, run history → Correlations, community+FAQ → Help, star-click bug fixed, e2e rewritten)
+
+</details>
 
 ## Phase Details
 
@@ -102,13 +114,15 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 14 → 15 → 16
+Phases execute in numeric order: 14 → 15 → 16 → 17 → 18
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 14. Ticker/Cashtag Bridging | 2/2 | In Progress|  |
-| 15. ML Run Orchestration & Progress | 0/TBD | Not started | - |
-| 16. Correlation Persistence & Analysis Triggers | 2/2 | Complete    | 2026-08-30 |
+| 14. Ticker/Cashtag Bridging | 2/2 | Complete | 2026-08-29 |
+| 15. ML Run Orchestration & Progress | 2/2 | Complete | 2026-08-29 |
+| 16. Correlation Persistence & Analysis Triggers | 2/2 | Complete | 2026-08-30 |
+| 17. Feed Card & Header Polish | 1/1 | Complete | 2026-08-30 |
+| 18. Navigation & Density | 1/1 | Complete | 2026-08-30 |
 
 ---
-_Archived roadmap details: [milestones/v0.1.5-ROADMAP.md](milestones/v0.1.5-ROADMAP.md)_
+_Archived roadmap details: [milestones/v0.1.5-ROADMAP.md](milestones/v0.1.5-ROADMAP.md) · [milestones/v0.1.6-ROADMAP.md](milestones/v0.1.6-ROADMAP.md) · [milestones/v0.1.7-ROADMAP.md](milestones/v0.1.7-ROADMAP.md)_

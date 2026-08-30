@@ -11,6 +11,7 @@ import { VirtualizedGrid } from './VirtualizedGrid';
 interface HypeFeedProps {
   signals: SocialSignal[];
   highlightThreshold: number;
+  compact?: boolean;
 }
 
 const platformIcons: Record<string, string> = {
@@ -54,7 +55,29 @@ function formatEngagement(signal: SocialSignal): string {
   return parts.join('  ');
 }
 
-function HypeFeedImpl({ signals, highlightThreshold }: HypeFeedProps) {
+/**
+ * Virality badge color: heat scale from slate (cold) through amber to red
+ * (hot). Score ≥ highlightThreshold gets the hottest color.
+ */
+function viralityColor(score: number, threshold: number): string {
+  if (score >= threshold) return '#ef4444'; // hot — red
+  const t = Math.min(score / Math.max(threshold, 1), 1); // 0..1
+  // interpolate slate → amber → red
+  if (t < 0.5) {
+    const u = t / 0.5;
+    const r = Math.round(100 + u * (245 - 100));
+    const g = Math.round(116 + u * (158 - 116));
+    const b = Math.round(139 + u * (11 - 139));
+    return `rgb(${r},${g},${b})`;
+  }
+  const u = (t - 0.5) / 0.5;
+  const r = Math.round(245 + u * (239 - 245));
+  const g = Math.round(158 + u * (68 - 158));
+  const b = Math.round(11 + u * (68 - 11));
+  return `rgb(${r},${g},${b})`;
+}
+
+function HypeFeedImpl({ signals, highlightThreshold, compact = false }: HypeFeedProps) {
   // Sort by virality descending. Keep all posts — no per-platform cap.
   const sorted = useMemo(
     () => [...signals].sort((a, b) => b.virality - a.virality),
@@ -77,6 +100,8 @@ function HypeFeedImpl({ signals, highlightThreshold }: HypeFeedProps) {
         const bg = heatColor(signal.sentiment);
         const fg = textColor(signal.sentiment);
         const isHot = signal.virality >= highlightThreshold;
+        const scoreColor = viralityColor(signal.virality, highlightThreshold);
+        const engagement = formatEngagement(signal);
 
         const Wrapper = signal.url ? 'a' : 'div';
         const wrapperProps = signal.url
@@ -87,36 +112,55 @@ function HypeFeedImpl({ signals, highlightThreshold }: HypeFeedProps) {
           <Wrapper
             key={`${signal.platform}:${signal.id}`}
             {...wrapperProps}
-            className={`card-hover rounded-lg border hover:border-slate-600 cursor-pointer block p-2.5 ${
+            className={`card-hover rounded-lg border cursor-pointer block ${
               isHot
                 ? 'border-brand-500/40 shadow-lg shadow-brand-500/10'
-                : 'border-slate-800'
+                : 'border-slate-800 hover:border-slate-600'
             }`}
-            style={{ backgroundColor: bg, color: fg, minHeight: '100px' }}
+            style={{ backgroundColor: bg, color: fg, padding: compact ? '8px 10px' : '10px 12px', minHeight: compact ? '76px' : '100px' }}
           >
             <div className="flex items-start justify-between gap-1 mb-1">
               <span className="text-[9px] font-bold uppercase opacity-80">
                 {icon} {signal.platform}
               </span>
-              <span className="font-bold text-sm">{Math.round(signal.virality)}</span>
+              <span
+                className="font-bold text-sm px-1.5 rounded"
+                style={{
+                  color: scoreColor,
+                  backgroundColor: 'rgba(0,0,0,0.25)',
+                }}
+                title={`Virality ${Math.round(signal.virality)} (hot ≥ ${highlightThreshold})`}
+              >
+                {Math.round(signal.virality)}
+              </span>
             </div>
             <p
               className="font-semibold leading-tight mb-1"
               style={{
-                fontSize: '11px',
-                lineHeight: '1.2',
+                fontSize: compact ? '10.5px' : '11px',
+                lineHeight: '1.25',
                 display: '-webkit-box',
-                WebkitLineClamp: 2,
+                WebkitLineClamp: compact ? 2 : 3,
                 WebkitBoxOrient: 'vertical',
                 overflow: 'hidden',
               }}
             >
               {signal.text}
             </p>
+            {/* Virality score bar — makes the score readable at a glance */}
+            <div className="h-0.5 rounded-full bg-black/25 mb-1" aria-hidden>
+              <div
+                className="h-full rounded-full"
+                style={{
+                  width: `${Math.min(100, (signal.virality / Math.max(highlightThreshold * 1.5, 1)) * 100)}%`,
+                  backgroundColor: scoreColor,
+                }}
+              />
+            </div>
             <div className="flex flex-col gap-1">
               {signal.keywords.length > 0 && (
                 <div className="flex flex-wrap gap-1">
-                  {signal.keywords.slice(0, 4).map((kw) => (
+                  {signal.keywords.slice(0, compact ? 2 : 4).map((kw) => (
                     <span
                       key={kw}
                       className="text-[11px] font-medium px-1.5 py-0.5 rounded bg-black/20 opacity-80"
@@ -127,10 +171,12 @@ function HypeFeedImpl({ signals, highlightThreshold }: HypeFeedProps) {
                 </div>
               )}
               <div className="flex items-end justify-between gap-1">
-                <span className="opacity-70 text-[9px]">@{signal.author}</span>
-                <span className="opacity-70 text-[9px]">
-                  {formatEngagement(signal)}
-                </span>
+                <span className="opacity-70 text-[9px] truncate">@{signal.author}</span>
+                {engagement && (
+                  <span className="opacity-70 text-[9px] whitespace-nowrap">
+                    {engagement}
+                  </span>
+                )}
               </div>
             </div>
           </Wrapper>

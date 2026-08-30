@@ -1,20 +1,20 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.1.6
-milestone_name: fix correlation (Phases 14-16)
-status: Awaiting next milestone
-stopped_at: Phase 16 complete — all phases complete
-last_updated: "2026-08-30T07:56:20.625Z"
+milestone: v0.1.7
+milestone_name: Dashboard UX Polish (Phases 17-18)
+status: Complete — milestone archived
+closed_at: Phases 17+18 complete, milestone archived to milestones/v0.1.7-ROADMAP.md
+last_updated: "2026-08-30T12:30:00.000Z"
 last_activity: 2026-08-30
-last_activity_desc: Milestone v0.1.6 completed and archived
+last_activity_desc: Milestone closed — archives created, ROADMAP/PROJECT/MILESTONES updated, audit items acknowledged
 state_head: 8bee5edb1ccd9811f0e5b88ce3be98ded9f31a29
 progress:
-  total_phases: 3
-  completed_phases: 3
-  total_plans: 6
-  completed_plans: 6
+  total_phases: 2
+  completed_phases: 2
+  total_plans: 2
+  completed_plans: 2
   percent: 100
-current_phase: 16
+current_phase: null
 ---
 
 # Project State
@@ -24,14 +24,14 @@ current_phase: 16
 See: .planning/PROJECT.md (updated 2026-08-27)
 
 **Core value:** Surface the strongest, most reliable signal of what prediction markets are moving and why — by correlating social hype, news, and market odds — fast enough that the user trusts it as a daily decision aid.
-**Current focus:** Phase 16 — Correlation Persistence & Analysis Triggers
+**Current focus:** Phase 17 — Feed Card & Header Polish
 
 ## Current Position
 
-Phase: Milestone v0.1.6 complete
+Phase: — (milestone complete)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-08-30 — Milestone v0.1.6 completed and archived
+Status: v0.1.7 Dashboard UX Polish SHIPPED 2026-08-30 — archived to milestones/v0.1.7-ROADMAP.md
+Last activity: 2026-08-30 — Milestone close: tab consolidation (11→7), star-click fix, e2e rewrite, archives created
 
 ## Performance Metrics
 
@@ -112,10 +112,12 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-08-29T18:20:00.000Z
-Stopped at: Phase 16 complete — all phases complete
+Last session: 2026-08-30T12:30:00.000Z
+Stopped at: v0.1.7 milestone complete — ready for /gsd-new-milestone
 Resume file: None
 
 ## Operator Next Steps
 
 - Start the next milestone with /gsd-new-milestone
+- Deferred candidates for v0.1.8: CORR-05 (download progress aggregation), CORR-06 (news↔news correlation pass), MLPROG-03 (full ticker universe), TRIG-05 (embedding cache persistence)
+- User to commit all v0.1.7 work + planning updates (git rules: user handles commits)

@@ -339,8 +339,8 @@ A GitHub Actions workflow (`.github/workflows/release.yml`) automatically builds
 ### Automatic (tag push)
 
 ```bash
-git tag v0.1.4
-git push origin v0.1.4
+git tag v0.1.7
+git push origin v0.1.7
 ```
 
 This triggers the workflow which:

@@ -8,15 +8,21 @@ A 100% client-side Manifest V3 browser extension (Chrome + Firefox) that collect
 
 Surface the strongest, most reliable signal of what prediction markets are moving and why — by correlating social hype, news, and market odds — fast enough that the user trusts it as a daily decision aid.
 
-## Current Milestone: v0.1.6 fix correlation
+## Current Milestone: v0.1.7 Dashboard UX Polish — ✅ SHIPPED 2026-08-30
 
-**Goal:** Make correlation results trustworthy and correctly surfaced — stock indicator sources correlate with social/news, ML progress reflects actual worker state, and analysis runs at the right times with persisted results.
+**Goal:** Make the dashboard read as information, not decoration — based on a live screenshot review of every tab: news cards differentiate by source with readable hierarchy, hype cards surface the virality score and engagement, the header shows human-relevant info only, navigation is grouped and consolidated, and density adapts to the user.
 
-**Target features:**
-- Ticker/cashtag bridging — stock indicator NewsItems (keywords like `amzn`) match social signals carrying `$AMZN` cashtags
-- ML progress UI fix — embedding model progress reflects actual worker completion instead of appearing stuck
-- Analysis trigger behavior — no auto-analyze on every tab open; only when no analysis exists, otherwise after collectNow
-- Persist correlation results to storage so they survive tab/session restarts
+**Shipped:**
+- News tab de-orange-walled — neutral card surfaces with per-source accents, article publish times, capped keyword chips
+- Hype Feed cards informative — prominent heat-colored virality score, engagement on X/TikTok cards
+- Header cleanup — version out of the header, relative last-collection time
+- Navigation consolidated 11 → 7 tabs (user-directed) — watchlist → Markets, market-news → News segmented view, run history → Correlations, community+FAQ → Help; grouped Data / Insights / More
+- Sentiment dots on news cards + compact/comfortable density toggle (persisted)
+- Star-click bug fixed (preventDefault inside anchor tiles)
+- Popup duplicate FAQ blocks removed
+- e2e suite rewritten for the 7-tab layout
+
+**Next milestone goals:** TBD — start with `/gsd-new-milestone`. Deferred candidates: CORR-05 (download progress aggregation), CORR-06 (news↔news correlation pass), MLPROG-03 (full ticker universe), TRIG-05 (embedding cache persistence).
 
 ## Requirements
 
@@ -73,6 +79,10 @@ TrendCast is a mature, working extension. The codebase map (`.planning/codebase/
 **v1.1 shipped (2026-08-24):** News Source Fix milestone complete. Deep-merge + settings migration fix Seeking Alpha/Investing.com display for existing users (NEWS-01/02/03). Phase 10 added cross-source consensus alerts — topics appearing across >=3 distinct source types (social + news mix) fire alerts even with an empty watchlist. 340/340 unit tests pass, typecheck + lint clean, UAT 2/2 passed, security + Nyquist validation gates passed.
 
 **v0.1.5 shipped (2026-08-27):** Stock Indicator News Sources milestone complete. Three personal stock-indicator RSS feeds (usa-stocks-indicator, breakout screener, VCP screener-2) are first-class news sources: collected via rss2json with guid-based dedup-safe ids, health/staleness tracked, wired end-to-end through popup toggles, NewsFeed labels/colors, and HistoryChart. Settings deep-merge + migration backfills the new flags to `true` for existing users without overwriting explicit preferences. 357 unit tests + 137 e2e tests + typecheck all green.
+
+**v0.1.6 shipped (2026-08-30):** Fix Correlation milestone complete. Ticker/cashtag bridging unifies `$AMZN`/`AMZN`/`Amazon` into one entity space (CORR-01..04); ML runs serialized with requestId-scoped progress and model-download events (MLPROG-01/02); correlation results persist with `computedAt` freshness and re-analyze triggers on collection (TRIG-01..04). 445 unit tests, typecheck/lint/build clean.
+
+**v0.1.7 shipped (2026-08-30):** Dashboard UX Polish milestone complete. NewsFeed source-accented cards, HypeFeed virality/engagement, header cleanup, popup FAQ dedup (UX-01..04); grouped nav + sentiment dots + density toggle (UX-06/07); user-directed tab consolidation 11 → 7 with watchlist-in-Markets, market-news-in-News, run-history-in-Correlations, community+FAQ-in-Help; star-click bug fixed; e2e rewritten for 7 tabs (UX-05/08/09). 445 unit tests + e2e + typecheck/lint/build all green.
 
 **Known issue (resolved in v1.0):** Seeking Alpha and Investing.com news did not appear in the correlation tab. Root cause diagnosed and fixed (REL-01) — sources are fully wired end-to-end; the fix addressed the correlation threshold / display path.
 
@@ -137,4 +147,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-08-27 at start of v0.1.6 fix correlation milestone*
+*Last updated: 2026-08-30 at v0.1.7 Dashboard UX Polish milestone close*

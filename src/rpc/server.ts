@@ -35,7 +35,7 @@
 import { createServer } from 'node:http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createInterface } from 'node:readline';
-import { readdirSync } from 'node:fs';
+import { readdirSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getRpcDefinitions, getRpcDefinition } from './registry';
@@ -70,6 +70,27 @@ function print(tag: string, color: string, text: string): void {
   process.stdout.write(`${color}[${tag}] ${text}${COLORS.reset}\n`);
 }
 
+/**
+ * Format an RPC result for the terminal. Binary payloads (PNG dataUrls from
+ * debugCapture) are decoded and written to /tmp so they never flood the
+ * terminal with base64 — the printed line just names the saved file.
+ */
+function formatResult(method: string, result: unknown): string {
+  if (result && typeof result === 'object' && typeof (result as { dataUrl?: unknown }).dataUrl === 'string') {
+    const { dataUrl, ...rest } = result as { dataUrl: string } & Record<string, unknown>;
+    const m = dataUrl.match(/^data:image\/(png|jpeg);base64,(.+)$/s);
+    if (m) {
+      const ext = m[1] === 'jpeg' ? 'jpg' : 'png';
+      const dir = '/tmp/trendcast-ui';
+      mkdirSync(dir, { recursive: true });
+      const file = join(dir, `${method}-${Date.now()}.${ext}`);
+      writeFileSync(file, Buffer.from(m[2], 'base64'));
+      return `${JSON.stringify({ ...rest, savedTo: file })}`;
+    }
+  }
+  return JSON.stringify(result);
+}
+
 wss.on('connection', (socket) => {
   ext = socket;
   print('log-server', COLORS.ok, 'Extension connected — streaming logs… (type "help" for commands)');
@@ -93,7 +114,7 @@ wss.on('connection', (socket) => {
         print('rpc', COLORS.error, `RPC ${msg.method} FAILED: ${msg.error}`);
         p?.reject(new Error(msg.error ?? 'RPC error'));
       } else {
-        print('rpc', COLORS.rpc, `RPC ${msg.method} → ${JSON.stringify(msg.result)}`);
+        print('rpc', COLORS.rpc, `RPC ${msg.method} → ${formatResult(msg.method ?? 'rpc', msg.result)}`);
         p?.resolve(msg.result);
       }
       // Re-prompt after async output so the CLI prompt stays readable.
