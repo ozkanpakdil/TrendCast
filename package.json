@@ -27,7 +27,7 @@
     "test:e2e:report": "playwright show-report",
     "screenshots": "playwright test --config=playwright.screenshots.config.ts",
     "screenshots:headed": "playwright test --config=playwright.screenshots.config.ts --headed",
-    "log-server": "bun run scripts/log-server.ts",
+    "log-server": "bun run src/rpc/server.ts",
     "docs:serve": "cd docs && hugo server --buildDrafts --disableFastRender",
     "docs:build": "cd docs && hugo --minify",
     "docs:manifest": "bun run scripts/generate-screenshot-manifest.ts",

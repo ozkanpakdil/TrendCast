@@ -58,7 +58,6 @@ import {
   stampCorrelationResult,
   persistCorrelationResult,
   readStoredAnalysis,
-  shouldTriggerReanalysis,
 } from '@/utils/correlation-persistence';
 import { evaluateAlerts, evaluateCrossSourceAlerts, dispatchAlerts, broadcastAlerts, clearAlerts, updateBadge, getAlertHistory } from '@/background/alerts';
 import { buildMarketDrivenNews } from '@/background/correlationNews';
@@ -74,440 +73,7 @@ import MLWorker from '@/workers/ml-worker?worker';
 // [TrendCast] logs without manually pasting console overrides. No-op in
 // production builds (gated by import.meta.env.DEBUG_LOG_FORWARD).
 import '@/utils/log-forwarder';
-import { registerRpcHandler } from '@/utils/log-forwarder';
-import { setupDebugScreenControl } from '@/utils/debug-screen';
-
-// Debug-only screen control: exposes tabs/eval/capture/click RPCs so the
-// log-server CLI can drive the extension's own pages (dashboard/popup) in
-// the user's RUNNING browser. No-op in production builds.
-setupDebugScreenControl();
-
-// ── Debug RPC handlers (debug builds only) ───────────────────────
-// The log-forwarder's WebSocket bridge accepts commands from the local
-// log-server (scripts/log-server.ts). registerRpcHandler is a no-op in
-// production builds, so these registrations are stripped too.
-registerRpcHandler('getVersion', () => ({
-  version: BUILD_VERSION,
-  userAgent: navigator.userAgent,
-  timestamp: new Date().toISOString(),
-}));
-
-registerRpcHandler('collectNow', async () => {
-  console.log('[TrendCast] RPC: collectNow');
-  const snapshot = await runCollection();
-  return {
-    collectedAt: snapshot.collectedAt,
-    markets: snapshot.markets.length,
-    signals: snapshot.signals.length,
-    news: snapshot.news.length,
-  };
-});
-
-registerRpcHandler('correlate', async (params) => {
-  const settings = await getSettings();
-  const engine = (params.engine as typeof settings.correlationEngine) ?? settings.correlationEngine;
-  const model = (params.model as string) ?? settings.embeddingModel;
-  const requestId = `rpc-corr-${Date.now()}`;
-  console.log(`[TrendCast] RPC: correlate engine="${engine}" model="${model}"`);
-  // Fire-and-forget like the dashboard path — result lands in storage and
-  // streams back through the log channel (CORRELATE_ALL OK line).
-  void runCorrelationAsync(engine, model, requestId);
-  return { started: true, requestId, engine, model };
-});
-
-registerRpcHandler('getSnapshot', async () => {
-  const snapshot = await getLatestSnapshot();
-  if (!snapshot) return { empty: true };
-  return {
-    collectedAt: snapshot.collectedAt,
-    markets: snapshot.markets.length,
-    signals: snapshot.signals.length,
-    news: snapshot.news.length,
-  };
-});
-
-registerRpcHandler('getSettings', async () => {
-  return await getSettings();
-});
-
-registerRpcHandler('getStorageUsage', async () => {
-  return await measureStorageUsage();
-});
-
-registerRpcHandler('ping', () => 'pong');
-
-// ── Benchmark RPC (debug builds only) ────────────────────────────
-// Runs the full correlation pipeline once per engine/model against the
-// CURRENT collected data and records quality metrics so the user can
-// compare engines/models and drop the ones that aren't useful.
-//
-// Scoring (0–100, higher = better):
-//   coverage  (40%) — how many of the 4 correlation passes produced
-//                     matches at all (a pass with 0 matches scores 0)
-//   precision (30%) — mean confidence of the top-10 matches per pass,
-//                     normalised against each pass's threshold
-//   spread    (15%) — confidence spread (std dev) of the top-10 per
-//                     pass: a good engine discriminates (some strong,
-//                     some weak matches), not everything-at-0.9
-//   speed     (15%) — log-scaled duration vs the fastest run in the set
-// Results are stored under CONFIG.storage.modelBenchmark and returned
-// by the `benchmark` / `benchmarkResults` log-server commands.
-
-/** One engine/model benchmark run. */
-interface BenchmarkRun {
-  engine: string;
-  model: string;
-  startedAt: number;
-  durationMs: number;
-  error?: string;
-  counts: { matches: number; newsMatches: number; newsSocialMatches: number; newsNewsMatches: number };
-  /** Mean confidence of the top-10 matches per pass (0 if no matches). */
-  top10Mean: { matches: number; newsMatches: number; newsSocialMatches: number; newsNewsMatches: number };
-  /** Std-dev of confidence across the top-10 matches per pass. */
-  top10Spread: { matches: number; newsSocialMatches: number; newsMatches: number; newsNewsMatches: number };
-  score?: BenchmarkScore;
-}
-
-/** Weighted quality score for a benchmark run (0–100). */
-interface BenchmarkScore {
-  total: number;
-  coverage: number;
-  precision: number;
-  spread: number;
-  speed: number;
-}
-
-/** Per-pass thresholds — mirrors src/services/engine/ml/types.ts. */
-const BENCH_THRESHOLDS = {
-  matches: 0.45,
-  newsMatches: 0.45,
-  newsSocialMatches: 0.35,
-  newsNewsMatches: 0.45,
-} as const;
-
-function mean(xs: number[]): number {
-  return xs.length === 0 ? 0 : xs.reduce((a, b) => a + b, 0) / xs.length;
-}
-
-function stdev(xs: number[]): number {
-  if (xs.length < 2) return 0;
-  const m = mean(xs);
-  return Math.sqrt(mean(xs.map((x) => (x - m) ** 2)));
-}
-
-/** Mean confidence of the top-N matches in a pass. */
-function topNMean<T extends { confidence: number }>(items: T[], n = 10): number {
-  return mean([...items].sort((a, b) => b.confidence - a.confidence).slice(0, n).map((m) => m.confidence));
-}
-
-/** Std-dev of confidence across the top-N matches in a pass. */
-function topNSpread<T extends { confidence: number }>(items: T[], n = 10): number {
-  return stdev([...items].sort((a, b) => b.confidence - a.confidence).slice(0, n).map((m) => m.confidence));
-}
-
-/** Score one run. `fastestMs` is the fastest duration in the benchmark set. */
-function scoreRun(run: BenchmarkRun, fastestMs: number): BenchmarkScore {
-  const passes = ['matches', 'newsMatches', 'newsSocialMatches', 'newsNewsMatches'] as const;
-
-  // Coverage: fraction of passes that found anything (40%)
-  const passesWithMatches = passes.filter((p) => run.counts[p] > 0).length;
-  const coverage = (passesWithMatches / passes.length) * 100;
-
-  // Precision: mean top-10 confidence normalised against the pass
-  // threshold, capped at 1 (30%). Only passes with matches contribute.
-  const precisions = passes
-    .filter((p) => run.counts[p] > 0)
-    .map((p) => Math.min(1, run.top10Mean[p] / BENCH_THRESHOLDS[p]));
-  const precision = mean(precisions) * 100;
-
-  // Spread: normalised std-dev of top-10 confidences (15%). A good
-  // engine discriminates — spread of 0 means everything scored the same.
-  const spreads = passes
-    .filter((p) => run.counts[p] > 1)
-    .map((p) => Math.min(1, run.top10Spread[p] / 0.2)); // 0.2 spread = fully discriminating
-  const spread = mean(spreads) * 100;
-
-  // Speed: log-scaled vs the fastest run (15%). 2× slower ≈ 70 pts,
-  // 10× slower ≈ 30 pts, 100× slower ≈ 0 pts.
-  const ratio = run.durationMs / Math.max(1, fastestMs);
-  const speed = Math.max(0, Math.min(100, 100 - 33.3 * Math.log10(Math.max(1, ratio))));
-
-  const total = coverage * 0.4 + precision * 0.3 + spread * 0.15 + speed * 0.15;
-  return {
-    total: Math.round(total * 10) / 10,
-    coverage: Math.round(coverage * 10) / 10,
-    precision: Math.round(precision * 10) / 10,
-    spread: Math.round(spread * 10) / 10,
-    speed: Math.round(speed * 10) / 10,
-  };
-}
-
-registerRpcHandler('benchmark', async (params) => {
-  const engines = (params.engines as string[] | undefined) ?? ['heuristic', 'embedding', 'sentiment', 'ner'];
-  const modelsByEngine: Record<string, string> = {
-    heuristic: '',
-    embedding: (params.embeddingModel as string) ?? 'Xenova/all-MiniLM-L6-v2',
-    sentiment: (params.sentimentModel as string) ?? 'Xenova/distilbert-base-uncased-finetuned-sst-2-english',
-    ner: (params.nerModel as string) ?? 'Xenova/bert-base-NER-uncased',
-    llm: (params.llmModel as string) ?? 'HuggingFaceTB/SmolLM2-135M-Instruct',
-  };
-
-  const markets = await getCollectedMarkets();
-  const signals = await getCollectedSignals();
-  const news = await getCollectedNews();
-  const inputs = { markets: markets.length, signals: signals.length, news: news.length };
-  console.log(`[TrendCast] RPC: benchmark engines=[${engines.join(', ')}] inputs:`, inputs);
-
-  if (markets.length === 0 || (signals.length === 0 && news.length === 0)) {
-    return { error: 'No collected data — run collectNow first.', inputs };
-  }
-
-  const runs: BenchmarkRun[] = [];
-  for (const engine of engines) {
-    const model = modelsByEngine[engine] ?? '';
-    const startedAt = Date.now();
-    try {
-      const result = await runCorrelationWithEngine(
-        markets, signals, news,
-        engine as 'heuristic' | 'embedding' | 'sentiment' | 'ner' | 'llm',
-        model,
-        `bench-${engine}-${startedAt}`,
-      );
-      const durationMs = Date.now() - startedAt;
-      const run: BenchmarkRun = {
-        engine,
-        model,
-        startedAt,
-        durationMs,
-        counts: {
-          matches: result.matches.length,
-          newsMatches: result.newsMatches.length,
-          newsSocialMatches: result.newsSocialMatches.length,
-          newsNewsMatches: result.newsNewsMatches.length,
-        },
-        top10Mean: {
-          matches: topNMean(result.matches),
-          newsMatches: topNMean(result.newsMatches),
-          newsSocialMatches: topNMean(result.newsSocialMatches),
-          newsNewsMatches: topNMean(result.newsNewsMatches),
-        },
-        top10Spread: {
-          matches: topNSpread(result.matches),
-          newsMatches: topNSpread(result.newsMatches),
-          newsSocialMatches: topNSpread(result.newsSocialMatches),
-          newsNewsMatches: topNSpread(result.newsNewsMatches),
-        },
-        error: result.error,
-      };
-      runs.push(run);
-      console.log(
-        `[TrendCast] benchmark ${engine} done in ${(durationMs / 1000).toFixed(1)}s:`,
-        `signal→market=${run.counts.matches}, news→market=${run.counts.newsMatches},`,
-        `news→social=${run.counts.newsSocialMatches}, news↔news=${run.counts.newsNewsMatches}`,
-      );
-    } catch (err) {
-      runs.push({
-        engine,
-        model,
-        startedAt,
-        durationMs: Date.now() - startedAt,
-        error: err instanceof Error ? err.message : String(err),
-        counts: { matches: 0, newsMatches: 0, newsSocialMatches: 0, newsNewsMatches: 0 },
-        top10Mean: { matches: 0, newsMatches: 0, newsSocialMatches: 0, newsNewsMatches: 0 },
-        top10Spread: { matches: 0, newsMatches: 0, newsSocialMatches: 0, newsNewsMatches: 0 },
-      });
-      console.error(`[TrendCast] benchmark ${engine} FAILED:`, err);
-    }
-  }
-
-  // Score all runs relative to the fastest successful one.
-  const successful = runs.filter((r) => !r.error);
-  const fastestMs = successful.length > 0 ? Math.min(...successful.map((r) => r.durationMs)) : 1;
-  for (const run of runs) {
-    if (!run.error) run.score = scoreRun(run, fastestMs);
-  }
-
-  const report = {
-    benchmarkedAt: Date.now(),
-    inputs,
-    runs,
-  };
-  await browser.storage.local.set({ [CONFIG.storage.modelBenchmark]: report });
-  console.log('[TrendCast] benchmark complete:', JSON.stringify(report, null, 2));
-  return report;
-});
-
-registerRpcHandler('benchmarkResults', async () => {
-  const stored = await browser.storage.local.get(CONFIG.storage.modelBenchmark);
-  return stored[CONFIG.storage.modelBenchmark] ?? { empty: true };
-});
-
-// ── Phase 16 debug RPCs (debug builds only) ──────────────────────
-// Inspect and manipulate the persisted correlation state so the
-// log-server CLI can exercise the persistence + trigger paths
-// (TRIG-01..04) without touching the dashboard UI.
-
-/** Summarised view of the stored correlation result. */
-function summarizeCorrelation(stored: NonNullable<Awaited<ReturnType<typeof readStoredAnalysis>>>) {
-  return {
-    requestId: stored.requestId,
-    engine: stored.engine,
-    model: stored.model,
-    error: stored.error ?? null,
-    computedAt: stored.computedAt ?? null,
-    ageMs: typeof stored.computedAt === 'number' ? Date.now() - stored.computedAt : null,
-    inputCounts: stored.inputCounts ?? null,
-    counts: {
-      matches: stored.matches.length,
-      newsMatches: stored.newsMatches.length,
-      newsSocialMatches: stored.newsSocialMatches.length,
-      newsNewsMatches: stored.newsNewsMatches.length,
-    },
-  };
-}
-
-registerRpcHandler('getCorrelations', async () => {
-  const stored = await readStoredAnalysis(browser.storage.local, CONFIG.storage.correlations);
-  if (!stored) return { empty: true };
-  return summarizeCorrelation(stored);
-});
-
-// Seed a synthetic stored result to exercise the dashboard gate/badge and
-// the re-analysis trigger without running a real engine. Params:
-//   engine   — stamped engine (default 'heuristic')
-//   model    — stamped model id (default none)
-//   staleMs  — backdate computedAt by this many ms (default 0 = now)
-//   error    — when set, seeds an ERROR result (tests the write policy +
-//              the "error never suppresses re-analysis" rule)
-//   requestId — override the marker id (default seed-<ts>)
-registerRpcHandler('seedCorrelations', async (params) => {
-  const engine = (params.engine as CorrelationResult['engine']) ?? 'heuristic';
-  const model = typeof params.model === 'string' ? params.model : undefined;
-  const staleMs = typeof params.staleMs === 'number' ? params.staleMs : 0;
-  const error = typeof params.error === 'string' ? params.error : undefined;
-  const requestId = (params.requestId as string) ?? `seed-${Date.now()}`;
-  const seeded: CorrelationResult = {
-    requestId,
-    matches: [],
-    newsMatches: [],
-    newsSocialMatches: [],
-    newsNewsMatches: [],
-    engine,
-    ...(model !== undefined ? { model } : {}),
-    ...(error !== undefined ? { error } : {}),
-    computedAt: Date.now() - staleMs,
-    inputCounts: { markets: 0, signals: 0, news: 0 },
-  };
-  // Deliberate raw write — seeding must bypass the persist write policy so
-  // an error result can be planted even when a good result exists.
-  await browser.storage.local.set({ [CONFIG.storage.correlations]: seeded });
-  console.log('[TrendCast] RPC: seedCorrelations', { requestId, engine, model, staleMs, error });
-  return { seeded: true, result: summarizeCorrelation(seeded) };
-});
-
-registerRpcHandler('clearCorrelations', async () => {
-  await browser.storage.local.remove(CONFIG.storage.correlations);
-  console.log('[TrendCast] RPC: clearCorrelations — stored result removed');
-  return { cleared: true };
-});
-
-registerRpcHandler('getRunState', async () => {
-  const marker = await readMlRunState(browser.storage.local, CONFIG.storage.mlRunState);
-  return {
-    marker,
-    live: marker !== null,
-    activeRequestId: mlRunQueue.activeRequestId,
-    queuedRequestIds: mlRunQueue.queuedRequestIds,
-  };
-});
-
-registerRpcHandler('getLastCollection', async () => {
-  const result = await browser.storage.local.get([
-    CONFIG.storage.lastCollectionAt,
-    CONFIG.storage.latestSnapshot,
-  ]);
-  const lastCollectionAt = result[CONFIG.storage.lastCollectionAt] as number | undefined;
-  const snapshot = result[CONFIG.storage.latestSnapshot] as CollectionSnapshot | undefined;
-  const collectedAt = snapshot?.collectedAt;
-  return {
-    lastCollectionAt: typeof lastCollectionAt === 'number' ? lastCollectionAt : null,
-    snapshotCollectedAt: typeof collectedAt === 'number' ? collectedAt : null,
-    ageMs: typeof collectedAt === 'number' ? Date.now() - collectedAt : null,
-    counts: snapshot
-      ? {
-          markets: snapshot.markets.length,
-          signals: snapshot.signals.length,
-          news: snapshot.news.length,
-        }
-      : null,
-  };
-});
-
-// Dry-run of the Phase 16 trigger decision (TRIG-03 pre-filter + liveness)
-// — shows exactly what the dashboard's storage.onChanged listener would do
-// for the CURRENT stored state, with a human-readable reason.
-registerRpcHandler('evaluateTrigger', async () => {
-  const stored = await readStoredAnalysis(browser.storage.local, CONFIG.storage.correlations);
-  const marker = await readMlRunState(browser.storage.local, CONFIG.storage.mlRunState);
-  const liveness = { live: marker !== null, queued: mlRunQueue.queuedRequestIds.length > 0 };
-  const result = await browser.storage.local.get([
-    CONFIG.storage.lastCollectionAt,
-    CONFIG.storage.latestSnapshot,
-  ]);
-  const snap = result[CONFIG.storage.latestSnapshot] as CollectionSnapshot | undefined;
-  const lastCollectionAt = result[CONFIG.storage.lastCollectionAt] as number | undefined;
-  // Same precedence as the dashboard listener: snapshot.collectedAt wins,
-  // lastCollectionAt is the fallback.
-  const snapshotCollectedAt =
-    snap && typeof snap.collectedAt === 'number'
-      ? snap.collectedAt
-      : typeof lastCollectionAt === 'number'
-        ? lastCollectionAt
-        : null;
-  const shouldTrigger = shouldTriggerReanalysis({ liveness, stored, snapshotCollectedAt });
-  let reason: string;
-  if (liveness.live || liveness.queued) reason = 'run-live-or-queued';
-  else if (snapshotCollectedAt === null) reason = 'no-collection-timestamp';
-  else if (!stored) reason = 'no-stored-result';
-  else if (stored.error) reason = 'stored-result-is-error';
-  else if (typeof stored.computedAt !== 'number' || !Number.isFinite(stored.computedAt)) {
-    reason = 'legacy-result-no-computedAt';
-  } else if (stored.computedAt < snapshotCollectedAt) reason = 'stale-result';
-  else reason = 'fresh';
-  return {
-    shouldTrigger,
-    reason,
-    liveness,
-    snapshotCollectedAt,
-    storedComputedAt: stored?.computedAt ?? null,
-  };
-});
-
-// Exercise the exact post-collection precompute path (TRIG-01/02): loads
-// the current collected data, runs the settings engine/model, stamps +
-// persists through the write policy, broadcasts, sweeps alerts, rebuilds
-// the market-news view. Awaits completion so the CLI sees the final state.
-registerRpcHandler('triggerPrecompute', async () => {
-  const settings = await getSettings();
-  const markets = await getCollectedMarkets();
-  const signals = await getCollectedSignals();
-  const news = await getCollectedNews();
-  console.log('[TrendCast] RPC: triggerPrecompute', {
-    engine: settings.correlationEngine,
-    markets: markets.length,
-    signals: signals.length,
-    news: news.length,
-  });
-  if (markets.length === 0 || (signals.length === 0 && news.length === 0)) {
-    return { started: false, error: 'No collected data — run collectNow first.' };
-  }
-  await runCorrelationPrecompute(markets, signals, news, settings);
-  const stored = await readStoredAnalysis(browser.storage.local, CONFIG.storage.correlations);
-  return {
-    started: true,
-    persisted: stored ? summarizeCorrelation(stored) : null,
-  };
-});
+import { registerAllRpcHandlers } from '@/rpc';
 
 // ── Register all listeners synchronously at top level ────────────
 setupAlarms();
@@ -581,6 +147,49 @@ let mlWorkerResolvers: {
   onProgress?: (info: { phase: string; current: number; total: number; engine: string; model: string; file?: string }) => void;
 } | null = null;
 let mlWorkerTimeout: ReturnType<typeof setTimeout> | null = null;
+
+// ── Debug RPC handlers (debug builds only) ───────────────────────
+// The RPC surface is defined declaratively in src/rpc/ (one RpcDefinition
+// per method: metadata + handler). registerAllRpcHandlers wires every
+// handler into the log-forwarder's WebSocket bridge. It is a no-op in
+// production builds, so these registrations are stripped too.
+
+/** Summarised view of the stored correlation result. */
+function summarizeCorrelation(stored: NonNullable<Awaited<ReturnType<typeof readStoredAnalysis>>>) {
+  return {
+    requestId: stored.requestId,
+    engine: stored.engine,
+    model: stored.model,
+    error: stored.error ?? null,
+    computedAt: stored.computedAt ?? null,
+    ageMs: typeof stored.computedAt === 'number' ? Date.now() - stored.computedAt : null,
+    inputCounts: stored.inputCounts ?? null,
+    counts: {
+      matches: stored.matches.length,
+      newsMatches: stored.newsMatches.length,
+      newsSocialMatches: stored.newsSocialMatches.length,
+      newsNewsMatches: stored.newsNewsMatches.length,
+    },
+  };
+}
+
+registerAllRpcHandlers({
+  browser,
+  buildVersion: BUILD_VERSION,
+  userAgent: navigator.userAgent,
+  getSettings,
+  getCollectedMarkets,
+  getCollectedSignals,
+  getCollectedNews,
+  getLatestSnapshot,
+  runCollection,
+  runCorrelationAsync,
+  runCorrelationWithEngine,
+  runCorrelationPrecompute,
+  mlRunQueue,
+  measureStorageUsage,
+  summarizeCorrelation,
+});
 
 const ML_WORKER_IDLE_TIMEOUT_MS = 300_000; // 5 min — LLM inference is very slow on WASM CPU
 

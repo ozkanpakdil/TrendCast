@@ -608,7 +608,7 @@ export interface ExtensionSettings {
   alertCooldownMinutes: number;
   /**
    * Whether to stream debug logs to the local log server
-   * (scripts/log-server.ts, ws://localhost:18080). Debug builds only —
+   * (src/rpc/server.ts, ws://localhost:18080). Debug builds only —
    * the forwarder is stripped from production bundles regardless.
    */
   logServerEnabled: boolean;

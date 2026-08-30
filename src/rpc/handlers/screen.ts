@@ -1,5 +1,6 @@
 /**
- * Debug screen control — lets the log-server drive the extension's UI.
+ * Debug screen control RPC handlers — let the debug reader drive the
+ * extension's UI (dashboard/popup) in the user's RUNNING browser.
  *
  * ⚠️ DEBUG-ONLY. Gated behind `import.meta.env.DEBUG_LOG_FORWARD` (set by
  * vite define for `--mode development` builds). Production builds strip
@@ -7,7 +8,7 @@
  *
  * Architecture (Firefox-safe):
  *
- *   log-server CLI ──ws──► worker RPC handler ──tabs.sendMessage──► page relay
+ *   debug reader ──ws──► worker RPC handler ──tabs.sendMessage──► page relay
  *                                                                    (debug-relay.ts)
  *
  * Why the relay: Firefox refuses `scripting.executeScript` into
@@ -27,8 +28,8 @@
  *   debugOpen    — open/focus an extension page
  */
 
-import { browser } from '@/messaging/browser';
-import { registerRpcHandler } from '@/utils/log-forwarder';
+import { rpc } from '../registry';
+import type { RpcContext } from '../types';
 
 /** Which extension page a debug command targets. */
 type DebugPage = 'dashboard' | 'popup';
@@ -39,33 +40,39 @@ const PAGE_PATHS: Record<DebugPage, string> = {
 };
 
 /** Find open tabs for an extension page (most recently active first). */
-async function findPageTabs(page: DebugPage): Promise<Array<{ id?: number; url?: string; active?: boolean; title?: string; windowId?: number }>> {
+async function findPageTabs(
+  ctx: RpcContext,
+  page: DebugPage,
+): Promise<Array<{ id?: number; url?: string; active?: boolean; title?: string; windowId?: number }>> {
   const path = PAGE_PATHS[page];
-  const tabs = await browser.tabs.query({ url: `*://*/${path}` });
+  const tabs = await ctx.browser.tabs.query({ url: `*://*/${path}` });
   // Firefox matches moz-extension:// URLs with the *://*/path pattern;
   // fall back to a manual filter if the pattern match comes back empty.
   if (tabs.length > 0) return tabs;
-  const all = await browser.tabs.query({});
+  const all = await ctx.browser.tabs.query({});
   return all.filter((t) => typeof t.url === 'string' && t.url.includes(path));
 }
 
 /** Resolve the target tab for a page, opening it if none is open. */
-async function resolveTab(page: DebugPage): Promise<{ id?: number; url?: string; active?: boolean; windowId?: number }> {
-  const tabs = await findPageTabs(page);
+async function resolveTab(
+  ctx: RpcContext,
+  page: DebugPage,
+): Promise<{ id?: number; url?: string; active?: boolean; windowId?: number }> {
+  const tabs = await findPageTabs(ctx, page);
   if (tabs.length > 0) {
     // Prefer the active tab, else the most recently opened.
     return tabs.find((t) => t.active) ?? tabs[tabs.length - 1];
   }
   // No tab open — create one (the extension opening its own page is allowed).
-  const created = await browser.tabs.create({ url: browser.runtime.getURL(PAGE_PATHS[page]) });
+  const created = await ctx.browser.tabs.create({ url: ctx.browser.runtime.getURL(PAGE_PATHS[page]) });
   // Give React a moment to mount before the caller messages the page.
   await new Promise((r) => setTimeout(r, 800));
   return created;
 }
 
 /** Send a relay command to a page and await its response. */
-async function relayToPage<T = unknown>(tabId: number, payload: unknown): Promise<T> {
-  const response = (await browser.tabs.sendMessage(tabId, {
+async function relayToPage<T = unknown>(ctx: RpcContext, tabId: number, payload: unknown): Promise<T> {
+  const response = (await ctx.browser.tabs.sendMessage(tabId, {
     __trendcastDebugRelay: true,
     payload,
   })) as { ok: boolean; value?: T; error?: string } | undefined;
@@ -74,13 +81,15 @@ async function relayToPage<T = unknown>(tabId: number, payload: unknown): Promis
   return response.value as T;
 }
 
-/** All debug RPC handlers, registered at import time (debug builds only). */
-export function setupDebugScreenControl(): void {
-  // List open extension pages.
-  registerRpcHandler('debugTabs', async () => {
+export class ScreenRpc {
+  @rpc('debugTabs', {
+    group: 'screen',
+    description: 'list open extension pages (dashboard/popup)',
+  })
+  async debugTabs(_params: Record<string, unknown>, ctx: RpcContext) {
     const out: Array<{ page: DebugPage; tabId: number | null; url: string; title: string; active: boolean }> = [];
     for (const page of Object.keys(PAGE_PATHS) as DebugPage[]) {
-      const tabs = await findPageTabs(page);
+      const tabs = await findPageTabs(ctx, page);
       for (const t of tabs) {
         out.push({
           page,
@@ -92,67 +101,100 @@ export function setupDebugScreenControl(): void {
       }
     }
     return { tabs: out };
-  });
+  }
 
-  // Full page text (innerText) — for content assertions.
-  registerRpcHandler('debugText', async (params) => {
+  @rpc('debugText', {
+    group: 'screen',
+    description: 'full page text (innerText) of an extension page',
+    params: [
+      { name: 'page', type: 'string', description: 'target page', optional: true, default: 'dashboard', choices: ['dashboard', 'popup'] },
+    ],
+  })
+  async debugText(params: Record<string, unknown>, ctx: RpcContext) {
     const page = (params.page as DebugPage) ?? 'dashboard';
-    const tab = await resolveTab(page);
+    const tab = await resolveTab(ctx, page);
     if (typeof tab.id !== 'number') throw new Error(`debugText: no tab id for ${page}`);
-    const text = await relayToPage<string>(tab.id, { kind: 'text' });
+    const text = await relayToPage<string>(ctx, tab.id, { kind: 'text' });
     return { tabId: tab.id, url: tab.url, text };
-  });
+  }
 
-  // DOM query — selector info (tag/text/visible), optionally text-filtered.
-  registerRpcHandler('debugDom', async (params) => {
+  @rpc('debugDom', {
+    group: 'screen',
+    description: 'query DOM elements (tag/text/visible) in a page',
+    params: [
+      { name: 'selector', type: 'string', description: 'CSS selector' },
+      { name: 'text', type: 'string', description: 'optional text filter', optional: true },
+      { name: 'page', type: 'string', description: 'target page', optional: true, default: 'dashboard', choices: ['dashboard', 'popup'] },
+    ],
+  })
+  async debugDom(params: Record<string, unknown>, ctx: RpcContext) {
     const page = (params.page as DebugPage) ?? 'dashboard';
     const selector = params.selector;
     if (typeof selector !== 'string') throw new Error('debugDom: params.selector (string) required');
     const text = typeof params.text === 'string' ? params.text : null;
-    const tab = await resolveTab(page);
+    const tab = await resolveTab(ctx, page);
     if (typeof tab.id !== 'number') throw new Error(`debugDom: no tab id for ${page}`);
-    const value = await relayToPage<{ count: number; items: unknown[] }>(tab.id, { kind: 'dom', selector, text });
+    const value = await relayToPage<{ count: number; items: unknown[] }>(ctx, tab.id, { kind: 'dom', selector, text });
     return { tabId: tab.id, url: tab.url, count: value.count, items: value.items };
-  });
+  }
 
-  // Synthetic click on an element (works for React handlers).
-  registerRpcHandler('debugClick', async (params) => {
+  @rpc('debugClick', {
+    group: 'screen',
+    description: 'click an element in an extension page',
+    params: [
+      { name: 'selector', type: 'string', description: 'CSS selector' },
+      { name: 'text', type: 'string', description: 'optional text filter', optional: true },
+      { name: 'page', type: 'string', description: 'target page', optional: true, default: 'dashboard', choices: ['dashboard', 'popup'] },
+    ],
+  })
+  async debugClick(params: Record<string, unknown>, ctx: RpcContext) {
     const page = (params.page as DebugPage) ?? 'dashboard';
     const selector = params.selector;
     if (typeof selector !== 'string') throw new Error('debugClick: params.selector (string) required');
     const text = typeof params.text === 'string' ? params.text : null;
-    const tab = await resolveTab(page);
+    const tab = await resolveTab(ctx, page);
     if (typeof tab.id !== 'number') throw new Error(`debugClick: no tab id for ${page}`);
-    const value = await relayToPage(tab.id, { kind: 'click', selector, text });
+    const value = await relayToPage(ctx, tab.id, { kind: 'click', selector, text });
     return { tabId: tab.id, result: value };
-  });
+  }
 
-  // Screenshot an extension page. captureVisibleTab only works on the
-  // ACTIVE tab of a window, so focus the target first when needed.
-  registerRpcHandler('debugCapture', async (params) => {
+  @rpc('debugCapture', {
+    group: 'screen',
+    description: 'screenshot the dashboard/popup → PNG file',
+    params: [
+      { name: 'page', type: 'string', description: 'target page', optional: true, default: 'dashboard', choices: ['dashboard', 'popup'] },
+    ],
+  })
+  async debugCapture(params: Record<string, unknown>, ctx: RpcContext) {
     const page = (params.page as DebugPage) ?? 'dashboard';
-    const tab = await resolveTab(page);
+    const tab = await resolveTab(ctx, page);
     if (typeof tab.id !== 'number') throw new Error(`debugCapture: no tab id for ${page}`);
     if (!tab.active) {
-      await browser.tabs.update(tab.id, { active: true });
+      await ctx.browser.tabs.update(tab.id, { active: true });
       await new Promise((r) => setTimeout(r, 300));
     }
-    const dataUrl = await browser.tabs.captureVisibleTab(tab.windowId);
+    const dataUrl = await ctx.browser.tabs.captureVisibleTab(tab.windowId);
     return { tabId: tab.id, dataUrl };
-  });
+  }
 
-  // Open or focus an extension page.
-  registerRpcHandler('debugOpen', async (params) => {
+  @rpc('debugOpen', {
+    group: 'screen',
+    description: 'open or focus an extension page',
+    params: [
+      { name: 'page', type: 'string', description: 'target page', optional: true, default: 'dashboard', choices: ['dashboard', 'popup'] },
+    ],
+  })
+  async debugOpen(params: Record<string, unknown>, ctx: RpcContext) {
     const page = (params.page as DebugPage) ?? 'dashboard';
-    const tabs = await findPageTabs(page);
+    const tabs = await findPageTabs(ctx, page);
     if (tabs.length > 0) {
       const target = tabs.find((t) => t.active) ?? tabs[tabs.length - 1];
       if (typeof target.id === 'number') {
-        await browser.tabs.update(target.id, { active: true });
+        await ctx.browser.tabs.update(target.id, { active: true });
         return { opened: false, focused: true, tabId: target.id };
       }
     }
-    const created = await browser.tabs.create({ url: browser.runtime.getURL(PAGE_PATHS[page]) });
+    const created = await ctx.browser.tabs.create({ url: ctx.browser.runtime.getURL(PAGE_PATHS[page]) });
     return { opened: true, focused: false, tabId: created.id ?? null };
-  });
+  }
 }

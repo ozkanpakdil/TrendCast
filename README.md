@@ -256,7 +256,46 @@ once — the MV3 background worker is ephemeral and wakes on any event.
 > any page. Pasting a `console.log` override into the dashboard DevTools
 > console does NOT capture worker logs. The forwarder patches `console.*`
 > inside the worker itself. It is debug-only and never ships.
+### RPC library architecture (`src/rpc/`)
 
+The RPC surface is a small **decorator-based library** — the single source
+of truth for every debug command. Each RPC is declared once as a class
+method with a `@rpc` decorator:
+
+```ts
+export class CoreRpc {
+  @rpc('getVersion', { group: 'core', description: 'extension build version + user agent' })
+  getVersion(_params, ctx) { ... }
+}
+```
+
+The decorator self-registers each method into a registry
+(`src/rpc/registry.ts`). Two consumers read the same registry:
+
+- **The debug reader** (`src/rpc/server.ts`) scans `./handlers` at runtime
+  and dynamic-imports every file — zero-touch auto-discovery (like a Java
+  classpath scan). It auto-builds its CLI (`help`, param parsing, dispatch)
+  from the registry, so **adding a new RPC = adding one decorated method**.
+  No barrel update, no server-side `switch` to maintain.
+- **The background worker** imports a static barrel
+  (`src/rpc/definitions.ts`) that side-effect-imports every handler, since
+  the Vite-bundled worker can't fs-scan.
+
+Handlers receive an injected `RpcContext` (see `src/rpc/types.ts`) so they
+never import the browser/background directly — which is what lets the debug
+reader import the library in Node without pulling in the webextension
+polyfill.
+
+> 💡 **Future extraction (not done yet):** the generic skeleton — the
+> `@rpc` decorator + registry + the auto-discovering server loop — is
+> ~250 lines and genuinely reusable across extensions. If we build a
+> second extension, we could extract it into a standalone package (e.g.
+> `webext-debug-rpc`) and keep only the handlers app-side. We checked npm
+> and nothing exists that combines decorator auto-discovery + a WebSocket
+> bridge to a running extension + an auto-generated CLI, so it would fill
+> a real gap. For now it stays in-repo — the handlers are the bulk (~1000
+> lines) and are TrendCast-specific, so extraction only pays off at 3+
+> extensions.
 ## �📸 Screenshots & Documentation
 
 The full documentation site is hosted on GitHub Pages at

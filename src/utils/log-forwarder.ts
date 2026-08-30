@@ -27,7 +27,7 @@
  * { type: "rpc-error", id, method, error }.
  *
  * Server (run in a terminal):
- *   bun run scripts/log-server.ts
+ *   bun run src/rpc/server.ts
  *   # listens on ws://localhost:18080, prints logs, accepts commands
  */
 
