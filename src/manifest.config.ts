@@ -44,6 +44,13 @@ declare const process: { env: Record<string, string | undefined> } | undefined;
 const isFirefox =
   (typeof process !== 'undefined' && process.env?.TARGET === 'firefox') ?? false;
 
+// Debug builds set DEBUG_BUILD=1 (see package.json build:debug* scripts).
+// Debug-only manifest additions: <all_urls> host permission unlocks
+// tabs.captureVisibleTab (screenshots) in Firefox; 'capture' is the
+// Chrome equivalent. Never present in production builds.
+const isDebugBuild =
+  (typeof process !== 'undefined' && process.env?.DEBUG_BUILD === '1') ?? false;
+
 export default defineManifest({
   manifest_version: 3,
   name: pkg.displayName ?? 'TrendCast',
@@ -160,6 +167,11 @@ export default defineManifest({
   // These allow content scripts to run on these sites AND allow the
   // background worker to open background tabs to these URLs for scraping.
   // The user's existing login sessions are used automatically — no API keys.
+  // Host permissions — declared separately per MV3 spec.
+  // ⚠️ These trigger user consent prompts on install.
+  // These allow content scripts to run on these sites AND allow the
+  // background worker to open background tabs to these URLs for scraping.
+  // The user's existing login sessions are used automatically — no API keys.
   host_permissions: [
     // Prediction markets (user's own session if logged in)
     'https://*.polymarket.com/*',
@@ -184,6 +196,9 @@ export default defineManifest({
     'https://cdn-lfs.huggingface.co/*',
     'https://cdn-lfs-us-1.huggingface.co/*',
     'https://cdn-lfs-eu-1.huggingface.co/*',
+    // Debug builds only: unlocks tabs.captureVisibleTab for the log-server
+    // screenshot RPC (Firefox requires <all_urls> to expose the API).
+    ...(isDebugBuild ? ['<all_urls>'] : []),
   ],
 
   // ── Web Accessible Resources ───────────────────────────────────

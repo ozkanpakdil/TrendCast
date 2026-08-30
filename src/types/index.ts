@@ -279,6 +279,12 @@ export interface CorrelationResult {
    * or switch to the heuristic engine.
    */
   error?: string;
+  /** Epoch ms when the result was persisted (Phase 16, TRIG-01). */
+  computedAt?: number;
+  /** Model ID used (empty/omitted for heuristic). */
+  model?: string;
+  /** Per-source input sizes captured at run time (Phase 16, TRIG-01). */
+  inputCounts?: { markets: number; signals: number; news: number };
 }
 
 /**

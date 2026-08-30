@@ -49,6 +49,7 @@ import { browser } from '@/messaging/browser';
 import { sendMessage } from '@/messaging';
 import { downloadExport } from '@/utils/export';
 import { deepMergeSettings } from '@/utils/settings';
+import { hasFreshAnalysis } from '@/utils/correlation-persistence';
 import { computeBridgingCoverage, computeCorrelatedCounts } from '@/utils/source-health';
 
 // Build-time version stamp injected by Vite's define.
@@ -56,6 +57,18 @@ import { computeBridgingCoverage, computeCorrelatedCounts } from '@/utils/source
 const BUILD_VERSION = import.meta.env.BUILD_VERSION ?? 'dev';
 
 type Tab = 'feed' | 'markets' | 'news' | 'correlations' | 'watchlist' | 'alerts' | 'market-news' | 'history' | 'community' | 'faq' | 'settings';
+
+/** Format relative time (e.g., "2h ago", "3d ago"). Copied from CorrelationPanel. */
+function timeAgo(epochMs: number): string {
+  if (!epochMs) return '';
+  const diff = Date.now() - epochMs;
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ago`;
+}
 
 /** Human-readable label for ML correlation phases. */
 function phaseLabel(phase: string): string {
@@ -137,7 +150,7 @@ function filterNewsNewsMatches(
 
 export function App() {
   const { snapshot, loading, error: snapshotError, collecting, lastCollectionAt, triggerCollection } = useSnapshot();
-  const { correlations, loading: corrLoading, error: corrError, progress: corrProgress, elapsedMs, runCorrelation, cancelCorrelation, runStats, runHistory } = useCorrelations();
+  const { correlations, loading: corrLoading, loaded: corrLoaded, error: corrError, progress: corrProgress, elapsedMs, runCorrelation, cancelCorrelation, runStats, runHistory } = useCorrelations();
   const { alerts, loading: alertsLoading, error: alertsError, clearAlerts } = useAlerts();
   const { view: marketNewsView, loading: marketNewsLoading } = useMarketNews();
   const [activeTab, setActiveTab] = useState<Tab>('feed');
@@ -200,9 +213,18 @@ export function App() {
   useEffect(() => {
     // Only run once per dashboard session, and only if we have data
     if (corrInitRef.current) return;
+    // Phase 16 (TRIG-02): wait for the mount-load to settle so we can tell
+    // "cache not read yet" from "no stored analysis".
+    if (!corrLoaded) return;
     if (!snapshot) return;
     if (snapshot.markets.length === 0 && snapshot.signals.length === 0) return;
+    // Set the ref BEFORE the freshness check so the gate is evaluated exactly
+    // once per session — a mid-session manual failure cannot re-trigger an
+    // auto-run.
     corrInitRef.current = true;
+    // Skip the auto-run when a stored non-error analysis already exists —
+    // the cached results render instantly and no CORRELATE_ALL is sent.
+    if (hasFreshAnalysis(correlations)) return;
     // Fire and forget — the hook loads cached results from storage first,
     // and this ensures a fresh computation in the background.
     const initModel =
@@ -213,7 +235,7 @@ export function App() {
       : settings.embeddingModel;
     runCorrelation(settings.correlationEngine, initModel);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [snapshot]);
+  }, [snapshot, corrLoaded]);
 
   const toggleTheme = useCallback(async () => {
     const newTheme: ThemeMode = theme === 'dark' ? 'light' : 'dark';
@@ -472,6 +494,16 @@ export function App() {
                     🔗 Correlated Signals & News
                   </h2>
                   <div className="flex items-center gap-2">
+                    {/* Phase 16 (TRIG-04): freshness badge from the stored result */}
+                    {correlations && !corrLoading && (
+                      <span className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                        {typeof correlations.computedAt === 'number'
+                          ? `⏱ computed ${timeAgo(correlations.computedAt)} · ${correlations.engine ?? 'unknown engine'}`
+                            + (correlations.model ? ` · ${correlations.model}` : '')
+                            + (typeof lastCollectionAt === 'number' && correlations.computedAt < lastCollectionAt ? ' · ⚠ stale' : '')
+                          : `⏱ computed: unknown age · ${correlations.engine ?? 'unknown engine'}`}
+                      </span>
+                    )}
                     {/* Engine selector */}
                     <select
                       value={settings.correlationEngine}

@@ -54,6 +54,12 @@ import { backfillWatchlist } from '@/utils/watchlist';
 import { getSettingsFromStorage, migrateEnabledSourcesFromStorage, migrateCorrelationEngine, migrateLLMModel } from '@/utils/settings';
 import { MlRunQueue } from '@/utils/ml-run-queue';
 import { readMlRunState, writeMlRunState, clearMlRunState, isOrphanedRunState, type MlRunState } from '@/utils/ml-run-state';
+import {
+  stampCorrelationResult,
+  persistCorrelationResult,
+  readStoredAnalysis,
+  shouldTriggerReanalysis,
+} from '@/utils/correlation-persistence';
 import { evaluateAlerts, evaluateCrossSourceAlerts, dispatchAlerts, broadcastAlerts, clearAlerts, updateBadge, getAlertHistory } from '@/background/alerts';
 import { buildMarketDrivenNews } from '@/background/correlationNews';
 import { mergeMarkets, mergeSignals, mergeNews } from '@/background/merge';
@@ -69,6 +75,12 @@ import MLWorker from '@/workers/ml-worker?worker';
 // production builds (gated by import.meta.env.DEBUG_LOG_FORWARD).
 import '@/utils/log-forwarder';
 import { registerRpcHandler } from '@/utils/log-forwarder';
+import { setupDebugScreenControl } from '@/utils/debug-screen';
+
+// Debug-only screen control: exposes tabs/eval/capture/click RPCs so the
+// log-server CLI can drive the extension's own pages (dashboard/popup) in
+// the user's RUNNING browser. No-op in production builds.
+setupDebugScreenControl();
 
 // ── Debug RPC handlers (debug builds only) ───────────────────────
 // The log-forwarder's WebSocket bridge accepts commands from the local
@@ -330,6 +342,173 @@ registerRpcHandler('benchmarkResults', async () => {
   return stored[CONFIG.storage.modelBenchmark] ?? { empty: true };
 });
 
+// ── Phase 16 debug RPCs (debug builds only) ──────────────────────
+// Inspect and manipulate the persisted correlation state so the
+// log-server CLI can exercise the persistence + trigger paths
+// (TRIG-01..04) without touching the dashboard UI.
+
+/** Summarised view of the stored correlation result. */
+function summarizeCorrelation(stored: NonNullable<Awaited<ReturnType<typeof readStoredAnalysis>>>) {
+  return {
+    requestId: stored.requestId,
+    engine: stored.engine,
+    model: stored.model,
+    error: stored.error ?? null,
+    computedAt: stored.computedAt ?? null,
+    ageMs: typeof stored.computedAt === 'number' ? Date.now() - stored.computedAt : null,
+    inputCounts: stored.inputCounts ?? null,
+    counts: {
+      matches: stored.matches.length,
+      newsMatches: stored.newsMatches.length,
+      newsSocialMatches: stored.newsSocialMatches.length,
+      newsNewsMatches: stored.newsNewsMatches.length,
+    },
+  };
+}
+
+registerRpcHandler('getCorrelations', async () => {
+  const stored = await readStoredAnalysis(browser.storage.local, CONFIG.storage.correlations);
+  if (!stored) return { empty: true };
+  return summarizeCorrelation(stored);
+});
+
+// Seed a synthetic stored result to exercise the dashboard gate/badge and
+// the re-analysis trigger without running a real engine. Params:
+//   engine   — stamped engine (default 'heuristic')
+//   model    — stamped model id (default none)
+//   staleMs  — backdate computedAt by this many ms (default 0 = now)
+//   error    — when set, seeds an ERROR result (tests the write policy +
+//              the "error never suppresses re-analysis" rule)
+//   requestId — override the marker id (default seed-<ts>)
+registerRpcHandler('seedCorrelations', async (params) => {
+  const engine = (params.engine as CorrelationResult['engine']) ?? 'heuristic';
+  const model = typeof params.model === 'string' ? params.model : undefined;
+  const staleMs = typeof params.staleMs === 'number' ? params.staleMs : 0;
+  const error = typeof params.error === 'string' ? params.error : undefined;
+  const requestId = (params.requestId as string) ?? `seed-${Date.now()}`;
+  const seeded: CorrelationResult = {
+    requestId,
+    matches: [],
+    newsMatches: [],
+    newsSocialMatches: [],
+    newsNewsMatches: [],
+    engine,
+    ...(model !== undefined ? { model } : {}),
+    ...(error !== undefined ? { error } : {}),
+    computedAt: Date.now() - staleMs,
+    inputCounts: { markets: 0, signals: 0, news: 0 },
+  };
+  // Deliberate raw write — seeding must bypass the persist write policy so
+  // an error result can be planted even when a good result exists.
+  await browser.storage.local.set({ [CONFIG.storage.correlations]: seeded });
+  console.log('[TrendCast] RPC: seedCorrelations', { requestId, engine, model, staleMs, error });
+  return { seeded: true, result: summarizeCorrelation(seeded) };
+});
+
+registerRpcHandler('clearCorrelations', async () => {
+  await browser.storage.local.remove(CONFIG.storage.correlations);
+  console.log('[TrendCast] RPC: clearCorrelations — stored result removed');
+  return { cleared: true };
+});
+
+registerRpcHandler('getRunState', async () => {
+  const marker = await readMlRunState(browser.storage.local, CONFIG.storage.mlRunState);
+  return {
+    marker,
+    live: marker !== null,
+    activeRequestId: mlRunQueue.activeRequestId,
+    queuedRequestIds: mlRunQueue.queuedRequestIds,
+  };
+});
+
+registerRpcHandler('getLastCollection', async () => {
+  const result = await browser.storage.local.get([
+    CONFIG.storage.lastCollectionAt,
+    CONFIG.storage.latestSnapshot,
+  ]);
+  const lastCollectionAt = result[CONFIG.storage.lastCollectionAt] as number | undefined;
+  const snapshot = result[CONFIG.storage.latestSnapshot] as CollectionSnapshot | undefined;
+  const collectedAt = snapshot?.collectedAt;
+  return {
+    lastCollectionAt: typeof lastCollectionAt === 'number' ? lastCollectionAt : null,
+    snapshotCollectedAt: typeof collectedAt === 'number' ? collectedAt : null,
+    ageMs: typeof collectedAt === 'number' ? Date.now() - collectedAt : null,
+    counts: snapshot
+      ? {
+          markets: snapshot.markets.length,
+          signals: snapshot.signals.length,
+          news: snapshot.news.length,
+        }
+      : null,
+  };
+});
+
+// Dry-run of the Phase 16 trigger decision (TRIG-03 pre-filter + liveness)
+// — shows exactly what the dashboard's storage.onChanged listener would do
+// for the CURRENT stored state, with a human-readable reason.
+registerRpcHandler('evaluateTrigger', async () => {
+  const stored = await readStoredAnalysis(browser.storage.local, CONFIG.storage.correlations);
+  const marker = await readMlRunState(browser.storage.local, CONFIG.storage.mlRunState);
+  const liveness = { live: marker !== null, queued: mlRunQueue.queuedRequestIds.length > 0 };
+  const result = await browser.storage.local.get([
+    CONFIG.storage.lastCollectionAt,
+    CONFIG.storage.latestSnapshot,
+  ]);
+  const snap = result[CONFIG.storage.latestSnapshot] as CollectionSnapshot | undefined;
+  const lastCollectionAt = result[CONFIG.storage.lastCollectionAt] as number | undefined;
+  // Same precedence as the dashboard listener: snapshot.collectedAt wins,
+  // lastCollectionAt is the fallback.
+  const snapshotCollectedAt =
+    snap && typeof snap.collectedAt === 'number'
+      ? snap.collectedAt
+      : typeof lastCollectionAt === 'number'
+        ? lastCollectionAt
+        : null;
+  const shouldTrigger = shouldTriggerReanalysis({ liveness, stored, snapshotCollectedAt });
+  let reason: string;
+  if (liveness.live || liveness.queued) reason = 'run-live-or-queued';
+  else if (snapshotCollectedAt === null) reason = 'no-collection-timestamp';
+  else if (!stored) reason = 'no-stored-result';
+  else if (stored.error) reason = 'stored-result-is-error';
+  else if (typeof stored.computedAt !== 'number' || !Number.isFinite(stored.computedAt)) {
+    reason = 'legacy-result-no-computedAt';
+  } else if (stored.computedAt < snapshotCollectedAt) reason = 'stale-result';
+  else reason = 'fresh';
+  return {
+    shouldTrigger,
+    reason,
+    liveness,
+    snapshotCollectedAt,
+    storedComputedAt: stored?.computedAt ?? null,
+  };
+});
+
+// Exercise the exact post-collection precompute path (TRIG-01/02): loads
+// the current collected data, runs the settings engine/model, stamps +
+// persists through the write policy, broadcasts, sweeps alerts, rebuilds
+// the market-news view. Awaits completion so the CLI sees the final state.
+registerRpcHandler('triggerPrecompute', async () => {
+  const settings = await getSettings();
+  const markets = await getCollectedMarkets();
+  const signals = await getCollectedSignals();
+  const news = await getCollectedNews();
+  console.log('[TrendCast] RPC: triggerPrecompute', {
+    engine: settings.correlationEngine,
+    markets: markets.length,
+    signals: signals.length,
+    news: news.length,
+  });
+  if (markets.length === 0 || (signals.length === 0 && news.length === 0)) {
+    return { started: false, error: 'No collected data — run collectNow first.' };
+  }
+  await runCorrelationPrecompute(markets, signals, news, settings);
+  const stored = await readStoredAnalysis(browser.storage.local, CONFIG.storage.correlations);
+  return {
+    started: true,
+    persisted: stored ? summarizeCorrelation(stored) : null,
+  };
+});
+
 // ── Register all listeners synchronously at top level ────────────
 setupAlarms();
 setupMessageHandlers();
@@ -354,10 +533,22 @@ void (async () => {
         requestId: marker.requestId,
         error: 'Correlation run was interrupted (browser stopped the background worker). Please run the analysis again.',
       };
-      await browser.storage.local.set({ [CONFIG.storage.correlations]: interruptedResult });
+      // Phase 16 (TRIG-01): persist through the write-policy helper — an
+      // interrupted-error result must never clobber a stored non-error result.
+      const stampedInterrupted = stampCorrelationResult(interruptedResult, { model: marker.model });
+      const persistedInterrupted = await persistCorrelationResult(
+        browser.storage.local,
+        CONFIG.storage.correlations,
+        stampedInterrupted,
+      );
+      if (!persistedInterrupted) {
+        console.warn(
+          '[TrendCast] Kept existing non-error correlation result; interrupted-error result not persisted.',
+        );
+      }
       browser.runtime.sendMessage({
         type: 'CORRELATION_RESULT',
-        payload: interruptedResult,
+        payload: stampedInterrupted,
       }).catch(() => {});
     }
   } catch (err) {
@@ -863,6 +1054,23 @@ function setupInstallHandler(): void {
     browser.alarms.create(CONFIG.collection.alarmName, {
       periodInMinutes: CONFIG.collection.defaultIntervalMinutes,
     });
+
+    // Debug builds: auto-open the dashboard when the extension is (temporarily)
+    // installed. Firefox blocks ALL external navigation to moz-extension://
+    // URLs (geckodriver, WebDriver BiDi, CDP — every automation protocol), so
+    // automation drivers cannot open extension pages themselves. The extension
+    // opening its own page IS allowed, and the driver then attaches to the
+    // already-open tab. Stripped from production builds.
+    if (import.meta.env.DEBUG_LOG_FORWARD === true) {
+      try {
+        await browser.tabs.create({
+          url: browser.runtime.getURL('src/dashboard/index.html'),
+        });
+        console.log('[TrendCast] Debug: dashboard auto-opened for automation');
+      } catch (err) {
+        console.error('[TrendCast] Debug: failed to auto-open dashboard:', err);
+      }
+    }
   });
 
   // Phase 4: clicking an alert notification opens the dashboard.
@@ -1053,16 +1261,32 @@ async function runCorrelationAsync(
       result.requestId = requestId;
     }
 
-    await browser.storage.local.set({ [CONFIG.storage.correlations]: result });
+    // Phase 16 (TRIG-01): persist through the write-policy helper with
+    // freshness metadata. The helper never throws — a persistence failure
+    // cannot break this terminal path.
+    const stamped = stampCorrelationResult(result, {
+      model,
+      inputCounts: { markets: markets.length, signals: signals.length, news: news.length },
+    });
+    const persisted = await persistCorrelationResult(
+      browser.storage.local,
+      CONFIG.storage.correlations,
+      stamped,
+    );
+    if (!persisted) {
+      console.warn(
+        '[TrendCast] Kept existing non-error correlation result; incoming result not persisted.',
+      );
+    }
 
     // Broadcast the result to any listening dashboard/popup tabs
     console.log('[TrendCast] Broadcasting CORRELATION_RESULT:', {
-      requestId: result.requestId,
-      matches: result.matches.length,
+      requestId: stamped.requestId,
+      matches: stamped.matches.length,
     });
     browser.runtime.sendMessage({
       type: 'CORRELATION_RESULT',
-      payload: result,
+      payload: stamped,
     }).catch((err) => {
       console.error('[TrendCast] CORRELATION_RESULT sendMessage failed:', err);
     });
@@ -1096,10 +1320,23 @@ async function runCorrelationAsync(
       requestId, // Phase 15: stamp the id so the UI can scope this terminal state
       error: err instanceof Error ? err.message : String(err),
     };
-    await browser.storage.local.set({ [CONFIG.storage.correlations]: errorResult });
+    // Phase 16 (TRIG-01): persist through the write-policy helper — an error
+    // result must never overwrite a stored non-error result. inputCounts are
+    // not available here (data loads inside the try block).
+    const stampedError = stampCorrelationResult(errorResult, { engine, model });
+    const persistedError = await persistCorrelationResult(
+      browser.storage.local,
+      CONFIG.storage.correlations,
+      stampedError,
+    );
+    if (!persistedError) {
+      console.warn(
+        '[TrendCast] Kept existing non-error correlation result; error result not persisted.',
+      );
+    }
     browser.runtime.sendMessage({
       type: 'CORRELATION_RESULT',
-      payload: errorResult,
+      payload: stampedError,
     }).catch(() => {});
   } finally {
     // Phase 15: terminal path reached (success, ML error, or cancel) —
@@ -1236,9 +1473,46 @@ async function runCorrelationPrecompute(
     : engine === 'ner' ? settings.nerModel
     : engine === 'llm' ? settings.llmModel
     : settings.embeddingModel;
-  const result = await runCorrelationWithEngine(markets, signals, news, engine, model, `precompute-${Date.now()}`);
 
-  await browser.storage.local.set({ [CONFIG.storage.correlations]: result });
+  // Phase 16 (TRIG-01): every terminal path persists a stamped result. A
+  // thrown precompute is converted into a terminal error result so the
+  // dashboard always settles, and persistence goes through the write-policy
+  // helper so an error never clobbers a stored non-error result.
+  let result: CorrelationResult;
+  try {
+    result = await runCorrelationWithEngine(markets, signals, news, engine, model, `precompute-${Date.now()}`);
+  } catch (err) {
+    result = {
+      matches: [],
+      newsMatches: [],
+      newsSocialMatches: [],
+      newsNewsMatches: [],
+      engine,
+      requestId: `precompute-${Date.now()}`,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+
+  const stamped = stampCorrelationResult(result, {
+    model,
+    inputCounts: { markets: markets.length, signals: signals.length, news: news.length },
+  });
+  const persisted = await persistCorrelationResult(
+    browser.storage.local,
+    CONFIG.storage.correlations,
+    stamped,
+  );
+  if (!persisted) {
+    console.warn(
+      '[TrendCast] Kept existing non-error correlation result; precompute result not persisted.',
+    );
+  }
+
+  // Broadcast so any open dashboard updates without a manual re-run.
+  browser.runtime.sendMessage({
+    type: 'CORRELATION_RESULT',
+    payload: stamped,
+  }).catch(() => {});
 
   // Phase 4: evaluate the fresh result against the watchlist and dispatch
   // any new alerts (badge fallback if notifications are denied).
@@ -1247,13 +1521,13 @@ async function runCorrelationPrecompute(
   // Phase 5: rebuild the derived market-driven news snapshot.
   await rebuildMarketNewsView();
 
-  if (result.error) {
+  if (stamped.error) {
     console.warn(
-      `[TrendCast] Pre-compute (${engine}) failed: ${result.error} — ${result.matches.length} results`,
+      `[TrendCast] Pre-compute (${engine}) failed: ${stamped.error} — ${stamped.matches.length} results`,
     );
   } else {
     console.log(
-      `[TrendCast] Pre-computed (${engine}) ${result.matches.length} signal→market, ${result.newsMatches.length} news→market, ${result.newsSocialMatches.length} news→social, ${result.newsNewsMatches.length} news↔news`,
+      `[TrendCast] Pre-computed (${engine}) ${stamped.matches.length} signal→market, ${stamped.newsMatches.length} news→market, ${stamped.newsSocialMatches.length} news→social, ${stamped.newsNewsMatches.length} news↔news`,
     );
   }
 }

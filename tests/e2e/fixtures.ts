@@ -252,6 +252,11 @@ export const MOCK_CORRELATIONS = {
     },
   ],
   engine: 'heuristic',
+  // Phase 16 (TRIG-01/TRIG-04): freshness metadata matching MOCK_SNAPSHOT
+  // array lengths (2 markets, 3 signals, 2 news).
+  computedAt: Date.now(),
+  model: '',
+  inputCounts: { markets: 2, signals: 3, news: 2 },
 };
 
 // ── Mock injection ────────────────────────────────────────────────
@@ -362,6 +367,23 @@ export function mockBrowserApiScript(
     hasListener: function(fn) { return __changeListeners.indexOf(fn) >= 0; },
   };
 
+  // Phase 16 (TRIG-03): record storage change events for the keys the
+  // dashboard's re-analysis trigger listens on, so specs can assert the
+  // listener saw the collection event.
+  __changeListeners.push(function(changes, area) {
+    var watched = {
+      'trendcast:correlations': true,
+      'trendcast:latest-snapshot': true,
+      'trendcast:last-collection': true,
+    };
+    Object.keys(changes).forEach(function(k) {
+      if (watched[k]) {
+        globalThis.__trendcastStorageEvents = globalThis.__trendcastStorageEvents || [];
+        globalThis.__trendcastStorageEvents.push({ key: k, area: area });
+      }
+    });
+  });
+
   // ── Message handlers ───────────────────────────────────────
   // Canned responses for known message types.
   var __messageHandlers = [];
@@ -379,9 +401,54 @@ export function mockBrowserApiScript(
     'CANCEL_CORRELATION': { ok: true, data: { cancelled: true } },
   };
 
+  // Phase 16 (TRIG-03): opt-in mock liveness simulation. Custom handlers are
+  // checked before cannedResponses, and runtimeSendMessage resolves with a
+  // handler-returned Promise, chaining the delay. With
+  // globalThis.__trendcastSlowCorrelation unset (the default), behavior is
+  // identical to the canned responses — instant CORRELATE_ALL, live:false
+  // run-state — so every pre-existing test is unaffected. The flag is
+  // page-scoped (fresh page per test), so no cleanup is needed.
+  __messageHandlers.push(function(msg) {
+    var type = msg && msg.type;
+    if (type === 'CORRELATE_ALL' && globalThis.__trendcastSlowCorrelation === true) {
+      globalThis.__trendcastCorrelationLive = true;
+      var payload = deepClone(cannedResponses['CORRELATE_ALL']);
+      return new Promise(function(resolve) {
+        setTimeout(function() {
+          globalThis.__trendcastCorrelationLive = false;
+          resolve(payload);
+        }, 1500);
+      });
+    }
+    if (type === 'CORRELATION_RUN_STATE') {
+      // Wire format matches src/messaging/index.ts: the background handler
+      // returns the bare object and the messaging layer wraps it in
+      // { ok, data } — so the hook's 'ok'-presence unwrap reads resp.data.
+      var live = globalThis.__trendcastCorrelationLive === true;
+      return {
+        ok: true,
+        data: {
+          live: live,
+          queued: false,
+          requestId: live ? 'mock-live-run' : null,
+          activeRequestId: live ? 'mock-live-run' : null,
+        },
+      };
+    }
+    return undefined;
+  });
+
   var runtimeSendMessage = function(msg) {
     return new Promise(function(resolve, reject) {
       var type = msg && msg.type;
+      // Phase 16 (TRIG-02): count CORRELATE_ALL invocations. This MUST stay at
+      // the TOP of runtimeSendMessage — before the custom __messageHandlers
+      // loop AND before the canned-response lookup — because a custom handler
+      // serving CORRELATE_ALL causes an early return, so any increment placed
+      // after the loop never runs for handler-served calls.
+      if (type === 'CORRELATE_ALL') {
+        globalThis.__trendcastCorrelateAllCalls = (globalThis.__trendcastCorrelateAllCalls || 0) + 1;
+      }
       // Check custom handlers first
       for (var i = 0; i < __messageHandlers.length; i++) {
         var handler = __messageHandlers[i];

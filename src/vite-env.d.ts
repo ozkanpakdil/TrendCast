@@ -3,6 +3,7 @@
 interface ImportMetaEnv {
   readonly IS_FIREFOX?: boolean;
   readonly BUILD_VERSION?: string;
+  readonly DEBUG_LOG_FORWARD?: boolean;
 }
 
 interface ImportMeta {

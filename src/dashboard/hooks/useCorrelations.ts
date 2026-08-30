@@ -17,6 +17,7 @@ import type { CorrelationResult as CorrelationResultType, CorrelationEngine, Cor
 import { sendMessage } from '@/messaging';
 import { browser } from '@/messaging/browser';
 import { CONFIG } from '@/config';
+import { readStoredAnalysis, shouldTriggerReanalysis } from '@/utils/correlation-persistence';
 
 export interface CorrelationProgress {
   phase: string;
@@ -100,10 +101,30 @@ export function useCorrelations() {
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<CorrelationProgress | null>(null);
   const [elapsedMs, setElapsedMs] = useState(0);
+  // Phase 16 (TRIG-02): set once the mount-load settles so the App auto-run
+  // gate can distinguish "cache not read yet" from "no stored analysis".
+  const [loaded, setLoaded] = useState(false);
 
   const startTimeRef = useRef<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const requestIdRef = useRef<string | null>(null);
+  // Phase 16 (TRIG-03): the last result applied through applyResult, used by
+  // the storage.onChanged listener to skip an identical re-broadcast echo.
+  const lastAppliedRef = useRef<{ requestId?: string; computedAt?: number } | null>(null);
+  // Phase 16 (TRIG-03): true while a snapshot-trigger evaluation is awaiting
+  // its liveness check — closes the pre-filter→response race for stacked
+  // snapshot events (the pure guard cannot see this race).
+  const triggerInFlightRef = useRef(false);
+  // Phase 16 (TRIG-03): the onChanged listener's async continuations check
+  // this before touching state or calling runCorrelation, so a listener
+  // firing after unmount cannot setState.
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   // Load pre-computed correlations + run history from storage on mount.
   useEffect(() => {
@@ -120,7 +141,8 @@ export function useCorrelations() {
           setRunHistory(history);
         }
       })
-      .catch((err) => console.error('[TrendCast] Failed to load cached correlations:', err));
+      .catch((err) => console.error('[TrendCast] Failed to load cached correlations:', err))
+      .finally(() => setLoaded(true));
   }, []);
 
   // Elapsed time ticker
@@ -159,6 +181,12 @@ export function useCorrelations() {
     }
 
     setCorrelations(corrResult);
+    // Phase 16 (TRIG-03): record the applied identity so the onChanged
+    // listener can dedupe an identical re-broadcast of this result.
+    lastAppliedRef.current = {
+      requestId: corrResult.requestId,
+      computedAt: corrResult.computedAt,
+    };
     setError(corrResult.error ?? null);
 
     const elapsed = startTimeRef.current ? Date.now() - startTimeRef.current : 0;
@@ -351,5 +379,108 @@ export function useCorrelations() {
     requestIdRef.current = null;
   }, [stopTimer]);
 
-  return { correlations, loading, error, progress, elapsedMs, runCorrelation, cancelCorrelation, runStats, runHistory };
+  // Keep the latest runCorrelation in a ref so the storage.onChanged
+  // trigger never captures a stale closure.
+  const runCorrelationRef = useRef(runCorrelation);
+  runCorrelationRef.current = runCorrelation;
+
+  // Phase 16 (TRIG-03): storage.onChanged listener — two branches, mirroring
+  // the useSnapshot listener pattern (register once, clean up on unmount).
+  // Branch A: the correlations key changed (this tab's run, the background
+  // precompute, or a re-broadcast echo). Route through applyResultRef so the
+  // requestId/shape guard stays the single entry point for stored-result
+  // updates — never setCorrelations directly from this listener.
+  // Branch B: a snapshot key changed (a collection completed). Evaluate the
+  // pure shouldTriggerReanalysis pre-filter, confirm with the background's
+  // CORRELATION_RUN_STATE liveness, then re-run the analysis. With no
+  // explicit engine/model the background resolves the current settings
+  // engine/model — the same resolution the manual/auto paths rely on.
+  useEffect(() => {
+    const listener = (changes: Record<string, { newValue?: unknown }>, areaName: string) => {
+      if (areaName !== 'local') return;
+
+      // ── Branch A: stored correlation result changed ──
+      const corrChange = changes[CONFIG.storage.correlations];
+      if (corrChange && corrChange.newValue) {
+        const newValue = corrChange.newValue;
+        if (
+          newValue &&
+          typeof newValue === 'object' &&
+          Array.isArray((newValue as { matches?: unknown }).matches)
+        ) {
+          // Echo dedupe: an identical re-broadcast (same requestId AND
+          // computedAt) of the already-applied result is a no-op instead of
+          // a re-render + duplicate run-stats entry.
+          const incoming = newValue as CorrelationResultType;
+          const last = lastAppliedRef.current;
+          const isEcho =
+            last !== null &&
+            incoming.requestId !== undefined &&
+            incoming.computedAt !== undefined &&
+            incoming.requestId === last.requestId &&
+            incoming.computedAt === last.computedAt;
+          if (!isEcho) {
+            applyResultRef.current(incoming);
+          }
+        }
+      }
+
+      // ── Branch B: a collection completed (snapshot keys changed) ──
+      const snapChange = changes[CONFIG.storage.latestSnapshot];
+      const lastCollChange = changes[CONFIG.storage.lastCollectionAt];
+      if (!snapChange && !lastCollChange) return;
+      // A previous trigger evaluation is still awaiting its liveness check —
+      // skip this stacked snapshot event.
+      if (triggerInFlightRef.current) return;
+      const rawCollectedAt =
+        snapChange?.newValue && typeof snapChange.newValue === 'object'
+          ? (snapChange.newValue as { collectedAt?: unknown }).collectedAt
+          : lastCollChange?.newValue;
+      const snapshotCollectedAt = typeof rawCollectedAt === 'number' ? rawCollectedAt : undefined;
+
+      triggerInFlightRef.current = true;
+      void (async () => {
+        try {
+          const stored = await readStoredAnalysis(browser.storage.local, CONFIG.storage.correlations);
+          if (!mountedRef.current) return;
+          // Cheap pure pre-filter — liveness is unknown here; the
+          // authoritative check is the CORRELATION_RUN_STATE response below.
+          if (
+            !shouldTriggerReanalysis({
+              liveness: { live: false, queued: false },
+              stored,
+              snapshotCollectedAt,
+            })
+          ) {
+            return;
+          }
+          const resp = await sendMessage('CORRELATION_RUN_STATE', {});
+          if (!mountedRef.current) return;
+          const unwrapped =
+            resp && typeof resp === 'object' && 'ok' in resp
+              ? (resp as {
+                  ok: boolean;
+                  data: { live: boolean; requestId: string | null; queued: boolean };
+                }).data
+              : (resp as { live: boolean; requestId: string | null; queued: boolean });
+          if (unwrapped?.live === true || unwrapped?.queued === true) {
+            console.log(
+              '[TrendCast] [Dashboard] Collection trigger skipped — a correlation run is already live/queued',
+            );
+            return;
+          }
+          await runCorrelationRef.current();
+        } catch (err) {
+          console.warn('[TrendCast] [Dashboard] Collection trigger failed:', err);
+        } finally {
+          triggerInFlightRef.current = false;
+        }
+      })();
+    };
+
+    browser.storage.onChanged.addListener(listener);
+    return () => browser.storage.onChanged.removeListener(listener);
+  }, []);
+
+  return { correlations, loading, loaded, error, progress, elapsedMs, runCorrelation, cancelCorrelation, runStats, runHistory };
 }

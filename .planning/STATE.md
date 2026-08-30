@@ -2,20 +2,19 @@
 gsd_state_version: 1.0
 milestone: v0.1.6
 milestone_name: fix correlation (Phases 14-16)
-current_phase: 15
-current_phase_name: ML Run Orchestration & Progress
-status: phase_complete
-stopped_at: Phase 15 complete (2/2 plans executed, verified) — ready for Phase 16
-last_updated: "2026-08-29T19:00:00.000Z"
-last_activity: 2026-08-29
-last_activity_desc: Phase 15 executed — 15-01 (ML run queue) + 15-02 (download progress) verified green
-state_head: d094f63c47c8f0677ec711870d944d37adf2380d
+status: Awaiting next milestone
+stopped_at: Phase 16 complete — all phases complete
+last_updated: "2026-08-30T07:56:20.625Z"
+last_activity: 2026-08-30
+last_activity_desc: Milestone v0.1.6 completed and archived
+state_head: 8bee5edb1ccd9811f0e5b88ce3be98ded9f31a29
 progress:
   total_phases: 3
-  completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
-  percent: 33
+  completed_phases: 3
+  total_plans: 6
+  completed_plans: 6
+  percent: 100
+current_phase: 16
 ---
 
 # Project State
@@ -25,20 +24,20 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-27)
 
 **Core value:** Surface the strongest, most reliable signal of what prediction markets are moving and why — by correlating social hype, news, and market odds — fast enough that the user trusts it as a daily decision aid.
-**Current focus:** Phase 14 — Ticker/Cashtag Bridging
+**Current focus:** Phase 16 — Correlation Persistence & Analysis Triggers
 
 ## Current Position
 
-Phase: 15 (ML Run Orchestration & Progress) — PHASE COMPLETE
-Plan: 15-01 + 15-02 executed
-Status: Both plans verified green (416/416 tests, typecheck/lint/build clean)
-Last activity: 2026-08-29 — Phase 15 executed; awaiting user validation/commit
+Phase: Milestone v0.1.6 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-08-30 — Milestone v0.1.6 completed and archived
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 25 (prior milestone)
+- Total plans completed: 27 (prior milestone)
 - Average duration: 30 min
 - Total execution time: 1.5 hours
 
@@ -55,6 +54,7 @@ Last activity: 2026-08-29 — Phase 15 executed; awaiting user validation/commit
 | 07-tiktok-collector | 3 | - | - |
 | 08-storage-ml-hardening | 3 | - | - |
 | 10 | 3 | - | - |
+| 16 | 2 | - | - |
 
 **Recent Trend:**
 
@@ -113,9 +113,9 @@ Items acknowledged and deferred at milestone close, most recent first:
 ## Session Continuity
 
 Last session: 2026-08-29T18:20:00.000Z
-Stopped at: Phase 14 closed (verified GOAL ACHIEVED) — Phase 15 planning
+Stopped at: Phase 16 complete — all phases complete
 Resume file: None
 
 ## Operator Next Steps
 
-- Plan Phase 15 (ML Run Orchestration & Progress, MLPROG-01/02), then execute
+- Start the next milestone with /gsd-new-milestone

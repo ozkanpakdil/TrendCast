@@ -1,5 +1,18 @@
 # Milestones
 
+## v0.1.6 v0.1.6 (Shipped: 2026-08-30)
+
+**Phases completed:** 3 phases, 6 plans, 10 tasks
+
+**Key accomplishments:**
+
+- Ticker-identity bridging shipped: `$NVDA` social posts, `NVDA — Stock Indicator` news, and Nvidia contracts now unify on one entity key, with ticker-aware boost and hardened embedding pipeline.
+- Stock-indicator news items now carry ticker-only keywords (label/date tokens can no longer dilute keyword Jaccard), and the source-health sidebar shows per-source bridging coverage (bridged/total) in its tooltip.
+- ML correlation runs are now serialized through a FIFO queue, every terminal result is stamped with its requestId, and a persisted run-state marker lets the dashboard detect (and settle) a run whose service worker died mid-flight.
+- First-run model downloads now surface per-file progress through the existing `loading-model` phase instead of a silent spinner — the dashboard shows which file is downloading and how far along it is.
+
+---
+
 ## v0.1.5 Stock Indicator News Sources (Shipped: 2026-08-27)
 
 **Phases completed:** 3 phases, 3 plans, 3 tasks

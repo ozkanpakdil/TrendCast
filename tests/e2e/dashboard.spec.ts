@@ -21,7 +21,7 @@
  */
 
 import { test, expect, type Page } from '@playwright/test';
-import { injectBrowserMock, MOCK_SNAPSHOT } from './fixtures';
+import { injectBrowserMock, MOCK_CORRELATIONS, MOCK_SNAPSHOT } from './fixtures';
 
 const DASHBOARD_URL = 'http://127.0.0.1:4173/src/dashboard/index.html';
 
@@ -781,6 +781,131 @@ test.describe('Dashboard — Correlations Tab', () => {
     await engineSelect.selectOption('embedding');
     await page.waitForTimeout(300);
     await expect(page.locator('main')).toContainText(/ML engine selected/);
+  });
+
+  // ── Phase 16 (TRIG-02/TRIG-04): cached-first dashboard ──
+
+  test('shows cached results without auto-analyze', async ({ page }) => {
+    await openDashboard(page);
+    await page.locator('nav button', { hasText: 'Correlations' }).click();
+    await page.waitForTimeout(1000);
+    // A stored non-error result exists — the auto-run gate must NOT fire.
+    const calls = await page.evaluate(
+      () => (globalThis as unknown as { __trendcastCorrelateAllCalls?: number }).__trendcastCorrelateAllCalls ?? 0,
+    );
+    expect(calls).toBe(0);
+    // The cached match text renders instantly from storage.
+    await expect(page.locator('main')).toContainText(/BTC to the moon/);
+  });
+
+  test('header shows computedAt and engine from cached result', async ({ page }) => {
+    await openDashboard(page);
+    await page.locator('nav button', { hasText: 'Correlations' }).click();
+    await page.waitForTimeout(500);
+    // Freshness badge: relative computedAt + engine from the stored result.
+    await expect(page.locator('main')).toContainText(/computed \d+[smhd] ago/);
+    await expect(page.locator('main')).toContainText('heuristic');
+  });
+
+  // ── Phase 16 (TRIG-02): auto-run only when no stored analysis exists ──
+
+  test('auto-runs analysis when no stored result exists', async ({ page }) => {
+    await openDashboard(page, { 'trendcast:correlations': null });
+    await page.locator('nav button', { hasText: 'Correlations' }).click();
+    await page.waitForTimeout(2000);
+    // No stored result — the auto-run gate must fire.
+    const calls = await page.evaluate(
+      () => (globalThis as unknown as { __trendcastCorrelateAllCalls?: number }).__trendcastCorrelateAllCalls ?? 0,
+    );
+    expect(calls).toBeGreaterThanOrEqual(1);
+  });
+
+  // ── Phase 16 (TRIG-04): freshness badge edge cases ──
+
+  test('header shows unknown age for legacy results without computedAt', async ({ page }) => {
+    const legacyCorrelations = { ...MOCK_CORRELATIONS };
+    delete (legacyCorrelations as { computedAt?: number }).computedAt;
+    await openDashboard(page, { 'trendcast:correlations': legacyCorrelations });
+    await page.locator('nav button', { hasText: 'Correlations' }).click();
+    await page.waitForTimeout(500);
+    // Legacy result (no computedAt) — badge must not claim a false freshness.
+    await expect(page.locator('main')).toContainText(/unknown age/i);
+  });
+
+  test('header marks stale results after a newer collection', async ({ page }) => {
+    // computedAt 2h ago vs seeded last-collection 30min ago → stale.
+    await openDashboard(page, {
+      'trendcast:correlations': { ...MOCK_CORRELATIONS, computedAt: Date.now() - 7_200_000 },
+    });
+    await page.locator('nav button', { hasText: 'Correlations' }).click();
+    await page.waitForTimeout(500);
+    await expect(page.locator('main')).toContainText(/stale/i);
+  });
+
+  // ── Phase 16 (TRIG-03): collection-completion trigger ──
+
+  test('re-runs analysis when a collection completes', async ({ page }) => {
+    await openDashboard(page);
+    await page.locator('nav button', { hasText: 'Correlations' }).click();
+    await page.waitForTimeout(1000);
+    const before = await page.evaluate(
+      () => (globalThis as unknown as { __trendcastCorrelateAllCalls?: number }).__trendcastCorrelateAllCalls ?? 0,
+    );
+    expect(before).toBe(0);
+    // Drive the mock's storage change: the write calls notifyChange, which
+    // synchronously invokes every registered storage.onChanged listener —
+    // this write IS the synthetic collection event. The dispatched
+    // collectedAt (now) is strictly newer than the seeded correlations'
+    // computedAt, so the freshness pre-filter passes. The snapshot is passed
+    // as an evaluate argument (Playwright does not serialize closures).
+    await page.evaluate((snapshot) => {
+      const g = globalThis as unknown as {
+        browser: { storage: { local: { set: (items: Record<string, unknown>) => Promise<void> } } };
+      };
+      return g.browser.storage.local.set({ 'trendcast:latest-snapshot': snapshot });
+    }, { ...MOCK_SNAPSHOT, collectedAt: Date.now() });
+    await page.waitForTimeout(2000);
+    // The listener saw the collection event…
+    const events = await page.evaluate(
+      () =>
+        (globalThis as unknown as { __trendcastStorageEvents?: Array<{ key: string; area: string }> })
+          .__trendcastStorageEvents ?? [],
+    );
+    expect(events.some((e) => e.key === 'trendcast:latest-snapshot' && e.area === 'local')).toBe(true);
+    // …and exactly one guarded re-run fired.
+    const after = await page.evaluate(
+      () => (globalThis as unknown as { __trendcastCorrelateAllCalls?: number }).__trendcastCorrelateAllCalls ?? 0,
+    );
+    expect(after).toBe(before + 1);
+  });
+
+  test('does not double-run when a run is already active', async ({ page }) => {
+    await openDashboard(page);
+    await page.locator('nav button', { hasText: 'Correlations' }).click();
+    await page.waitForTimeout(500);
+    // Opt into the mock's liveness simulation: CORRELATE_ALL holds a live run
+    // for ~1500ms and CORRELATION_RUN_STATE reports live:true while it runs.
+    await page.evaluate(() => {
+      (globalThis as unknown as { __trendcastSlowCorrelation?: boolean }).__trendcastSlowCorrelation = true;
+    });
+    // Start a manual re-analyze — the mock now holds the run live.
+    await page.locator('main button', { hasText: /Re-analyze/ }).click();
+    // Immediately land a collection event while the run is live.
+    await page.evaluate((snapshot) => {
+      const g = globalThis as unknown as {
+        browser: { storage: { local: { set: (items: Record<string, unknown>) => Promise<void> } } };
+      };
+      return g.browser.storage.local.set({ 'trendcast:latest-snapshot': snapshot });
+    }, { ...MOCK_SNAPSHOT, collectedAt: Date.now() });
+    // Wait past the mock run's resolution (~1500ms).
+    await page.waitForTimeout(2000);
+    // Exactly 1 invocation total: the manual run. The collection event landed
+    // while the run was live, CORRELATION_RUN_STATE reported live:true, and
+    // the trigger suppressed the second run.
+    const calls = await page.evaluate(
+      () => (globalThis as unknown as { __trendcastCorrelateAllCalls?: number }).__trendcastCorrelateAllCalls ?? 0,
+    );
+    expect(calls).toBe(1);
   });
 });
 

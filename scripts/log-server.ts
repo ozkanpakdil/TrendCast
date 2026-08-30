@@ -131,6 +131,23 @@ const HELP = `Commands:
                           engine=model pairs override the model, e.g.
                           "benchmark llm=HuggingFaceTB/SmolLM2-360M-Instruct")
   benchmarkResults        print the last benchmark report as a scored table
+  getCorrelations         stored correlation result (engine/model/computedAt/counts)
+  seedCorrelations        write a synthetic stored result to test gate/badge/trigger
+                          (opts: engine=… model=… staleMs=… error="msg" requestId=…)
+  clearCorrelations       remove the stored correlation result
+  runState                ML run-state marker + queue liveness (live/queued ids)
+  lastCollection          lastCollectionAt + snapshot collectedAt + input counts
+  evaluateTrigger         dry-run of the Phase 16 re-analysis trigger decision
+  triggerPrecompute       run the post-collection precompute path now (awaits)
+  tabs                    list open extension pages (dashboard/popup)
+  text [--page popup]     full page text (innerText) of an extension page
+  dom <selector> [--text X] [--page popup]
+                          query DOM elements (tag/text/visible) in a page
+  shot [path]             screenshot the dashboard → PNG file
+  shot [path] --page popup  target the popup page instead
+  open <dashboard|popup>  open or focus an extension page
+  click <selector> [--text X] [--page popup]
+                          click an element in an extension page
   ping                    liveness check
   help                    this message
   quit                    exit the server`;
@@ -220,7 +237,25 @@ rl.on('line', async (line) => {
         print('rpc', COLORS.rpc, JSON.stringify(await callRpc('collectNow'), null, 2));
         break;
       case 'correlate': {
-        const params = arg ? { engine: arg } : {};
+        // Accept "engine" or "engine=model" tokens; a model override maps to
+        // the `model` RPC param the background correlate handler supports
+        // (lets UAT force a broken/unavailable model to test error paths).
+        const tokens = arg ? arg.split(/[\s,]+/).filter(Boolean) : [];
+        const params: Record<string, string> = {};
+        for (const token of tokens) {
+          const eq = token.indexOf('=');
+          if (eq > 0) {
+            const engine = token.slice(0, eq);
+            if (engine === 'model') {
+              params.model = token.slice(eq + 1);
+            } else {
+              params.engine = engine;
+              params.model = token.slice(eq + 1);
+            }
+          } else {
+            params.engine = token;
+          }
+        }
         print('rpc', COLORS.rpc, JSON.stringify(await callRpc('correlate', params), null, 2));
         break;
       }
@@ -261,6 +296,122 @@ rl.on('line', async (line) => {
       case 'benchmarkResults': {
         const stored = (await callRpc('benchmarkResults')) as BenchReport;
         printBenchmarkReport(stored);
+        break;
+      }
+      case 'getCorrelations':
+        print('rpc', COLORS.rpc, JSON.stringify(await callRpc('getCorrelations'), null, 2));
+        break;
+      case 'seedCorrelations': {
+        // Accept key=value tokens: engine= model= staleMs= error= requestId=
+        const params: Record<string, unknown> = {};
+        for (const token of arg.split(/[\s,]+/).filter(Boolean)) {
+          const eq = token.indexOf('=');
+          if (eq <= 0) {
+            print('seedCorrelations', COLORS.warn, `Ignoring malformed token "${token}" (expected key=value)`);
+            continue;
+          }
+          const key = token.slice(0, eq);
+          const value = token.slice(eq + 1);
+          if (key === 'staleMs') params[key] = Number(value);
+          else params[key] = value;
+        }
+        print('rpc', COLORS.rpc, JSON.stringify(await callRpc('seedCorrelations', params), null, 2));
+        break;
+      }
+      case 'clearCorrelations':
+        print('rpc', COLORS.ok, JSON.stringify(await callRpc('clearCorrelations'), null, 2));
+        break;
+      case 'runState':
+        print('rpc', COLORS.rpc, JSON.stringify(await callRpc('getRunState'), null, 2));
+        break;
+      case 'lastCollection':
+        print('rpc', COLORS.rpc, JSON.stringify(await callRpc('getLastCollection'), null, 2));
+        break;
+      case 'evaluateTrigger':
+        print('rpc', COLORS.rpc, JSON.stringify(await callRpc('evaluateTrigger'), null, 2));
+        break;
+      case 'triggerPrecompute':
+        print('rpc', COLORS.rpc, JSON.stringify(await callRpc('triggerPrecompute'), null, 2));
+        break;
+      case 'tabs': {
+        const res = (await callRpc('debugTabs')) as { tabs?: Array<{ page: string; tabId: number | null; url: string; title: string; active: boolean }> };
+        if (!res.tabs || res.tabs.length === 0) {
+          print('tabs', COLORS.warn, 'No extension pages open (open the dashboard or popup first).');
+        } else {
+          for (const t of res.tabs) {
+            print('tabs', COLORS.ok, `#${t.tabId ?? '?'} ${t.active ? '*' : ' '} ${t.page.padEnd(10)} ${t.title.slice(0, 40)}  ${t.url.slice(0, 60)}`);
+          }
+        }
+        break;
+      }
+      case 'text': {
+        // text [--page popup]
+        const pageIdx = rest.indexOf('--page');
+        const page = pageIdx >= 0 ? rest[pageIdx + 1] : 'dashboard';
+        const res = (await callRpc('debugText', { page })) as { text?: string };
+        if (typeof res.text === 'string') {
+          print('text', COLORS.rpc, res.text.slice(0, 4000));
+        } else {
+          print('text', COLORS.warn, 'No text returned (is the page open?)');
+        }
+        break;
+      }
+      case 'dom': {
+        // dom <selector> [--text X] [--page popup]
+        const textIdx = rest.indexOf('--text');
+        const text = textIdx >= 0 ? rest[textIdx + 1] : null;
+        const pageIdx = rest.indexOf('--page');
+        const page = pageIdx >= 0 ? rest[pageIdx + 1] : 'dashboard';
+        const positional = rest.filter((t, i) => t !== '--text' && t !== '--page' && i !== textIdx + 1 && i !== pageIdx + 1);
+        const selector = positional.join(' ');
+        if (!selector) {
+          print('dom', COLORS.warn, 'Usage: dom <selector> [--text X] [--page popup]');
+          break;
+        }
+        const res = (await callRpc('debugDom', { selector, text, page })) as { count?: number; items?: unknown[] };
+        print('dom', COLORS.rpc, JSON.stringify(res, null, 2));
+        break;
+      }
+      case 'shot': {
+        // shot [path] [--page popup]
+        const pageIdx = rest.indexOf('--page');
+        const page = pageIdx >= 0 ? rest[pageIdx + 1] : 'dashboard';
+        const positional = rest.filter((t, i) => t !== '--page' && i !== pageIdx + 1 && !t.startsWith('--'));
+        const path = positional[0] ?? '/tmp/trendcast-bridge-shot.png';
+        const res = (await callRpc('debugCapture', { page })) as { dataUrl?: string };
+        if (!res.dataUrl) {
+          print('shot', COLORS.error, 'Capture returned no data (is the tab visible?).');
+          break;
+        }
+        const { writeFileSync } = await import('node:fs');
+        writeFileSync(path, Buffer.from(res.dataUrl.split(',')[1] ?? '', 'base64'));
+        print('shot', COLORS.ok, `✓ Screenshot: ${path}`);
+        break;
+      }
+      case 'open': {
+        const page = arg || 'dashboard';
+        if (!['dashboard', 'popup'].includes(page)) {
+          print('open', COLORS.warn, 'Usage: open <dashboard|popup>');
+          break;
+        }
+        const res = await callRpc('debugOpen', { page });
+        print('open', COLORS.ok, JSON.stringify(res));
+        break;
+      }
+      case 'click': {
+        // click <selector> [--text X] [--page popup]
+        const textIdx = rest.indexOf('--text');
+        const text = textIdx >= 0 ? rest[textIdx + 1] : null;
+        const pageIdx = rest.indexOf('--page');
+        const page = pageIdx >= 0 ? rest[pageIdx + 1] : 'dashboard';
+        const positional = rest.filter((t, i) => t !== '--text' && t !== '--page' && i !== textIdx + 1 && i !== pageIdx + 1);
+        const selector = positional.join(' ');
+        if (!selector) {
+          print('click', COLORS.warn, 'Usage: click <selector> [--text X] [--page popup]');
+          break;
+        }
+        const res = (await callRpc('debugClick', { selector, text, page })) as { result?: unknown };
+        print('click', COLORS.rpc, JSON.stringify(res.result, null, 2));
         break;
       }
       default:
