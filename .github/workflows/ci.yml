@@ -70,8 +70,24 @@ jobs:
       - name: Install Playwright browsers
         run: bunx playwright install --with-deps chromium
 
-      - name: Run Playwright tests
-        run: bun run test:e2e
+      # Restore the cross-run CPU/memory history written by the monitor
+      - name: Restore resource history
+        uses: actions/cache@v4
+        with:
+          path: resource-monitor/history.json
+          key: trendcast-resource-history-${{ github.run_id }}
+          restore-keys: trendcast-resource-history-
+
+      # Wraps the Playwright run: fails if machine or single-tab CPU/memory
+      # cross the thresholds; records peaks in the job summary and history.
+      - name: Run Playwright tests (resource monitored)
+        uses: ozkanpakdil/github-playwright-monitor@main
+        with:
+          run-command: bun run test:e2e
+          machine-cpu-threshold: 80
+          machine-memory-threshold: 80
+          tab-cpu-threshold: 70
+          tab-memory-threshold: 80
 
       - name: Upload Playwright report
         if: ${{ !cancelled() }}
@@ -79,6 +95,16 @@ jobs:
         with:
           name: playwright-report
           path: playwright-report/
+          retention-days: 14
+
+      - name: Upload resource monitor reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: resource-monitor-report
+          path: |
+            resource-monitor/
+            monocart-report/
           retention-days: 14
 
       - name: Upload Playwright traces
